@@ -1,83 +1,65 @@
 /**
  * ================================
  * ReservationService.gs
- * 予約番号・変更予約管理
+ * 予約管理
  * ================================
  */
-const ReservationService = {
+var ReservationService = {
 
   /**
-   * 予約番号を発行
+   * 新規／変更を含めて予約作成
    */
-  issueReservationNo() {
+  create(formData) {
     const props = PropertiesService.getScriptProperties();
-    const todayStr = Utilities.formatDate(new Date(), "JST", "MMdd");
 
-    const lastDate = props.getProperty("LAST_DATE");
-    const lastNum  = Number(props.getProperty("LAST_NUM") || 0);
+    const isChange =
+      props.getProperty(`CHANGE_${formData.userId}`) !== null;
 
-    const dailyCount = (lastDate === todayStr) ? lastNum + 1 : 1;
+    let changeSourceNo = "";
 
-    props.setProperty("LAST_DATE", todayStr);
-    props.setProperty("LAST_NUM", dailyCount.toString());
+    if (isChange) {
+      changeSourceNo = props.getProperty(`CHANGE_${formData.userId}`);
+    }
 
-    const no = `${todayStr}-${("0" + dailyCount).slice(-2)}`;
+    const reservationNo = this.issueReservationNo();
 
     return {
-      no,
-      isChange: false
+      no: reservationNo,
+      isChange,
+      changeSourceNo
     };
   },
 
   /**
-   * 変更予約があれば、元予約を無効化
+   * 予約番号発行
    */
-  handleChangeReservation(formData) {
-    if (!formData.userId) return;
+  issueReservationNo() {
+    const sheet = SpreadsheetApp.getActive()
+      .getSheetByName("予約管理");
 
-    const userProps = PropertiesService.getUserProperties();
-    const json = userProps.getProperty(`CHANGE_TARGET_${formData.userId}`);
-    if (!json) return;
+    const lastNo = sheet.getRange("A1").getValue() || 0;
+    const nextNo = Number(lastNo) + 1;
 
-    const changeTarget = JSON.parse(json);
-    const ss = SpreadsheetApp.getActive();
-    const sheet = ss.getSheetByName("注文一覧");
-    if (!sheet) return;
+    sheet.getRange("A1").setValue(nextNo);
 
-    const data = sheet.getDataRange().getValues();
-
-    for (let i = 1; i < data.length; i++) {
-      if (data[i][1].toString().replace("'", "") === changeTarget.no) {
-        const row = i + 1;
-
-        // M列：変更済
-        sheet.getRange(row, 13).setValue("変更済");
-
-        // 行全体をグレーアウト
-        sheet.getRange(row, 1, 1, 14).setBackground("#cccccc");
-        break;
-      }
-    }
+    return nextNo;
   },
 
   /**
-   * 変更元予約Noを取得
+   * 変更元予約No取得（OrderService用）
    */
   getChangeSourceNo(userId) {
-    if (!userId) return "";
-    const props = PropertiesService.getUserProperties();
-    const json = props.getProperty(`CHANGE_TARGET_${userId}`);
-    if (!json) return "";
-    return JSON.parse(json).no || "";
+    return PropertiesService
+      .getScriptProperties()
+      .getProperty(`CHANGE_${userId}`) || "";
   },
 
   /**
    * 一時データ削除
    */
   clearTempData(userId) {
-    if (!userId) return;
-    const props = PropertiesService.getUserProperties();
-    props.deleteProperty(`CHANGE_TARGET_${userId}`);
-    props.deleteProperty(`CHANGE_LIST_${userId}`);
+    PropertiesService
+      .getScriptProperties()
+      .deleteProperty(`CHANGE_${userId}`);
   }
 };

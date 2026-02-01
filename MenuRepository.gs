@@ -13,7 +13,7 @@ const MenuRepository = (() => {
 
     const sheet = SpreadsheetApp
       .getActive()
-      .getSheetByName("メニューMST");
+      .getSheetByName("メニューマスタ");
     if (!sheet) throw new Error("メニューMST が見つかりません");
 
     const values = sheet.getDataRange().getValues();

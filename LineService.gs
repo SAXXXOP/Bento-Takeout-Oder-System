@@ -80,4 +80,4 @@ const LineService = {
       muteHttpExceptions: true
     });
   }
-};
+}
