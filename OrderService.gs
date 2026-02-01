@@ -1,7 +1,6 @@
 const OrderService = {
   saveOrder(reservationNo, formData, isChange) {
-    const ss = SpreadsheetApp.getActive();
-    const sheet = ss.getSheetByName("注文一覧");
+    const sheet = SpreadsheetApp.getActive().getSheetByName("注文一覧");
     if (!sheet) return;
 
     const groupText = Object.entries(formData.groupSummary || {})
@@ -19,11 +18,10 @@ const OrderService = {
       formData.totalPrice,         // I: 合計金額
       formData.userId,             // J: LINE_ID
       groupText,                   // K: グループ集計
-      formData.isRegular ? "常連" : "通常", // L: 常連フラグ ★ここが復活
+      formData.isRegular ? "常連" : "通常", // L: 常連フラグ
       isChange ? "変更後" : "通常",  // M: ステータス
       ""                           // N: 変更元No
     ];
-
     sheet.appendRow(rowData);
   }
 };
