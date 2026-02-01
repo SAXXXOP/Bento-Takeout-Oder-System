@@ -4,7 +4,9 @@ const DateUtil = {
     if (!m) return null;
     const now = new Date();
     let d = new Date(now.getFullYear(), m[1] - 1, m[2]);
-    if (now.getMonth() === 11 && m[1] === "1") d.setFullYear(now.getFullYear() + 1);
+    if (now.getMonth() === 11 && m[1] === "1") {
+      d.setFullYear(now.getFullYear() + 1);
+    }
     return d;
   }
 };
