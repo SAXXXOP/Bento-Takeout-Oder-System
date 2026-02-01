@@ -1,37 +1,29 @@
-/**
- * ================================
- * OrderService.gs
- * 注文一覧シート書き込み
- * ================================
- */
 const OrderService = {
-
   saveOrder(reservationNo, formData, isChange) {
     const ss = SpreadsheetApp.getActive();
     const sheet = ss.getSheetByName("注文一覧");
     if (!sheet) return;
 
     const groupText = Object.entries(formData.groupSummary || {})
-      .map(([g, c]) => `${g}:${c}`)
-      .join("\n");
+      .map(([g, c]) => `${g}:${c}`).join("\n");
 
-    const changeSourceNo = ReservationService.getChangeSourceNo(formData.userId);
+    const rowData = [
+      new Date(),                  // A: タイムスタンプ
+      "'" + reservationNo,         // B: 予約番号
+      formData.phoneNumber,        // C: 電話番号
+      formData.userName,           // D: 名前
+      formData.pickupDate,         // E: 受取希望日
+      formData.note,               // F: リクエスト
+      formData.orderDetails,       // G: 商品詳細
+      formData.totalItems,         // H: 総数
+      formData.totalPrice,         // I: 合計金額
+      formData.userId,             // J: LINE_ID
+      groupText,                   // K: グループ集計
+      formData.isRegular ? "常連" : "通常", // L: 常連フラグ ★ここが復活
+      isChange ? "変更後" : "通常",  // M: ステータス
+      ""                           // N: 変更元No
+    ];
 
-    sheet.appendRow([
-      new Date(),                               // A: 登録日時
-      "'" + reservationNo,                     // B: 予約No
-      formData.phoneNumber,                    // C: 電話
-      formData.userName,                       // D: 氏名
-      `${formData.pickupDate} / ${formData.pickupTime}`, // E: 受取
-      formData.note,                           // F: 要望
-      formData.orderDetails,                   // G: 注文内容
-      formData.totalItems,                     // H: 点数
-      formData.totalPrice,                     // I: 金額
-      formData.userId,                         // J: LINE ID
-      groupText,                               // K: グループ集計
-      formData.isRegular,                      // L: 常連
-      isChange ? "変更後" : "通常",             // M: ステータス
-      isChange ? changeSourceNo : ""            // N: 変更元No
-    ]);
+    sheet.appendRow(rowData);
   }
 };

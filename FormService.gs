@@ -1,126 +1,83 @@
-/**
- * ================================
- * FormService.gs
- * フォーム回答解析
- * ================================
- */
 const FormService = {
-
-  /**
-   * トリガーイベントから formData を生成
-   */
   parse(e) {
-    const response = this.getLatestResponse(e);
-    if (!response) throw new Error("フォーム回答が取得できません");
+    let response;
+    if (e && e.response) {
+      response = e.response;
+    } else {
+      const ss = SpreadsheetApp.getActiveSpreadsheet();
+      const formUrl = ss.getFormUrl();
+      response = FormApp.openByUrl(formUrl).getResponses().pop();
+    }
 
     const itemResponses = response.getItemResponses();
-
     const formData = {
       userId: "",
-      userName: "",
+      userName: "", // 最終的に決定する名前
+      rawName: "",  // 氏名
+      simpleName: "", // 氏名（簡易）
       phoneNumber: "",
       pickupDate: "",
-      pickupTime: "",
       note: "",
-      orderItems: [],
       orderDetails: "",
-      groupSummary: {},
       totalItems: 0,
       totalPrice: 0,
-      isRegular: false
+      groupSummary: {},
+      isRegular: false // 常連判定フラグ
     };
 
-    // --- フォーム項目解析 ---
+    let rawDate = "";
+    let rawTime = "";
+
     itemResponses.forEach(r => {
-      const title = r.getItem().getTitle();
+      const title = r.getItem().getTitle().trim();
       const answer = r.getResponse();
 
-      switch (title) {
-        case "お名前":
-          formData.userName = answer;
-          break;
-
-        case "電話番号":
-          formData.phoneNumber = "'" + answer;
-          break;
-
-        case "受取日":
-          formData.pickupDate = answer;
-          break;
-
-        case "受取時間":
-          formData.pickupTime = answer;
-          break;
-
-        case "ご要望":
-          formData.note = answer;
-          break;
-
-        case "注文内容":
-          this.parseOrder(answer, formData);
-          break;
+      if (title.includes("氏名（簡易）")) {
+        formData.simpleName = answer;
+      } else if (title === "氏名") {
+        formData.rawName = answer;
+      } else if (title.includes("電話番号")) {
+        formData.phoneNumber = answer ? "'" + answer : "";
+      } else if (title === "受け取り希望日") {
+        rawDate = answer;
+      } else if (title === "受取り希望時刻") {
+        rawTime = answer;
+      } else if (title.includes("LINE_ID")) {
+        formData.userId = answer;
+      } else if (title.includes("備考") || title.includes("リクエスト")) {
+        formData.note = answer;
+      } else {
+        this.parseOrder(title, answer, formData);
       }
     });
 
-    // --- 注文内容組み立て ---
-    this.buildOrderSummary(formData);
+    // --- 氏名の決定ロジック ---
+    // 簡易名があれば優先、なければ氏名を使う
+    formData.userName = formData.simpleName || formData.rawName;
+    
+    // --- 常連判定の実行 ---
+    formData.isRegular = CustomerService.checkAndUpdateCustomer(formData);
 
+    formData.pickupDate = (rawDate || rawTime) ? `${rawDate} / ${rawTime}` : "";
     return formData;
   },
 
-  /**
-   * 最新フォーム回答取得
-   */
-  getLatestResponse(e) {
-    if (e && e.response) return e.response;
-
-    const form = FormApp.getActiveForm();
-    const responses = form.getResponses();
-    return responses.length ? responses[responses.length - 1] : null;
-  },
-
-  /**
-   * 注文内容解析
-   */
-  parseOrder(answer, formData) {
-    if (!Array.isArray(answer)) return;
-
-    answer.forEach(key => {
-      if (!MenuRepository.exists(key)) return;
-
-      const menu = MenuRepository.getByKey(key);
-
-      formData.orderItems.push({
-        key,
-        name: menu.menuName,
-        group: menu.group,
-        price: menu.price
-      });
-
-      // 点数
-      formData.totalItems += 1;
-
-      // 金額
-      formData.totalPrice += menu.price;
-
-      // グループ集計
-      if (!formData.groupSummary[menu.group]) {
-        formData.groupSummary[menu.group] = 0;
-      }
-      formData.groupSummary[menu.group] += 1;
+  parseOrder(title, answer, formData) {
+    const menuData = MenuRepository.getMenu();
+    const targets = menuData.filter(m => m.parentName === title);
+    if (targets.length === 0) return;
+    const counts = Array.isArray(answer) ? answer : String(answer).split(',');
+    counts.forEach((countStr, index) => {
+      const count = parseInt(countStr.trim());
+      if (isNaN(count) || count <= 0) return;
+      const menu = targets[index];
+      if (!menu) return;
+      const displayName = menu.childName ? `${menu.parentName}(${menu.childName})` : menu.parentName;
+      formData.orderDetails += `・${displayName} ${menu.price}円 x ${count}\n`;
+      formData.totalItems += count;
+      formData.totalPrice += menu.price * count;
+      const group = menu.group || "その他";
+      formData.groupSummary[group] = (formData.groupSummary[group] || 0) + count;
     });
-  },
-
-  /**
-   * 注文内容文字列生成
-   */
-  buildOrderSummary(formData) {
-    const lines = [];
-
-    formData.orderItems.forEach(item => {
-      lines.push(`・${item.name}　${item.price}円`);
-    });
-
-    formData.orderDetails = lines.join("\n");
   }
 };

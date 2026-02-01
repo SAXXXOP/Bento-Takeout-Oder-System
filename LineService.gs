@@ -10,7 +10,7 @@ const LineService = {
    * 予約完了／変更 完了メッセージ送信
    */
   sendReservationMessage(reservationNo, formData, isChange) {
-    const token = PropertiesService.getScriptProperties().getProperty("LINE_TOKEN");
+    const token = PropertiesService.getScriptProperties().getProperty("M1d5DVFLJE1kPm9WJSQrUkxYm0KB3wVTNrCIvxNxOaguMeBNmlcuxybaP+/DK4kl9E2ul5odAJ3C1oNhk+R1Utf6cC0ulD19T5Ih/B+6THisVxIDNjQJDtVD1q1X0fZzHSy1LFTB3COAJ/ak7w11igdB04t89/1O/w1cDnyilFU="); /**自分のLINE TOKEN*/
     if (!formData.userId || !token) return;
 
     const titleHeader = isChange
