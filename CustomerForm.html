@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: "Helvetica Neue", Arial, sans-serif; padding: 15px; color: #333; background-color: #f9f9f9; }
+    .section { margin-bottom: 15px; padding: 12px; border: 1px solid #ddd; border-radius: 8px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    h3 { margin: 0 0 10px 0; font-size: 15px; color: #2c3e50; border-left: 4px solid #3498db; padding-left: 8px; }
+    input[type="text"], textarea { width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
+    .search-results { max-height: 150px; overflow-y: auto; border: 1px solid #eee; margin-top: 5px; background: white; }
+    .result-item { padding: 10px; border-bottom: 1px solid #f0f0f0; cursor: pointer; font-size: 13px; }
+    .result-item:hover { background-color: #f1f7ff; }
+    .btn { width: 100%; padding: 12px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; margin-top: 10px; transition: 0.2s; }
+    .btn-blue { background: #3498db; color: white; }
+    .btn-blue:hover { background: #2980b9; }
+    .edit-area { display: none; }
+    .status { font-size: 12px; color: #27ae60; text-align: center; margin-top: 8px; font-weight: bold; min-height: 1.2em; }
+    .toggle-box { display: flex; margin-bottom: 10px; background: #eee; border-radius: 4px; padding: 2px; }
+    .toggle-box label { flex: 1; text-align: center; padding: 6px; cursor: pointer; font-size: 13px; border-radius: 3px; }
+    .toggle-box input { display: none; }
+    .toggle-box input:checked + span { background: white; display: block; border-radius: 3px; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+  </style>
+</head>
+<body>
+
+  <div class="section">
+    <h3>1. 顧客を検索</h3>
+    <input type="text" id="searchInput" placeholder="名前を入力..." oninput="doSearch()">
+    <div id="results" class="search-results"></div>
+  </div>
+
+  <div id="editSection" class="section edit-area">
+    <h3>2. 備考を編集</h3>
+    <p><strong id="targetName"></strong> 様</p>
+    
+    <div class="toggle-box">
+      <label><input type="radio" name="noteType" value="kitchen" checked onchange="switchNote()"><span>調理用</span></label>
+      <label><input type="radio" name="noteType" value="office" onchange="switchNote()"><span>事務用</span></label>
+    </div>
+
+    <textarea id="noteField" rows="5" placeholder="メモを入力..."></textarea>
+    <button class="btn btn-blue" onclick="doSave()">変更を保存する</button>
+    <div id="status" class="status"></div>
+  </div>
+
+  <script>
+    let selectedRow = null;
+    let cache = { kitchen: "", office: "" };
+
+    function doSearch() {
+      const query = document.getElementById('searchInput').value;
+      if (query.length < 1) { document.getElementById('results').innerHTML = ""; return; }
+      google.script.run.withSuccessHandler(showResults).searchCustomers(query);
+    }
+
+    function showResults(results) {
+      const container = document.getElementById('results');
+      container.innerHTML = results.length === 0 ? "<div class='result-item'>見つかりません</div>" : "";
+      results.forEach(res => {
+        const div = document.createElement('div');
+        div.className = 'result-item';
+        div.innerText = res.name + " (" + res.tel.slice(-4) + ")";
+        div.onclick = () => selectCustomer(res.row);
+        container.appendChild(div);
+      });
+    }
+
+    function selectCustomer(row) {
+      google.script.run.withSuccessHandler(customer => {
+        selectedRow = customer.row;
+        cache.kitchen = customer.noteKitchen || "";
+        cache.office = customer.noteOffice || "";
+        document.getElementById('targetName').innerText = customer.name;
+        document.getElementById('editSection').style.display = "block";
+        document.getElementById('results').innerHTML = "";
+        switchNote();
+      }).getCustomerByRow(row);
+    }
+
+    function switchNote() {
+      const type = document.querySelector('input[name="noteType"]:checked').value;
+      document.getElementById('noteField').value = (type === 'kitchen') ? cache.kitchen : cache.office;
+    }
+
+    function doSave() {
+      const type = document.querySelector('input[name="noteType"]:checked').value;
+      const note = document.getElementById('noteField').value;
+      const statusDiv = document.getElementById('status');
+      
+      statusDiv.innerText = "保存中...";
+      google.script.run.withSuccessHandler(msg => {
+        statusDiv.innerText = msg;
+        if(type === 'kitchen') cache.kitchen = note; else cache.office = note;
+        setTimeout(() => {
+          document.getElementById('editSection').style.display = "none";
+          document.getElementById('searchInput').value = "";
+          statusDiv.innerText = "";
+        }, 1500);
+      }).saveCustomerNote(selectedRow, note, type);
+    }
+  </script>
+</body>
+</html>
