@@ -20,7 +20,7 @@ function onFormSubmit(e) {
       reservationInfo.isChange
     );
 
-    CustomerService.updateCustomer(formData);
+    CustomerService.checkAndUpdateCustomer(formData);
 
     LineService.sendReservationMessage(
       reservationInfo.no,

@@ -59,7 +59,7 @@ const FormService = {
       if (!menu) return;
 
       const displayName = menu.childName ? `${menu.parentName}(${menu.childName})` : menu.parentName;
-      formData.orderDetails += `・${displayName} ${menu.price}円 x ${count}\n`;
+      formData.orderDetails += `・${displayName} x ${count}\n`;
       formData.totalItems += count;
       formData.totalPrice += menu.price * count;
       
