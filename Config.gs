@@ -83,6 +83,8 @@ const CONFIG = {
     // Googleフォームの各項目に自動入力するためのentry ID (LineWebhook.gsより転記)
     ENTRY_LINE_ID: "entry.593652011",
     ENTRY_OLD_NO: "entry.1781944258",
+  FORM: {
+    FORM_URL: "https://docs.google.com/forms/d/e/1FAIpQLSc-WHjrgsi9nl8N_NcJaqvRWIX-TJHrWQICc6-i08NfxYRflQ/viewform"},
  
     // 実際のトークンは「プロジェクトの設定 > スクリプトプロパティ」に 
     // LINE_TOKEN という名前で保存してください

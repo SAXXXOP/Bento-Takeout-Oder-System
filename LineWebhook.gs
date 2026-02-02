@@ -9,7 +9,7 @@ function doPost(e) {
     const replyToken = event.replyToken;
     const userId = event.source.userId;
 
-    // ★ 一時データは UserProperties
+    // ★ 一時データは UserProperties（CHANGE_* 用）
     const props = PropertiesService.getUserProperties();
 
     /* =========================
@@ -20,9 +20,8 @@ function doPost(e) {
 
       if (postData.startsWith("change_confirm:")) {
         const index = Number(postData.split(":")[1]);
+        
         const listJson = props.getProperty(`CHANGE_LIST_${userId}`);
-        pushText(userId, "postback時キー: " + props.getKeys().join(","));
-
         if (!listJson) {
           replyText(replyToken, "変更情報の有効期限が切れました。最初からやり直してください。");
           return;
@@ -36,12 +35,19 @@ function doPost(e) {
           return;
         }
 
-        // 内容を短縮（長すぎるとFlexが死ぬ）
-        const shortItems = target.items
-          ? (String(target.items).length > 50 ? String(target.items).slice(0, 50) + " 他" : String(target.items))
-          : "（内容不明）";
+        // ★ 元予約No（念のため ' を除去）
+        const oldNo = String(target.no || "").replace(/'/g, "");
 
-        // ✅ 安全版 confirmFlex
+        // ★ 事前入力付きフォームURLを生成
+        const prefilledUrl = buildPrefilledFormUrl(
+          CONFIG.FORM.FORM_URL, // 元のフォームURL
+          userId,               // LINE_ID
+          oldNo                 // 元予約番号
+        );
+
+        // ★ここが修正点：itemsShort を使う（getChangeableReservations側と一致させる）
+        const shortItems = target.itemsShort || "（内容不明）";
+
         const confirmFlex = {
           type: "flex",
           altText: "予約変更の準備完了",
@@ -78,10 +84,10 @@ function doPost(e) {
                   color: "#1DB446",
                   height: "sm",
                   action: {
-                    type: "uri",
-                    label: "予約フォームを開く",
-                    uri: CONFIG.FORM.RESERVATION_URL // ★固定URL（undefined回避）
-                  }
+                  type: "uri",
+                  label: "予約フォームを開く",
+                  uri: prefilledUrl
+                }
                 }
               ]
             }
@@ -92,7 +98,6 @@ function doPost(e) {
         props.setProperty(`CHANGE_TARGET_${userId}`, JSON.stringify(target));
         props.deleteProperty(`CHANGE_LIST_${userId}`);
 
-        // ★ここで返す
         replyFlex(replyToken, confirmFlex);
         return;
       }
@@ -117,9 +122,6 @@ function doPost(e) {
 
         // 一覧を保存（ユーザー単位）
         props.setProperty(`CHANGE_LIST_${userId}`, JSON.stringify(list));
-
-        // ★保存できたかを push で見える化（デバッグ用）
-pushText(userId, "保存キー: " + props.getKeys().join(","));
 
         const flex = buildReservationCarousel(list);
         replyFlex(replyToken, flex);
@@ -196,7 +198,7 @@ function buildReservationBubble(r, index) {
           action: {
             type: "postback",
             label: "この予約を変更する",
-            data: `change_confirm:${index}` // 案内用のアクションへ
+            data: `change_confirm:${index}`
           }
         }
       ]
@@ -227,7 +229,7 @@ function replyText(replyToken, text) {
 
 function replyTexts(replyToken, texts) {
   const url = "https://api.line.me/v2/bot/message/reply";
-  const token = CONFIG.LINE.LINE_TOKEN; // ★ 修正
+  const token = CONFIG.LINE.LINE_TOKEN;
 
   const payload = {
     replyToken,
@@ -241,13 +243,13 @@ function replyTexts(replyToken, texts) {
       "Authorization": "Bearer " + token
     },
     payload: JSON.stringify(payload),
-    muteHttpExceptions: true // ← デバッグ用におすすめ
+    muteHttpExceptions: true
   });
 }
 
 function replyFlex(replyToken, flexMessage) {
   const url = "https://api.line.me/v2/bot/message/reply";
-  const token = CONFIG.LINE.LINE_TOKEN; // ★ 修正
+  const token = CONFIG.LINE.LINE_TOKEN;
 
   const payload = {
     replyToken,
@@ -283,11 +285,11 @@ function pushText(userId, text) {
   });
 }
 
+
 /* ==================================================
    データ取得
    ================================================== */
 
-// LineWebhook.gs
 function getChangeableReservations(userId) {
   const sheet = SpreadsheetApp.getActive().getSheetByName(CONFIG.SHEET.ORDER_LIST);
   if (!sheet) return [];
@@ -304,32 +306,47 @@ function getChangeableReservations(userId) {
     // 自分の予約だけ
     if (row[CONFIG.COLUMN.LINE_ID - 1] !== userId) continue;
 
-    // ★ 修正④：ステータス判定を統一
+    // ステータスは「通常」だけ
     const status = row[CONFIG.COLUMN.STATUS - 1];
     if (status !== CONFIG.STATUS.NORMAL) continue;
+    
 
+    
     // 日付チェック（未来のみ）
-const pickupDateStr = row[CONFIG.COLUMN.PICKUP_DATE - 1];
-const pickupDate = parsePickupDate(pickupDateStr);
-if (!pickupDate || pickupDate < today) continue;
+    const pickupDateStr = row[CONFIG.COLUMN.PICKUP_DATE - 1];
+    const pickupDate = parsePickupDate(pickupDateStr);
+    if (!pickupDate || pickupDate < today) continue;
 
-const orderNo = row[CONFIG.COLUMN.ORDER_NO - 1]?.toString().replace("'", "");
+    const orderNo = row[CONFIG.COLUMN.ORDER_NO - 1]?.toString().replace("'", "");
 
-// ★ここ追加：items を短縮して保存
-const rawItems = String(row[CONFIG.COLUMN.DETAILS - 1] || "");
-const firstLine = rawItems.split("\n").find(l => l.trim()) || "";
-const itemsShort = rawItems.length > 60 ? (firstLine + " 他") : rawItems;
+    // ★ここ追加：items を短縮して保存（Properties容量対策）
+    const rawItems = String(row[CONFIG.COLUMN.DETAILS - 1] || "");
+    const firstLine = rawItems.split("\n").find(l => l.trim()) || "";
+    const itemsShort = rawItems.length > 60 ? (firstLine + " 他") : rawItems;
 
-// ★ここ修正：保存するのは軽い情報だけ
-list.push({
-  no: orderNo,
-  date: pickupDateStr,
-  itemsShort: itemsShort,
-  total: row[CONFIG.COLUMN.TOTAL_COUNT - 1]
-});
+    // ★ここ修正：保存するのは軽い情報だけ
+    list.push({
+      no: orderNo,
+      date: pickupDateStr,
+      itemsShort: itemsShort,
+      total: row[CONFIG.COLUMN.TOTAL_COUNT - 1]
+    });
   }
 
   return list;
+}
+
+//事前入力URLを作る関数
+function buildPrefilledFormUrl(baseUrl, lineId, oldNo) {
+  const entryLineId = CONFIG.LINE.ENTRY_LINE_ID; // entry.593652011
+  const entryOldNo  = CONFIG.LINE.ENTRY_OLD_NO;  // entry.1781944258
+
+  const params = [];
+  params.push(`${entryLineId}=${encodeURIComponent(lineId || "")}`);
+  params.push(`${entryOldNo}=${encodeURIComponent(oldNo || "")}`);
+
+  const sep = baseUrl.includes("?") ? "&" : "?";
+  return baseUrl + sep + params.join("&");
 }
 
 /**
@@ -337,32 +354,21 @@ list.push({
  */
 function parsePickupDate(dateVal) {
   if (!dateVal) return null;
-  
-  // 文字列から最初の「月/日」の部分を抽出 (例: 1/30)
+
   const match = dateVal.toString().match(/(\d{1,2})\/(\d{1,2})/);
   if (!match) return null;
 
   const month = parseInt(match[1], 10);
   const day = parseInt(match[2], 10);
-  
+
   const now = new Date();
   const year = now.getFullYear();
-  
-  // 12月に1月の予約をした場合などの年越しを考慮
+
   let date = new Date(year, month - 1, day);
-  
-  // もし解析した日付が現在より大幅に過去（例：11ヶ月以上前）なら翌年とみなす
+
   if (now.getMonth() === 11 && month === 1) {
     date.setFullYear(year + 1);
   }
 
   return date;
-}
-
-
-function testDateParse() {
-  const sample = "1/30(金) / 6:30~7:30";
-  const result = parsePickupDate(sample);
-  Logger.log("解析結果: " + result); 
-  // ここで「Invalid Date」や「null」が出るなら parsePickupDate が犯人です
 }
