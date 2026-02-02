@@ -43,7 +43,8 @@ const FormService = {
     // 簡易名があれば優先、なければ氏名
     formData.userName = formData.simpleName || formData.rawName;
     // 常連判定と名簿更新
-    formData.isRegular = CustomerService.checkAndUpdateCustomer(formData);
+    formData.isRegular = checkAndUpdateCustomer(formData);
+    (formData);
     // 日時整形
     formData.pickupDate = (rawDate || rawTime) ? `${rawDate} / ${rawTime}` : "";
     

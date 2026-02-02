@@ -73,4 +73,11 @@ const CONFIG = {
     PRICE: 5,        // E
     SHORT_NAME: 6    // F (内部キー・略称)
   },
+
+  // 7. LINE_TOKEN
+  LINE: {
+    // 実際のトークンは「プロジェクトの設定 > スクリプトプロパティ」に 
+    // CHANNEL_ACCESS_TOKEN という名前で保存してください
+    CHANNEL_ACCESS_TOKEN: PropertiesService.getScriptProperties().getProperty('CHANNEL_ACCESS_TOKEN'),
+  },
 };
