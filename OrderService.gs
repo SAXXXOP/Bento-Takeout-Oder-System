@@ -19,7 +19,10 @@ const OrderService = {
     rowData[CONFIG.COLUMN.ORDER_NO - 1] = "'" + reservationNo; // 新規番号にも ' を付ける
     rowData[CONFIG.COLUMN.TEL - 1] = formData.phoneNumber;
     rowData[CONFIG.COLUMN.NAME - 1] = formData.userName;
+    // 表示用（既存）
     rowData[CONFIG.COLUMN.PICKUP_DATE - 1] = formData.pickupDate;
+    // ★ 内部判定用（Date型）
+    rowData[CONFIG.COLUMN.PICKUP_DATE_RAW - 1] = formData.pickupDateRaw;
     rowData[CONFIG.COLUMN.NOTE - 1] = formData.note;
     rowData[CONFIG.COLUMN.DETAILS - 1] = formData.orderDetails;
     rowData[CONFIG.COLUMN.TOTAL_COUNT - 1] = formData.totalItems;
@@ -65,6 +68,29 @@ const OrderService = {
         console.log("マッチしました！行番号: " + rowNum);
         break; // 見つかったらループを抜ける
       }
+    }
+  }
+}
+
+
+function markReservationAsChanged(orderNo) {
+  const sheet = SpreadsheetApp
+    .getActive()
+    .getSheetByName(CONFIG.SHEET.ORDER_LIST);
+  if (!sheet) return;
+
+  const data = sheet.getDataRange().getValues();
+
+  for (let i = 1; i < data.length; i++) {
+    const no = data[i][CONFIG.COLUMN.ORDER_NO - 1]
+      ?.toString()
+      .replace("'", "");
+
+    if (no === orderNo) {
+      sheet
+        .getRange(i + 1, CONFIG.COLUMN.STATUS)
+        .setValue(CONFIG.STATUS.CHANGE_BEFORE);
+      return;
     }
   }
 };

@@ -13,9 +13,12 @@ function doPost(e) {
     /* =========================
        postback（Flexボタン）
        ========================= */
-    /* =========================
-       postback（Flexボタン）
-       ========================= */
+
+    // if (event.type === "postback") {
+    //pushText(userId, "【春場所テスト】postbackは届いています 🌸");
+    //return;
+    //}
+
     if (event.type === "postback") {
       const postData = event.postback.data || "";
 
@@ -89,7 +92,7 @@ function doPost(e) {
 
           // 変更対象のデータを一時保持
           props.setProperty(`CHANGE_TARGET_${userId}`, JSON.stringify(target));
-          replyFlex(replyToken, confirmFlex);
+          pushFlex(userId, confirmFlex);
         }
         return;
       }
@@ -219,7 +222,7 @@ function replyText(replyToken, text) {
 
 function replyTexts(replyToken, texts) {
   const url = "https://api.line.me/v2/bot/message/reply";
-  const token = PropertiesService.getScriptProperties().getProperty("LINE_TOKEN");
+  const token = CONFIG.LINE.LINE_TOKEN; // ★ 修正
 
   const payload = {
     replyToken,
@@ -232,13 +235,14 @@ function replyTexts(replyToken, texts) {
       "Content-Type": "application/json",
       "Authorization": "Bearer " + token
     },
-    payload: JSON.stringify(payload)
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true // ← デバッグ用におすすめ
   });
 }
 
 function replyFlex(replyToken, flexMessage) {
   const url = "https://api.line.me/v2/bot/message/reply";
-  const token = PropertiesService.getScriptProperties().getProperty("LINE_TOKEN");
+  const token = CONFIG.LINE.LINE_TOKEN; // ★ 修正
 
   const payload = {
     replyToken,
@@ -251,57 +255,73 @@ function replyFlex(replyToken, flexMessage) {
       "Content-Type": "application/json",
       "Authorization": "Bearer " + token
     },
-    payload: JSON.stringify(payload)
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
   });
 }
 
+function pushText(userId, text) {
+  const url = "https://api.line.me/v2/bot/message/push";
+  const token = CONFIG.LINE.LINE_TOKEN;
+
+  UrlFetchApp.fetch(url, {
+    method: "post",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer " + token
+    },
+    payload: JSON.stringify({
+      to: userId,
+      messages: [{ type: "text", text }]
+    }),
+    muteHttpExceptions: true
+  });
+}
 
 /* ==================================================
    データ取得
    ================================================== */
 
+// LineWebhook.gs
 function getChangeableReservations(userId) {
-  const sheet = SpreadsheetApp.getActive().getSheetByName("注文一覧");
+  const sheet = SpreadsheetApp.getActive().getSheetByName(CONFIG.SHEET.ORDER_LIST);
   if (!sheet) return [];
 
   const data = sheet.getDataRange().getValues();
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  // フォームのベースURLとエントリーIDの定義
-  const FORM_BASE_URL = "https://docs.google.com/forms/d/e/1FAIpQLSc-WHjrgsi9nl8N_NcJaqvRWIX-TJHrWQICc6-i08NfxYRflQ/viewform";
-  const ENTRY_LINE_ID = "entry.593652011"; 
-  const ENTRY_NO      = "entry.1781944258"; 
-
   let list = [];
+
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
-    if (row[9] !== userId) continue;
 
-    const statusText = row[12]; // M列: ステータス
-    if (statusText === "変更済" || statusText === "キャンセル" || statusText === "変更前") continue;
+    // 自分の予約だけ
+    if (row[CONFIG.COLUMN.LINE_ID - 1] !== userId) continue;
 
-    const pickupDateStr = row[4]?.toString();
+    // ★ 修正④：ステータス判定を統一
+    const status = row[CONFIG.COLUMN.STATUS - 1];
+    if (status !== CONFIG.STATUS.NORMAL) continue;
+
+    // 日付チェック（未来のみ）
+    const pickupDateStr = row[CONFIG.COLUMN.PICKUP_DATE - 1];
     const pickupDate = parsePickupDate(pickupDateStr);
     if (!pickupDate || pickupDate < today) continue;
 
-    // --- ここでURLを生成 ---
-    const orderNo = row[1]?.toString().replace("'", ""); // B列: 予約番号
-    const lineId  = row[9]?.toString().replace("'", ""); // J列: LINE_ID
-    
-    const prefilledUrl = `${FORM_BASE_URL}?${ENTRY_LINE_ID}=${encodeURIComponent(lineId)}&${ENTRY_NO}=${encodeURIComponent(orderNo)}`;
+    const orderNo = row[CONFIG.COLUMN.ORDER_NO - 1]?.toString().replace("'", "");
+    const lineId  = row[CONFIG.COLUMN.LINE_ID - 1];
 
     list.push({
       no: orderNo,
       date: pickupDateStr,
-      items: row[6],
-      total: row[7],
+      items: row[CONFIG.COLUMN.DETAILS - 1],
+      total: row[CONFIG.COLUMN.TOTAL_COUNT - 1],
       lineId: lineId,
-      tel: row[2]?.toString().replace("'", ""),
-      userName: row[3],
-      formUrl: prefilledUrl // ★生成したURLをリストに追加
+      tel: row[CONFIG.COLUMN.TEL - 1]?.toString().replace("'", ""),
+      userName: row[CONFIG.COLUMN.NAME - 1]
     });
   }
+
   return list;
 }
 

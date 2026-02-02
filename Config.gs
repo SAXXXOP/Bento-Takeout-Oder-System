@@ -8,7 +8,7 @@ const CONFIG = {
     NAME_SHORT: "氏名（簡易）",
     PHONE: "電話番号",
     PICKUP_DATE: "受け取り希望日",
-    PICKUP_TIME: "受取り希望時刻",
+    PICKUP_TIME: "受取り希望時刻",//※現在は未使用
     OLD_RESERVATION_NO: "元予約No",
     LINE_ID: "LINE_ID(自動入力)",
     NOTE: "抜き物、アレルギーなど" 
@@ -38,7 +38,8 @@ const CONFIG = {
     DAILY_SUMMARY: 11, // K: 当日まとめ用
     REGULAR_FLG: 12,   // L: 常連フラグ
     STATUS: 13,        // M: ステータス（通常/変更前/変更後）
-    SOURCE_NO: 14      // N: 変更元予約No
+    SOURCE_NO: 14,      // N: 変更元予約No
+    PICKUP_DATE_RAW: 15 // O ★Date型（内部用）
   },
 
   // 4. 「顧客名簿」シートの列配置

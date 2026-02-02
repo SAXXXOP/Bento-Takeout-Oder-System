@@ -1,36 +1,73 @@
 function onFormSubmit(e) {
   const lock = LockService.getScriptLock();
+  let formData = null; // ★ finally で使うため先に宣言
+
   try {
-    // 20秒待機
-    if (!lock.tryLock(20000)) {
-      console.error("ロックを取得できませんでした");
-      return;
+    if (!lock.tryLock(20000)) return;
+
+    /* =========================
+       1. フォーム解析
+       ========================= */
+    formData = FormService.parse(e);
+    if (!formData) return;
+
+    /* =========================
+       2. 予約変更チェック
+       ========================= */
+    const props = PropertiesService.getUserProperties();
+    const targetJson = props.getProperty(`CHANGE_TARGET_${formData.userId}`);
+    let changeTarget = null;
+
+    if (targetJson) {
+      changeTarget = JSON.parse(targetJson);
+
+      // 旧予約を「変更前」に更新
+      markReservationAsChanged(changeTarget.no);
+
+      // 一度使ったら必ず消す
+      props.deleteProperty(`CHANGE_TARGET_${formData.userId}`);
     }
 
-    // 1. フォームデータの解析 (FormService.gs)
-    const formData = FormService.parse(e);
-    if (!formData) return;
-    
-    // 2. 予約Noの生成と変更判定 (ReservationService.gs)
+    /* =========================
+       3. 予約番号生成
+       ========================= */
     const reservationInfo = ReservationService.create(formData);
-    
-    // 3. 顧客名簿の更新 (CustomerService.gs が定義されているか確認！)
-    // もしエラーが続くなら、ここを CustomerService ではなく 
-    // 実際のファイル内で定義されている変数名に変えてください。
-    formData.isRegular = CustomerService.checkAndUpdateCustomer(formData);
 
-    // 4. 注文一覧への書き込み (OrderService.gs)
-    OrderService.saveOrder(reservationInfo.no, formData, reservationInfo.isChange);
+    // ★ 変更予約フラグを最終確定
+    reservationInfo.isChange = !!changeTarget;
 
-    // 5. LINE通知の送信 (LineService.gs)
-    LineService.sendReservationMessage(reservationInfo.no, formData, reservationInfo.isChange);
-    
+    /* =========================
+       4. 顧客更新
+       ========================= */
+    formData.isRegular =
+      CustomerService.checkAndUpdateCustomer(formData);
+
+    /* =========================
+       5. 注文保存
+       ========================= */
+    OrderService.saveOrder(
+      reservationInfo.no,
+      formData,
+      reservationInfo.isChange
+    );
+
+    /* =========================
+       6. LINE送信
+       ========================= */
+    LineService.sendReservationMessage(
+      reservationInfo.no,
+      formData,
+      reservationInfo.isChange
+    );
+
   } catch (err) {
-    console.error("エラー発生:", err.stack); // stackを表示すると原因が分かりやすくなります
+    console.error(err);
+    throw err;
+
   } finally {
-    // 6. 予約変更時の一時データを削除
-    if (typeof formData !== 'undefined' && formData.userId) {
-      ReservationService.clearTempData(formData.userId); 
+    // 一時データの後始末
+    if (formData && formData.userId) {
+      ReservationService.clearTempData(formData.userId);
     }
     lock.releaseLock();
   }

@@ -62,7 +62,13 @@ function createProductionSheet() {
   let memos = [];
 
   data.slice(1).forEach(row => {
-    if (row[CONFIG.COLUMN.STATUS - 1] === CONFIG.STATUS.CHANGE_BEFORE) return;
+const status = row[CONFIG.COLUMN.STATUS - 1];
+
+// 集計対象は「通常」「変更後」のみ
+if (
+  status !== CONFIG.STATUS.NORMAL &&
+  status !== CONFIG.STATUS.CHANGE_AFTER
+) return;
     const pickupDate = row[CONFIG.COLUMN.PICKUP_DATE - 1]?.toString().replace(/[^0-9]/g, "");
     if (!pickupDate || !pickupDate.includes(target)) return;
 

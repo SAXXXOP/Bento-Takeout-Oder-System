@@ -16,16 +16,15 @@ const FormService = {
       groupSummary: {}, isRegular: false
     };
 
+    let pickupDateObj = null;
     let rawDate = "", rawTime = "";
 
-    // FormService.gs 内の修正
     itemResponses.forEach(r => {
       const item = r.getItem();
       if (!item) return;
       const title = item.getTitle() ? item.getTitle().trim() : "";
       const answer = r.getResponse();
 
-      // Configを参照して分岐
       if (title.includes(CONFIG.FORM.NAME_SHORT)) formData.simpleName = answer || "";
       else if (title === CONFIG.FORM.NAME_FULL) formData.rawName = answer || "";
       else if (title.includes(CONFIG.FORM.PHONE)) formData.phoneNumber = answer ? "'" + answer : "";
@@ -37,17 +36,29 @@ const FormService = {
       else this.parseOrder(title, answer, formData);
     });
 
-    // ユーザー名が空の場合のデフォルト値を設定
+    // --- Date生成 ---
+    if (rawDate) {
+      const m = rawDate.match(/(\d{1,2})\/(\d{1,2})/);
+      if (m) {
+        const month = Number(m[1]);
+        const day   = Number(m[2]);
+        const now = new Date();
+        let year = now.getFullYear();
+        if (now.getMonth() === 11 && month === 1) year++;
+        pickupDateObj = new Date(year, month - 1, day);
+      }
+    }
+
+    // ★ 内部用 Date
+    formData.pickupDateRaw = pickupDateObj;
+
+    // 表示用（既存仕様）
+    formData.pickupDate =
+      (rawDate || rawTime) ? `${rawDate} / ${rawTime}` : "";
+
+    // ユーザー名確定
     formData.userName = formData.simpleName || formData.rawName || "";
 
-    // 簡易名があれば優先、なければ氏名
-    formData.userName = formData.simpleName || formData.rawName;
-    // 常連判定と名簿更新
-    formData.isRegular = CustomerService.checkAndUpdateCustomer(formData);
-    (formData);
-    // 日時整形
-    formData.pickupDate = (rawDate || rawTime) ? `${rawDate} / ${rawTime}` : "";
-    
     return formData;
   },
 
