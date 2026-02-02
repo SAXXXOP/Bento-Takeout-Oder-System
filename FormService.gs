@@ -1,150 +1,70 @@
-/**
- * ================================
- * FormService.gs
- * フォーム回答の取得・解析
- * ================================
- */
 const FormService = {
-
-  /**
-   * 最新のフォーム回答を取得
-   */
-  getLatestResponse(e) {
-    if (e && e.response) return e.response;
-
-    const ss = SpreadsheetApp.getActive();
-    const formUrl = ss.getFormUrl();
-    if (!formUrl) return null;
-
-    const responses = FormApp.openByUrl(formUrl).getResponses();
-    return responses.length ? responses.pop() : null;
-  },
-
-  /**
-   * フォーム回答を解析して業務用データに変換
-   */
-  parseResponse(response, menuMap) {
-    const itemResponses = response.getItemResponses();
-
-    let userId = "";
-    let userName = "";
-    let phoneNumber = "";
-    let pickupDate = "";
-    let pickupTime = "";
-    let note = "";
-    let orderDetails = "";
-    let totalItems = 0;
-    let totalPrice = 0;
-    let groupSummary = {};
-    let isRegular = "";
-    let isChange = false;
-
-    for (const ir of itemResponses) {
-      const item = ir.getItem();
-      const title = item.getTitle().trim();
-      const res = ir.getResponse();
-      if (!res || res === "" || (Array.isArray(res) && res.every(v => v === null))) continue;
-
-      // --- デバッグログ（既存維持） ---
-      console.log("チェック中の項目名: [" + title + "]");
-
-      // --- 変更予約判定 ---
-      if (title.includes("元予約No")) {
-        console.log("★元予約Noを検出しました！ 値: " + res);
-        isChange = true;
-        continue;
-      }
-
-      // --- 基本情報 ---
-      if (title.toUpperCase().includes("LINE_ID")) {
-        userId = res;
-        continue;
-      }
-      if (title.includes("氏名")) {
-        userName = res;
-        if (title.includes("簡易")) isRegular = "常連";
-        continue;
-      }
-      if (title.includes("電話")) {
-        phoneNumber = "'" + res;
-        continue;
-      }
-      if (title.includes("受け取り希望日")) {
-        pickupDate = res;
-        continue;
-      }
-      if (title.includes("受取希望時刻")) {
-        pickupTime = res;
-        continue;
-      }
-      if (title.includes("ご要望")) {
-        note += (note ? " / " : "") + res;
-        continue;
-      }
-
-      // 除外項目
-      if (
-        title.includes("ご利用されるのは") ||
-        title.includes("商品を選ぶ") ||
-        title.includes("注文を送信")
-      ) {
-        continue;
-      }
-
-      // --- 商品集計 ---
-      if (item.getType() === FormApp.ItemType.GRID) {
-        const rows = item.asGridItem().getRows();
-        let gridDetails = "";
-
-        for (let i = 0; i < rows.length; i++) {
-          const count = Number(res[i]);
-          if (!count || isNaN(count)) continue;
-
-          const childLabel = rows[i].trim();
-          const info = menuMap.children[childLabel];
-
-          gridDetails += `  ${childLabel} x ${count}\n`;
-          totalItems += count;
-
-          if (info) {
-            totalPrice += info.price * count;
-            groupSummary[info.group] = (groupSummary[info.group] || 0) + count;
-          }
-        }
-
-        if (gridDetails) {
-          orderDetails += `・${title}:\n${gridDetails}`;
-        }
-
-      } else {
-        const count = Number(res);
-        if (!isNaN(count) && count > 0) {
-          const info = menuMap.parents[title];
-
-          orderDetails += `・${title} x ${count}\n`;
-          totalItems += count;
-
-          if (info) {
-            totalPrice += info.price * count;
-            groupSummary[info.group] = (groupSummary[info.group] || 0) + count;
-          }
-        }
-      }
+  parse(e) {
+    let response;
+    if (e && e.response) {
+      response = e.response;
+    } else {
+      const formUrl = SpreadsheetApp.getActiveSpreadsheet().getFormUrl();
+      response = FormApp.openByUrl(formUrl).getResponses().pop();
     }
 
-    return {
-      userId,
-      userName,
-      phoneNumber,
-      pickupDate,
-      pickupTime,
-      note,
-      orderDetails: orderDetails.trim(),
-      totalItems,
-      totalPrice,
-      groupSummary,
-      isRegular,
-      isChange
+    const itemResponses = response.getItemResponses();
+    const formData = {
+      userId: "", userName: "", rawName: "", simpleName: "",
+      phoneNumber: "", pickupDate: "", note: "",
+      orderDetails: "", totalItems: 0, totalPrice: 0,
+      groupSummary: {}, isRegular: false
     };
+
+    let rawDate = "", rawTime = "";
+
+    itemResponses.forEach(r => {
+      const title = r.getItem().getTitle().trim();
+      const answer = r.getResponse();
+
+      if (title.includes("氏名（簡易）")) formData.simpleName = answer;
+      else if (title === "氏名") formData.rawName = answer;
+      else if (title.includes("電話番号")) formData.phoneNumber = answer ? "'" + answer : "";
+      else if (title === "受け取り希望日") rawDate = answer;
+      else if (title === "受取り希望時刻") rawTime = answer;
+      else if (title.includes("LINE_ID")) formData.userId = answer;
+      else if (title.includes("備考") || title.includes("リクエスト")) formData.note = answer;
+      else this.parseOrder(title, answer, formData);
+    });
+
+    // 簡易名があれば優先、なければ氏名
+    formData.userName = formData.simpleName || formData.rawName;
+    // 常連判定と名簿更新
+    formData.isRegular = CustomerService.checkAndUpdateCustomer(formData);
+    // 日時整形
+    formData.pickupDate = (rawDate || rawTime) ? `${rawDate} / ${rawTime}` : "";
+    
+    return formData;
+  },
+
+  parseOrder(title, answer, formData) {
+    const menuData = MenuRepository.getMenu();
+    // マスタのC列(parentName)と質問文が一致するものを抽出
+    const targets = menuData.filter(m => m.parentName === title);
+    if (targets.length === 0) return;
+
+    // グリッド回答(1, 0, 1など)を配列化
+    const counts = Array.isArray(answer) ? answer : String(answer).split(',');
+
+    counts.forEach((countStr, index) => {
+      const count = parseInt(countStr.trim());
+      if (isNaN(count) || count <= 0) return;
+
+      const menu = targets[index];
+      if (!menu) return;
+
+      const displayName = menu.childName ? `${menu.parentName}(${menu.childName})` : menu.parentName;
+      formData.orderDetails += `・${displayName} x ${count}\n`;
+      formData.totalItems += count;
+      formData.totalPrice += menu.price * count;
+      
+      const group = menu.group || "その他";
+      formData.groupSummary[group] = (formData.groupSummary[group] || 0) + count;
+    });
   }
 };

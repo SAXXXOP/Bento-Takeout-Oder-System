@@ -1,118 +1,112 @@
-/**
- * ================================
- * CustomerService.gs
- * 顧客名簿管理
- * ================================
- */
 const CustomerService = {
 
-  /**
-   * 顧客名簿を更新
-   */
-  update(userId, userName, phoneNumber, price, orderDetails, totalItems) {
-    if (!userId) return;
+  // ================================
+  // フォーム送信時の名簿更新（改修版）
+  // ================================
+  checkAndUpdateCustomer(formData) {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("顧客名簿");
+    if (!sheet) return false;
 
-    const ss = SpreadsheetApp.getActive();
-    let sheet = ss.getSheetByName("顧客名簿");
-
-    if (!sheet) {
-      sheet = ss.insertSheet("顧客名簿");
-      sheet.appendRow([
-        "LINE ID", "氏名", "電話番号", "初回来店日", "最終来店日",
-        "合計回数", "合計金額", "備考(調理)", "備考(事務)",
-        "履歴1", "履歴2", "履歴3"
-      ]);
-      sheet.setFrozenRows(1);
-    }
-
-    const data = sheet.getDataRange().getValues();
-    const today = new Date();
-    const todayStr = Utilities.formatDate(today, "JST", "MM/dd");
-
-    const summary = `${todayStr} (${totalItems}点) ${price.toLocaleString()}円`;
-    const detail = orderDetails.trim();
+    const values = sheet.getDataRange().getValues();
+    const lineId = formData.userId;
+    const phone = formData.phoneNumber;
+    const newName = formData.userName;
+    const now = new Date();
 
     let foundRow = -1;
-    for (let i = 1; i < data.length; i++) {
-      if (data[i][0] === userId) {
+
+    // ① LINE ID 最優先で検索
+    for (let i = 1; i < values.length; i++) {
+      if (lineId && values[i][0] === lineId) {
         foundRow = i + 1;
         break;
       }
     }
 
-    if (foundRow > 0) {
-      // --- 既存顧客 ---
-      const historyRange = sheet.getRange(foundRow, 10, 1, 2);
-      const oldValues = historyRange.getValues()[0];
-      const oldNotes  = historyRange.getNotes()[0];
-
-      const rowValues = data[foundRow - 1];
-      const basicInfo = [
-        userId,
-        userName,
-        phoneNumber,
-        rowValues[3],
-        today,
-        Number(rowValues[5] || 0) + 1,
-        Number(rowValues[6] || 0) + price
-      ];
-      sheet.getRange(foundRow, 1, 1, 7).setValues([basicInfo]);
-
-      // 履歴スライド
-      sheet.getRange(foundRow, 10).setValue(summary).setNote(detail);
-      sheet.getRange(foundRow, 11).setValue(oldValues[0]).setNote(oldNotes[0]);
-      sheet.getRange(foundRow, 12).setValue(oldValues[1]).setNote(oldNotes[1]);
-
-    } else {
-      // --- 新規顧客 ---
-      sheet.appendRow([
-        userId, userName, phoneNumber,
-        today, today, 1, price,
-        "", "", summary, "", ""
-      ]);
-      sheet.getRange(sheet.getLastRow(), 10).setNote(detail);
+    // ② 保険：電話番号一致
+    if (foundRow === -1 && phone) {
+      for (let i = 1; i < values.length; i++) {
+        if (values[i][2] === phone) {
+          foundRow = i + 1;
+          break;
+        }
+      }
     }
+
+    // === 既存顧客 ===
+    if (foundRow !== -1) {
+      const row = values[foundRow - 1];
+      const oldName = row[1];
+
+      // 名前は「情報量が多い方」を採用
+      const betterName =
+        newName && newName.length > (oldName || "").length
+          ? newName
+          : oldName;
+
+      const currentCount = parseInt(row[5]) || 0;
+      const currentTotal = parseInt(row[6]) || 0;
+
+      sheet.getRange(foundRow, 1).setValue(lineId || row[0]); // LINE ID
+      sheet.getRange(foundRow, 2).setValue(betterName);      // 氏名
+      sheet.getRange(foundRow, 5).setValue(now);             // 最終
+      sheet.getRange(foundRow, 6).setValue(currentCount + 1);// 回数
+      sheet.getRange(foundRow, 7).setValue(
+        currentTotal + (formData.totalPrice || 0)
+      );
+
+      return true; // 常連
+    }
+
+    // === 新規顧客 ===
+    sheet.appendRow([
+      lineId,                 // A: LINE ID
+      newName,                // B: 氏名
+      phone,                  // C: 電話番号
+      now,                    // D: 初回
+      now,                    // E: 最終
+      1,                      // F: 回数
+      formData.totalPrice||0, // G: 金額
+      "",                     // H: 備考(調理)
+      "",                     // I: 備考(事務)
+      "", "", ""              // 履歴
+    ]);
+
+    return false;
   },
 
-  /**
-   * 名前検索
-   */
-  search(query) {
-    if (!query) return [];
-    const sheet = SpreadsheetApp.getActive().getSheetByName("顧客名簿");
-    const data = sheet.getDataRange().getValues();
+  // ================================
+  // サイドバー検索（氏名部分一致）
+  // ================================
+  getCustomerInfo(name) {
+    if (!name) return null;
+    const values = SpreadsheetApp.getActiveSpreadsheet()
+      .getSheetByName("顧客名簿")
+      .getDataRange()
+      .getValues();
 
-    return data.slice(1)
-      .filter(r => r[1].toString().includes(query))
-      .map(r => ({
-        row: data.indexOf(r) + 1,
-        name: r[1],
-        tel: r[2].toString()
-      }));
+    for (let i = 1; i < values.length; i++) {
+      if (values[i][1] && values[i][1].includes(name)) {
+        return {
+          lineId: values[i][0],
+          name: values[i][1],
+          tel: values[i][2],
+          noteCook: values[i][7],
+          noteOffice: values[i][8],
+          row: i + 1
+        };
+      }
+    }
+    return null;
   },
 
-  /**
-   * 行番号から顧客取得
-   */
-  getByRow(row) {
-    const sheet = SpreadsheetApp.getActive().getSheetByName("顧客名簿");
-    const data = sheet.getRange(row, 1, 1, 9).getValues()[0];
-
-    return {
-      row,
-      name: data[1],
-      noteKitchen: data[7],
-      noteOffice: data[8]
-    };
-  },
-
-  /**
-   * 備考保存
-   */
-  saveNote(row, note, type) {
-    const sheet = SpreadsheetApp.getActive().getSheetByName("顧客名簿");
-    const col = (type === "kitchen") ? 8 : 9;
-    sheet.getRange(row, col).setValue(note);
-    return "保存しました！";
+  // ================================
+  // サイドバー保存
+  // ================================
+  updateCustomerNotes(rowData) {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("顧客名簿");
+    sheet.getRange(rowData.row, 8).setValue(rowData.noteCook);
+    sheet.getRange(rowData.row, 9).setValue(rowData.noteOffice);
+    return "保存しました";
   }
 };

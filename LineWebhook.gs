@@ -17,6 +17,24 @@ function doPost(e) {
       const postData = event.postback.data || "";
 
       // ▼ 予約選択（修正版：ボタン付きFlexメッセージで返信）
+      // ▼ 詳細確認（G列の内容をテキストで返す）
+      if (postData.startsWith("show_details:")) {
+        const index = Number(postData.split(":")[1]);
+        const listJson = props.getProperty(`CHANGE_LIST_${userId}`);
+        if (!listJson) {
+          replyText(replyToken, "データが見つかりませんでした。");
+          return;
+        }
+        const list = JSON.parse(listJson);
+        const target = list[index];
+        if (target) {
+          const detailMsg = `【ご注文詳細】\n予約番号: ${target.no}\n------------------\n${target.items}`;
+          replyText(replyToken, detailMsg);
+        }
+        return;
+      }
+
+      // ▼ 予約選択（ここから既存の if (postData.startsWith("change:")) ...）
       if (postData.startsWith("change:")) {
         const index = Number(postData.split(":")[1]);
         const listJson = props.getProperty(`CHANGE_LIST_${userId}`);
@@ -189,37 +207,28 @@ function buildReservationBubble(r, index) {
         {
           type: "separator"
         },
-        {
-          type: "text",
-          text: "ご注文内容",
-          size: "sm",
-          color: "#888888"
-        },
-        {
-          type: "text",
-          text: r.items,
-          size: "sm",
-          wrap: true
-        },
+        /* 修正箇所：flexを調整して文字同士を近づける */
         {
           type: "box",
           layout: "baseline",
           margin: "md",
+          spacing: "md",
+          justifyContent: "center", // 全体を中央寄せにする
           contents: [
             {
               type: "text",
-              text: "点数",
+              text: "ご注文合計",
               size: "sm",
-              color: "#888888",
-              flex: 1
+              color: "#666666",
+              flex: 0 // 内容に合わせる
             },
             {
               type: "text",
               text: `${r.total} 点`,
-              size: "md",
+              size: "lg",
               weight: "bold",
-              color: "#D32F2F",
-              flex: 4
+              color: "#222222",
+              flex: 0 // 内容に合わせる
             }
           ]
         }
@@ -234,10 +243,21 @@ function buildReservationBubble(r, index) {
           type: "button",
           style: "primary",
           color: "#1DB446",
+          height: "sm",
           action: {
             type: "postback",
             label: "この予約を変更",
             data: `change:${index}`
+          }
+        },
+        {
+          type: "button",
+          style: "secondary",
+          height: "sm",
+          action: {
+            type: "postback",
+            label: "詳細を確認",
+            data: `show_details:${index}`
           }
         }
       ]
@@ -309,42 +329,40 @@ function replyFlex(replyToken, flexMessage) {
    データ取得
    ================================================== */
 
+// LineWebhook.gs の後半にある関数を書き換え
 function getChangeableReservations(userId) {
-  if (!userId) return [];
   const sheet = SpreadsheetApp.getActive().getSheetByName("注文一覧");
+  if (!sheet) return [];
+
   const data = sheet.getDataRange().getValues();
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const list = [];
-  console.log("検索開始: " + userId); // デバッグログ
-
+  let list = [];
+  // 2行目からループ (i=1)
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
-    const lineId = row[9]?.toString().trim();
-    if (lineId !== userId) continue;
+    // J列(index 9)のLINE IDが一致するか確認
+    if (row[9] !== userId) continue;
 
-    const statusText = row[12]?.toString().trim();
-    // 「変更前」などのステータスで除外されていないか確認
+    const statusText = row[12]; // M列: ステータス
     if (statusText === "変更済" || statusText === "キャンセル" || statusText === "変更前") continue;
 
     const pickupDateStr = row[4]?.toString();
     const pickupDate = parsePickupDate(pickupDateStr);
-    
-    console.log(`行${i+1}: 注文No${row[1]} 日付解析結果: ${pickupDate}`); // デバッグログ
 
     if (!pickupDate || pickupDate < today) continue;
 
     list.push({
-      no: row[1]?.toString().replace("'", ""),
-      date: pickupDateStr,
-      items: row[6],
-      total: row[7],
-      tel: row[2]?.toString().replace("'", ""),
-      userName: row[3]
+      no: row[1]?.toString().replace("'", ""),      // B列: 予約番号
+      date: pickupDateStr,                          // E列: 受取希望日
+      items: row[6],                                // G列: 商品詳細
+      total: row[7],                                // H列: 総数
+      lineId: row[9]?.toString().replace("'", ""),  // J列: LINE_ID ★追加
+      tel: row[2]?.toString().replace("'", ""),     // C列: 電話番号
+      userName: row[3]                              // D列: 名前
     });
   }
-  console.log("見つかった件数: " + list.length);
   return list;
 }
 

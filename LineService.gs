@@ -1,83 +1,77 @@
-/**
- * ================================
- * LineService.gs
- * LINE通知送信
- * ================================
- */
-const LineService = {
+const LineService = (() => {
+
+  const TOKEN = PropertiesService
+    .getScriptProperties()
+    .getProperty("LINE_TOKEN");
 
   /**
-   * 予約完了／変更 完了メッセージ送信
+   * Main.gs から呼ばれる唯一の入口
    */
-  sendReservationMessage(reservationNo, formData, isChange) {
-    const token = PropertiesService.getScriptProperties().getProperty("LINE_TOKEN");
-    if (!formData.userId || !token) return;
+  function sendReservationMessage(reservationNo, formData, isChange) {
+    if (!formData?.userId || !TOKEN) return;
 
-    const titleHeader = isChange
+    const title = isChange
       ? "【予約内容の変更を承りました】"
-      : "【ご予約ありがとうございました】";
+      : "【ご予約ありがとうございます】";
 
-    LineService._sendText(
-      formData.userId,
-      token,
+    const text = buildMessage(
+      title,
       reservationNo,
-      formData.pickupDate,
-      formData.pickupTime,
-      formData.userName,
-      formData.phoneNumber,
-      formData.note,
-      formData.orderDetails,
-      formData.totalItems,
-      formData.totalPrice,
-      titleHeader
+      formData
     );
-  },
+
+    push(formData.userId, text);
+  }
 
   /**
-   * 実送信（既存ロジック完全移植）
+   * メッセージ本文生成（Bロジック）
    */
-  _sendText(
-    userId,
-    token,
-    reservationNo,
-    pickupDate,
-    pickupTime,
-    userName,
-    phoneNumber,
-    note,
-    orderDetails,
-    totalItems,
-    totalPrice,
-    titleHeader
-  ) {
+  function buildMessage(title, reservationNo, d) {
 
-    const text = [
-      "━━━━━━━━━━━━━",
-      ` ${titleHeader}`,
-      "━━━━━━━━━━━━━",
-      `■予約No：${reservationNo}`,
-      `■受取り：${pickupDate} ${pickupTime}`,
-      `■お名前：${userName} 様`,
-      `■お電話：${phoneNumber.replace("'", "")}`,
-      "【ご要望】",
-      note || "なし",
-      "【ご注文内容】",
-      orderDetails.trim(),
-      ` 合計：${totalItems}点 / ${totalPrice.toLocaleString()}円`,
-      "━━━━━━━━━━━━━"
-    ].join("\n");
+  const tel = d.phoneNumber
+    ? d.phoneNumber.replace(/^'/, "")
+    : "";
 
-    UrlFetchApp.fetch("https://api.line.me/v2/bot/message/push", {
-      method: "post",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer " + token
-      },
-      payload: JSON.stringify({
-        to: userId,
-        messages: [{ type: "text", text }]
-      }),
-      muteHttpExceptions: true
-    });
+  return [
+    "━━━━━━━━━━━━━",
+    title,
+    "━━━━━━━━━━━━━",
+    `■予約No：${reservationNo}`,
+    `■受取り：${d.pickupDate} ${d.pickupTime}`,
+    `■お名前：${d.userName} 様`,
+    `■お電話：${tel}`,
+    "【ご要望】",
+    d.note || "なし",
+    "【ご注文内容】",
+    d.orderDetails,
+    ` 合計：${d.totalItems}点 / ${Number(d.totalPrice).toLocaleString()}円`,
+    "━━━━━━━━━━━━━"
+  ].join("\n");
+}
+
+  /**
+   * LINE push（低レイヤ）
+   */
+  function push(userId, text) {
+    UrlFetchApp.fetch(
+      "https://api.line.me/v2/bot/message/push",
+      {
+        method: "post",
+        contentType: "application/json",
+        headers: {
+          Authorization: "Bearer " + TOKEN
+        },
+        payload: JSON.stringify({
+          to: userId,
+          messages: [{ type: "text", text }]
+        }),
+        muteHttpExceptions: true
+      }
+    );
   }
-};
+
+  return {
+    sendReservationMessage
+  };
+
+})();
