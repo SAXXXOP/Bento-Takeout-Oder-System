@@ -53,7 +53,6 @@ const FormService = {
 
   parseOrder(title, answer, formData) {
     const menuData = MenuRepository.getMenu();
-    // titleがnullの場合に備えて文字列化
     const safeTitle = title ? String(title).trim() : "";
     const targets = menuData.filter(m => m.parentName === safeTitle);
     
@@ -62,15 +61,25 @@ const FormService = {
     const counts = Array.isArray(answer) ? answer : String(answer).split(',');
 
     counts.forEach((countStr, index) => {
-      if (!countStr) return; // 空ならスキップ
+      if (!countStr) return; 
       const count = parseInt(String(countStr).trim());
       if (isNaN(count) || count <= 0) return;
 
       const menu = targets[index];
       if (!menu) return;
 
-      const displayName = menu.childName ? `${menu.parentName}(${menu.childName})` : menu.parentName;
+      // 【修正】小メニューが空かつ、他にも選択肢がある場合は「集計用親項目」とみなしてスキップ
+      // これにより ID 5, 10, 15, 21, 46 が注文詳細テキストに載るのを防ぎます
+      if ((!menu.childName || menu.childName.trim() === "") && targets.length > 1) {
+        return;
+      }
+
+      // 【修正】F列の略称があればそれを使い、なければ従来通り組み立てる
+      const displayName = menu.shortName || (menu.childName ? `${menu.parentName}(${menu.childName})` : menu.parentName);
+      
+      // ここで「・」を1つだけ付けて保存
       formData.orderDetails += `・${displayName} x ${count}\n`;
+      
       formData.totalItems += count;
       formData.totalPrice += menu.price * count;
       
