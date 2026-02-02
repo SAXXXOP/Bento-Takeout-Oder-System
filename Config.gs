@@ -62,5 +62,15 @@ const CONFIG = {
     NORMAL: "通常",
     CHANGE_BEFORE: "変更前",
     CHANGE_AFTER: "変更後"
-  }
+  },
+
+  // 6. 「メニューマスタ」シートの列配置
+  MENU_COLUMN: {
+    ID: 1,           // A
+    GROUP: 2,        // B
+    MENU_NAME: 3,    // C (フォームの質問文)
+    SUB_MENU: 4,     // D (グリッドの選択肢など)
+    PRICE: 5,        // E
+    SHORT_NAME: 6    // F (内部キー・略称)
+  },
 };
