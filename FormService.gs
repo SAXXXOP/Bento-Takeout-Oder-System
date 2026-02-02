@@ -60,31 +60,44 @@ const FormService = {
 
     const counts = Array.isArray(answer) ? answer : String(answer).split(',');
 
+    // 【重要】マスタの何行目を参照するかを管理するポインタ
+    let masterPointer = 0;
+
     counts.forEach((countStr, index) => {
-      if (!countStr) return; 
+      if (!countStr || countStr.trim() === "") return;
+      
       const count = parseInt(String(countStr).trim());
-      if (isNaN(count) || count <= 0) return;
-
-      const menu = targets[index];
-      if (!menu) return;
-
-      // 【修正】小メニューが空かつ、他にも選択肢がある場合は「集計用親項目」とみなしてスキップ
-      // これにより ID 5, 10, 15, 21, 46 が注文詳細テキストに載るのを防ぎます
-      if ((!menu.childName || menu.childName.trim() === "") && targets.length > 1) {
+      if (isNaN(count) || count <= 0) {
+        // 個数が0や空の場合は、マスタのポインタだけ進めて次の回答へ
+        // ※グリッド形式の場合、回答の並びとマスタの並びは1:1で対応しているはずなので
+        masterPointer++;
         return;
       }
 
-      // 【修正】F列の略称があればそれを使い、なければ従来通り組み立てる
+      // 参照先の項目を取得
+      let menu = targets[masterPointer];
+
+      // 【修正の核心】
+      // もし参照した項目が「親項目（小メニュー空）」だった場合、
+      // それはグリッドの選択肢（具材）ではないので、その行を飛ばして次を見る
+      while (menu && (!menu.childName || menu.childName.trim() === "") && targets.length > masterPointer + 1) {
+        masterPointer++;
+        menu = targets[masterPointer];
+      }
+
+      if (!menu) return;
+
       const displayName = menu.shortName || (menu.childName ? `${menu.parentName}(${menu.childName})` : menu.parentName);
       
-      // ここで「・」を1つだけ付けて保存
       formData.orderDetails += `・${displayName} x ${count}\n`;
-      
       formData.totalItems += count;
-      formData.totalPrice += menu.price * count;
+      formData.totalPrice += (menu.price || 0) * count;
       
       const group = menu.group || "その他";
       formData.groupSummary[group] = (formData.groupSummary[group] || 0) + count;
+
+      // この回答の処理が終わったので、次の回答のためにマスタのポインタを進める
+      masterPointer++;
     });
   }
 };
