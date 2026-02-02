@@ -1,26 +1,17 @@
 const LineService = (() => {
+  // Config.gsで設定したトークンを使用
+  const getBtnToken = () => CONFIG.LINE.CHANNEL_ACCESS_TOKEN;
 
-  const TOKEN = PropertiesService
-    .getScriptProperties()
-    .getProperty("LINE_TOKEN");
-
-  /**
-   * Main.gs から呼ばれる唯一の入口
-   */
   function sendReservationMessage(reservationNo, formData, isChange) {
-    if (!formData?.userId || !TOKEN) return;
+    const token = getBtnToken();
+    if (!token || !formData?.userId) {
+      console.error("LINE送信不可: トークンまたはユーザーIDがありません");
+      return;
+    }
 
-    const title = isChange
-      ? "【予約内容の変更を承りました】"
-      : "【ご予約ありがとうございます】";
-
-    const text = buildMessage(
-      title,
-      reservationNo,
-      formData
-    );
-
-    push(formData.userId, text);
+    const title = isChange ? "【予約変更を承りました】" : "【ご予約ありがとうございます】";
+    const text = buildMessage(title, reservationNo, formData);
+    push(token, formData.userId, text);
   }
 
   /**

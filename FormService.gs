@@ -43,7 +43,7 @@ const FormService = {
     // 簡易名があれば優先、なければ氏名
     formData.userName = formData.simpleName || formData.rawName;
     // 常連判定と名簿更新
-    formData.isRegular = checkAndUpdateCustomer(formData);
+    formData.isRegular = CustomerService.checkAndUpdateCustomer(formData);
     (formData);
     // 日時整形
     formData.pickupDate = (rawDate || rawTime) ? `${rawDate} / ${rawTime}` : "";
@@ -53,15 +53,17 @@ const FormService = {
 
   parseOrder(title, answer, formData) {
     const menuData = MenuRepository.getMenu();
-    // マスタのC列(parentName)と質問文が一致するものを抽出
-    const targets = menuData.filter(m => m.parentName === title);
+    // titleがnullの場合に備えて文字列化
+    const safeTitle = title ? String(title).trim() : "";
+    const targets = menuData.filter(m => m.parentName === safeTitle);
+    
     if (targets.length === 0) return;
 
-    // グリッド回答(1, 0, 1など)を配列化
     const counts = Array.isArray(answer) ? answer : String(answer).split(',');
 
     counts.forEach((countStr, index) => {
-      const count = parseInt(countStr.trim());
+      if (!countStr) return; // 空ならスキップ
+      const count = parseInt(String(countStr).trim());
       if (isNaN(count) || count <= 0) return;
 
       const menu = targets[index];

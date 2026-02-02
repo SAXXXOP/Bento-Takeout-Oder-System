@@ -10,8 +10,8 @@ const CONFIG = {
     PICKUP_DATE: "受け取り希望日",
     PICKUP_TIME: "受取り希望時刻",
     OLD_RESERVATION_NO: "元予約No",
-    LINE_ID: "LINE_ID",
-    NOTE: "リクエスト" 
+    LINE_ID: "LINE_ID(自動入力)",
+    NOTE: "抜き物、アレルギーなど" 
   },
 
   // 2. スプレッドシート名
@@ -74,10 +74,17 @@ const CONFIG = {
     SHORT_NAME: 6    // F (内部キー・略称)
   },
 
-  // 7. LINE_TOKEN
+  // 7. LINE/LIFF 関連設定（メモとして記録）
   LINE: {
+    // リッチメニューの「予約する」ボタンに設定しているURL
+    LIFF_URL: "https://liff.line.me/2009003404-RXJsbtuc",
+    
+    // Googleフォームの各項目に自動入力するためのentry ID (LineWebhook.gsより転記)
+    ENTRY_LINE_ID: "entry.593652011",
+    ENTRY_OLD_NO: "entry.1781944258",
+ 
     // 実際のトークンは「プロジェクトの設定 > スクリプトプロパティ」に 
-    // CHANNEL_ACCESS_TOKEN という名前で保存してください
-    CHANNEL_ACCESS_TOKEN: PropertiesService.getScriptProperties().getProperty('CHANNEL_ACCESS_TOKEN'),
+    // LINE_TOKEN という名前で保存してください
+    LINE_TOKEN: PropertiesService.getScriptProperties().getProperty('LINE_TOKEN'),
   },
 };
