@@ -2,7 +2,7 @@
  * システム全体の設定項目を一括管理する
  */
 const CONFIG = {
-  // 1. Googleフォームの質問タイトル
+  // 1. Googleフォームの質問タイトル（フォームの文言と一致させる）
   FORM: {
     NAME_FULL: "氏名",
     NAME_SHORT: "氏名（簡易）",
@@ -11,7 +11,7 @@ const CONFIG = {
     PICKUP_TIME: "受取り希望時刻",
     OLD_RESERVATION_NO: "元予約No",
     LINE_ID: "LINE_ID",
-    NOTE: "リクエスト"
+    NOTE: "リクエスト" 
   },
 
   // 2. スプレッドシート名
@@ -19,11 +19,11 @@ const CONFIG = {
     ORDER_LIST: "注文一覧",
     CUSTOMER_LIST: "顧客名簿",
     MENU_MASTER: "メニューマスタ",
-    DAILY_SUMMARY: "当日まとめ",   // 追加
-    RESERVATION_CARD: "予約札"     // 追加
+    DAILY_SUMMARY: "当日まとめ",
+    RESERVATION_CARD: "予約札"
   },
 
-  // 3. 注文一覧シートの列配置（1始まり）
+  // 3. 「注文一覧」シートの列配置
   COLUMN: {
     TIMESTAMP: 1,      // A
     ORDER_NO: 2,       // B
@@ -37,35 +37,27 @@ const CONFIG = {
     LINE_ID: 10,       // J
     DAILY_SUMMARY: 11, // K: 当日まとめ用
     REGULAR_FLG: 12,   // L: 常連フラグ
-    STATUS: 13,        // M: ステータス
+    STATUS: 13,        // M: ステータス（通常/変更前/変更後）
     SOURCE_NO: 14      // N: 変更元予約No
   },
 
-  // 4. 顧客名簿シートの列配置（1始まり）
+  // 4. 「顧客名簿」シートの列配置
   CUSTOMER_COLUMN: {
-    LINE_ID: 1, NAME: 2, TEL: 3, FIRST_VISIT: 4, LAST_VISIT: 5,
-    VISIT_COUNT: 6, TOTAL_SPEND: 7, NOTE_COOK: 8, NOTE_OFFICE: 9,
-    HISTORY_1: 10, HISTORY_2: 11, HISTORY_3: 12
+    LINE_ID: 1,        // A
+    NAME: 2,           // B
+    TEL: 3,            // C
+    FIRST_VISIT: 4,    // D
+    LAST_VISIT: 5,     // E
+    VISIT_COUNT: 6,    // F
+    TOTAL_SPEND: 7,    // G
+    NOTE_COOK: 8,      // H: 備考(調理)
+    NOTE_OFFICE: 9,    // I: 備考(事務)
+    HISTORY_1: 10,     // J
+    HISTORY_2: 11,     // K
+    HISTORY_3: 12      // L
   },
 
-  // 5. 当日まとめシートの構成（必要に応じて定義）
-  SUMMARY_COLUMN: {
-    PICKUP_TIME: 1,    // A: 受取時間
-    NAME: 2,           // B: 名前
-    ORDER_DETAILS: 3,  // C: 注文内容
-    TOTAL_PRICE: 4,    // D: 合計
-    PAID_STATUS: 5,    // E: 支払状況など
-    RESERVATION_NO: 6  // F: 予約番号
-  },
-
-  // 6. 予約札の設定（レイアウト上の位置など）
-  CARD: {
-    COLUMNS_PER_PAGE: 3, // 1ページに並べる札の数（4列など）
-    FONT_SIZE_NAME: 14,
-    FONT_SIZE_DETAILS: 10
-  },
-
-  // 7. ステータス文言
+  // 5. ステータス文言
   STATUS: {
     NORMAL: "通常",
     CHANGE_BEFORE: "変更前",
