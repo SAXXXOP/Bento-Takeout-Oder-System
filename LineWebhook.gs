@@ -14,6 +14,10 @@ function doPost(e) {
        postback（Flexボタン）
        ========================= */
 
+    if (event.type === "postback") {
+  replyText(replyToken, "postback受信OK");
+  return;
+}
     // if (event.type === "postback") {
     //pushText(userId, "【春場所テスト】postbackは届いています 🌸");
     //return;
