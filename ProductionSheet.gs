@@ -1,6 +1,6 @@
 /**
  * 当日まとめシート作成
- * 修正点：小メニューをID順（マスタ登録順）に並び替え / ビンパッキング / サイズ12
+ * 修正点：見出し用ID(10,15,21,46等)の重複排除 / ID順 / ビンパッキング
  */
 function createProductionSheet() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -15,11 +15,11 @@ function createProductionSheet() {
   if (res.getSelectedButton() !== ui.Button.OK) return;
   const target = res.getResponseText().replace(/[^0-9]/g, "");
 
-  // --- 1. メニューマスタのインデックス化 (ID順を保持) ---
+  // --- 1. メニューマスタのインデックス化 ---
   const masterData = master.getDataRange().getValues().slice(1);
   const itemToInfo = {};    
   const displayNameMap = {}; 
-  const itemOrder = []; // ID順を保持するための配列
+  const itemOrder = {}; 
 
   masterData.forEach((r, index) => {
     const group = r[CONFIG.MENU_COLUMN.GROUP - 1];
@@ -29,21 +29,20 @@ function createProductionSheet() {
     
     if (!group) return;
 
-    const info = { group, parent, child, id: index }; // 出現順(index)を保持
+    const info = { group, parent, child, id: index };
+    const isHeaderOnly = !child || child === parent; // 見出し行かどうかの判定
 
-    if (child) {
-      itemToInfo[child] = info;
-      if (!itemOrder.includes(child)) itemOrder.push(child);
-    }
-    if (short) {
-      itemToInfo[short] = info;
-    }
-    if (parent && !itemToInfo[parent]) {
+    if (child) itemToInfo[child] = info;
+    if (short) itemToInfo[short] = info;
+    
+    // 親メニュー名での登録（見出し行、または小メニューなし注文のヒット用）
+    if (parent && (!itemToInfo[parent] || isHeaderOnly)) {
       itemToInfo[parent] = info;
-      if (!itemOrder.includes(parent)) itemOrder.push(parent);
     }
     
-    displayNameMap[child || parent] = short || child || parent;
+    const key = child || parent;
+    displayNameMap[key] = short || child || parent;
+    if (itemOrder[key] === undefined) itemOrder[key] = index;
   });
 
   // --- 2. データの集計 ---
@@ -88,7 +87,10 @@ function createProductionSheet() {
       }
 
       const { group, parent, child } = info;
-      const childKey = child || parent;
+      
+      // 重要：小メニューが空、または親と同じなら「親自身」として集計
+      const isRedundant = !child || child === parent || displayNameMap[child] === displayNameMap[parent];
+      const childKey = isRedundant ? parent : child;
 
       if (!detailTree[group]) detailTree[group] = {};
       if (!detailTree[group][parent]) detailTree[group][parent] = {};
@@ -121,36 +123,31 @@ function createProductionSheet() {
     colRows = colRows.map(r => r + 1);
   }
 
-  // --- 5. ビンパッキング用の高さ計算 ---
+  // --- 5. 高さ計算（ビンパッキング用） ---
   const sortedGroups = Object.keys(detailTree).map(g => {
-    let h = 1; // Header
+    let h = 1; 
     Object.keys(detailTree[g]).forEach(p => {
-      h++; // Parent row
+      h++; 
       const cKeys = Object.keys(detailTree[g][p]);
-      if (!(cKeys.length === 1 && cKeys[0] === p)) h += cKeys.length;
+      const validChildren = cKeys.filter(c => c !== p && displayNameMap[c] !== displayNameMap[p]);
+      h += validChildren.length;
     });
     return { name: g, height: h + 1 };
   }).sort((a, b) => b.height - a.height);
 
-  // --- 6. 描画 (小メニューをID順にソート) ---
+  // --- 6. 描画 ---
   sortedGroups.forEach(item => {
     const g = item.name;
     let idx = colRows.indexOf(Math.min(...colRows));
     let tCol = COL_START[idx];
     let tRow = colRows[idx];
 
-    // グループヘッダー
     sheet.getRange(tRow, tCol, 1, 2).setBackground("#444444").setFontColor("#ffffff").setFontWeight("bold").setFontSize(12);
     sheet.getRange(tRow, tCol).setValue(g);
     sheet.getRange(tRow, tCol+1).setValue(groupCounts[g]).setHorizontalAlignment("center");
     tRow++;
 
-    // 親メニューの並び替え (マスタ出現順)
-    const sortedParents = Object.keys(detailTree[g]).sort((a, b) => {
-      const idA = itemToInfo[a]?.id ?? 999;
-      const idB = itemToInfo[b]?.id ?? 999;
-      return idA - idB;
-    });
+    const sortedParents = Object.keys(detailTree[g]).sort((a, b) => (itemOrder[a] || 999) - (itemOrder[b] || 999));
 
     sortedParents.forEach(p => {
       const children = detailTree[g][p];
@@ -161,15 +158,12 @@ function createProductionSheet() {
       sheet.getRange(tRow, tCol + 1).setValue(pCount).setHorizontalAlignment("center");
       tRow++;
 
-      // 子メニューの並び替え (マスタ出現順)
-      const sortedChildren = Object.entries(children).sort((a, b) => {
-        const idA = itemToInfo[a[0]]?.id ?? 999;
-        const idB = itemToInfo[b[0]]?.id ?? 999;
-        return idA - idB;
-      });
+      const sortedChildren = Object.entries(children).sort((a, b) => (itemOrder[a[0]] || 999) - (itemOrder[b[0]] || 999));
 
       sortedChildren.forEach(([c, count]) => {
-        if (c === p && Object.keys(children).length === 1) return;
+        // 見出し行（自分自身）は内訳として表示しない
+        if (c === p || displayNameMap[c] === displayNameMap[p]) return;
+        
         sheet.getRange(tRow, tCol).setValue("    └ " + (displayNameMap[c] || c)).setFontSize(12);
         sheet.getRange(tRow, tCol + 1).setValue(count).setFontSize(12).setFontWeight("bold").setHorizontalAlignment("center");
         tRow++;
@@ -178,7 +172,6 @@ function createProductionSheet() {
     colRows[idx] = tRow + 1;
   });
 
-  // 仕上げ
   [1, 4, 7].forEach(c => sheet.setColumnWidth(c, 210));
   [2, 5, 8].forEach(c => sheet.setColumnWidth(c, 45));
   sheet.activate();
