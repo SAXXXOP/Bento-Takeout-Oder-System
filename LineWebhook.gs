@@ -245,9 +245,9 @@ function buildReservationBubble(r, index) {
           color: "#1DB446",
           height: "sm",
           action: {
-            type: "postback",
-            label: "この予約を変更",
-            data: `change:${index}`
+            "type": "uri",          // ★ postback から uri に変更
+            "label": "予約を変更する",
+            "uri": r.formUrl        // ★ 先ほど生成したURLを指定
           }
         },
         {
@@ -329,7 +329,6 @@ function replyFlex(replyToken, flexMessage) {
    データ取得
    ================================================== */
 
-// LineWebhook.gs の後半にある関数を書き換え
 function getChangeableReservations(userId) {
   const sheet = SpreadsheetApp.getActive().getSheetByName("注文一覧");
   if (!sheet) return [];
@@ -338,11 +337,14 @@ function getChangeableReservations(userId) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
+  // フォームのベースURLとエントリーIDの定義
+  const FORM_BASE_URL = "https://docs.google.com/forms/d/e/1FAIpQLSc-WHjrgsi9nl8N_NcJaqvRWIX-TJHrWQICc6-i08NfxYRflQ/viewform";
+  const ENTRY_LINE_ID = "entry.593652011"; 
+  const ENTRY_NO      = "entry.1781944258"; 
+
   let list = [];
-  // 2行目からループ (i=1)
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
-    // J列(index 9)のLINE IDが一致するか確認
     if (row[9] !== userId) continue;
 
     const statusText = row[12]; // M列: ステータス
@@ -350,17 +352,23 @@ function getChangeableReservations(userId) {
 
     const pickupDateStr = row[4]?.toString();
     const pickupDate = parsePickupDate(pickupDateStr);
-
     if (!pickupDate || pickupDate < today) continue;
 
+    // --- ここでURLを生成 ---
+    const orderNo = row[1]?.toString().replace("'", ""); // B列: 予約番号
+    const lineId  = row[9]?.toString().replace("'", ""); // J列: LINE_ID
+    
+    const prefilledUrl = `${FORM_BASE_URL}?${ENTRY_LINE_ID}=${encodeURIComponent(lineId)}&${ENTRY_NO}=${encodeURIComponent(orderNo)}`;
+
     list.push({
-      no: row[1]?.toString().replace("'", ""),      // B列: 予約番号
-      date: pickupDateStr,                          // E列: 受取希望日
-      items: row[6],                                // G列: 商品詳細
-      total: row[7],                                // H列: 総数
-      lineId: row[9]?.toString().replace("'", ""),  // J列: LINE_ID ★追加
-      tel: row[2]?.toString().replace("'", ""),     // C列: 電話番号
-      userName: row[3]                              // D列: 名前
+      no: orderNo,
+      date: pickupDateStr,
+      items: row[6],
+      total: row[7],
+      lineId: lineId,
+      tel: row[2]?.toString().replace("'", ""),
+      userName: row[3],
+      formUrl: prefilledUrl // ★生成したURLをリストに追加
     });
   }
   return list;
