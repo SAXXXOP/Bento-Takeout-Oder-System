@@ -18,20 +18,22 @@ const FormService = {
 
     let rawDate = "", rawTime = "";
 
+    // FormService.gs 内の修正
     itemResponses.forEach(r => {
       const item = r.getItem();
       if (!item) return;
-      const title = item.getTitle() ? item.getTitle().trim() : ""; // 安全に取得
+      const title = item.getTitle() ? item.getTitle().trim() : "";
       const answer = r.getResponse();
 
-      if (title.includes("氏名（簡易）")) formData.simpleName = answer || "";
-      else if (title === "氏名") formData.rawName = answer || "";
-      else if (title.includes("電話番号")) formData.phoneNumber = answer ? "'" + answer : "";
-      else if (title === "受け取り希望日") rawDate = answer || "";
-      else if (title === "受取り希望時刻") rawTime = answer || "";
-      else if (title.includes("LINE_ID")) formData.userId = answer || "";
-      else if (title.includes("旧予約番号")) formData.oldReservationNo = answer || ""; // 追加
-      else if (title.includes("備考") || title.includes("リクエスト")) formData.note = answer || "";
+      // Configを参照して分岐
+      if (title.includes(CONFIG.FORM.NAME_SHORT)) formData.simpleName = answer || "";
+      else if (title === CONFIG.FORM.NAME_FULL) formData.rawName = answer || "";
+      else if (title.includes(CONFIG.FORM.PHONE)) formData.phoneNumber = answer ? "'" + answer : "";
+      else if (title === CONFIG.FORM.PICKUP_DATE) rawDate = answer || "";
+      else if (title === CONFIG.FORM.PICKUP_TIME) rawTime = answer || "";
+      else if (title.includes(CONFIG.FORM.LINE_ID)) formData.userId = answer || "";
+      else if (title.includes(CONFIG.FORM.OLD_RESERVATION_NO)) formData.oldReservationNo = answer || "";
+      else if (title.includes(CONFIG.FORM.NOTE)) formData.note = answer || "";
       else this.parseOrder(title, answer, formData);
     });
 

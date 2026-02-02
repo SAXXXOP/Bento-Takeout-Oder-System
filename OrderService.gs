@@ -1,18 +1,14 @@
-// OrderService.gs
-
 const OrderService = {
   saveOrder(reservationNo, formData, isChange) {
-    const sheet = SpreadsheetApp.getActive().getSheetByName("注文一覧");
+    // シート名をConfigから取得
+    const sheet = SpreadsheetApp.getActive().getSheetByName(CONFIG.SHEET.ORDER_LIST);
     if (!sheet) return;
 
-    // --- 旧予約の特定と更新処理 ---
-    let oldNo = "";
-    if (isChange) {
-      // フォームから送信された旧予約番号、または一時保存データから取得
-      oldNo = formData.oldReservationNo || ""; 
-      if (oldNo) {
-        this.updateOldReservation(sheet, oldNo); // 旧予約を灰色＆「変更前」にする
-      }
+    let oldNo = formData.oldReservationNo || "";
+
+    // 変更の場合は、先に古い予約を探して更新する
+    if (isChange && oldNo) {
+      this.updateOldReservation(sheet, oldNo);
     }
 
     const groupText = Object.entries(formData.groupSummary || {})
@@ -31,8 +27,8 @@ const OrderService = {
       formData.userId,             // J: LINE_ID
       groupText,                   // K: グループ集計
       formData.isRegular ? "常連" : "通常", // L: 常連フラグ
-      isChange ? "変更後" : "通常",  // M: ステータス
-      oldNo                        // N: 変更元No（ここが旧予約番号になります）
+      isChange ? CONFIG.STATUS.CHANGE_AFTER : CONFIG.STATUS.NORMAL, // M: ステータス
+      oldNo ? "'" + oldNo : ""     // N: 元予約No
     ];
     sheet.appendRow(rowData);
   },
@@ -41,18 +37,26 @@ const OrderService = {
    * 旧予約を探して「変更前」に更新し、行を灰色にする
    */
   updateOldReservation(sheet, oldNo) {
-    const data = sheet.getDataRange().getValues();
-    const cleanOldNo = oldNo.toString().replace("'", "");
+    const targetNo = oldNo.toString().replace(/'/g, "").trim();
+    if (!targetNo) return;
+
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) return;
+
+    // B列(予約番号)をスキャン
+    const data = sheet.getRange(1, 2, lastRow, 1).getValues(); 
     
     for (let i = 1; i < data.length; i++) {
-      if (data[i][1].toString().replace("'", "") === cleanOldNo) {
+      const currentNo = data[i][0].toString().replace(/'/g, "").trim();
+      
+      if (currentNo === targetNo) {
         const rowNum = i + 1;
-        // M列（13列目）を「変更前」に
-        sheet.getRange(rowNum, 13).setValue("変更前");
-        // N列（14列目）が空なら、自身の番号を記録して紐付けを明確にしても良い
-        // 行を灰色に
+        // M列（13列目）を「変更前」に更新
+        sheet.getRange(rowNum, 13).setValue(CONFIG.STATUS.CHANGE_BEFORE);
+        // A列からN列までを灰色にする
         sheet.getRange(rowNum, 1, 1, 14).setBackground("#E0E0E0");
-        break;
+        
+        break; // ✅ これでループを抜けます
       }
     }
   }
