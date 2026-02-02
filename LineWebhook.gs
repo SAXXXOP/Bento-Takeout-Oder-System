@@ -309,22 +309,24 @@ function getChangeableReservations(userId) {
     if (status !== CONFIG.STATUS.NORMAL) continue;
 
     // 日付チェック（未来のみ）
-    const pickupDateStr = row[CONFIG.COLUMN.PICKUP_DATE - 1];
-    const pickupDate = parsePickupDate(pickupDateStr);
-    if (!pickupDate || pickupDate < today) continue;
+const pickupDateStr = row[CONFIG.COLUMN.PICKUP_DATE - 1];
+const pickupDate = parsePickupDate(pickupDateStr);
+if (!pickupDate || pickupDate < today) continue;
 
-    const orderNo = row[CONFIG.COLUMN.ORDER_NO - 1]?.toString().replace("'", "");
-    const lineId  = row[CONFIG.COLUMN.LINE_ID - 1];
+const orderNo = row[CONFIG.COLUMN.ORDER_NO - 1]?.toString().replace("'", "");
 
-    list.push({
-      no: orderNo,
-      date: pickupDateStr,
-      items: row[CONFIG.COLUMN.DETAILS - 1],
-      total: row[CONFIG.COLUMN.TOTAL_COUNT - 1],
-      lineId: lineId,
-      tel: row[CONFIG.COLUMN.TEL - 1]?.toString().replace("'", ""),
-      userName: row[CONFIG.COLUMN.NAME - 1]
-    });
+// ★ここ追加：items を短縮して保存
+const rawItems = String(row[CONFIG.COLUMN.DETAILS - 1] || "");
+const firstLine = rawItems.split("\n").find(l => l.trim()) || "";
+const itemsShort = rawItems.length > 60 ? (firstLine + " 他") : rawItems;
+
+// ★ここ修正：保存するのは軽い情報だけ
+list.push({
+  no: orderNo,
+  date: pickupDateStr,
+  itemsShort: itemsShort,
+  total: row[CONFIG.COLUMN.TOTAL_COUNT - 1]
+});
   }
 
   return list;
