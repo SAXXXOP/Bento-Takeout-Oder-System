@@ -19,18 +19,24 @@ const FormService = {
     let rawDate = "", rawTime = "";
 
     itemResponses.forEach(r => {
-      const title = r.getItem().getTitle().trim();
+      const item = r.getItem();
+      if (!item) return;
+      const title = item.getTitle() ? item.getTitle().trim() : ""; // 安全に取得
       const answer = r.getResponse();
 
-      if (title.includes("氏名（簡易）")) formData.simpleName = answer;
-      else if (title === "氏名") formData.rawName = answer;
+      if (title.includes("氏名（簡易）")) formData.simpleName = answer || "";
+      else if (title === "氏名") formData.rawName = answer || "";
       else if (title.includes("電話番号")) formData.phoneNumber = answer ? "'" + answer : "";
-      else if (title === "受け取り希望日") rawDate = answer;
-      else if (title === "受取り希望時刻") rawTime = answer;
-      else if (title.includes("LINE_ID")) formData.userId = answer;
-      else if (title.includes("備考") || title.includes("リクエスト")) formData.note = answer;
+      else if (title === "受け取り希望日") rawDate = answer || "";
+      else if (title === "受取り希望時刻") rawTime = answer || "";
+      else if (title.includes("LINE_ID")) formData.userId = answer || "";
+      else if (title.includes("旧予約番号")) formData.oldReservationNo = answer || ""; // 追加
+      else if (title.includes("備考") || title.includes("リクエスト")) formData.note = answer || "";
       else this.parseOrder(title, answer, formData);
     });
+
+    // ユーザー名が空の場合のデフォルト値を設定
+    formData.userName = formData.simpleName || formData.rawName || "";
 
     // 簡易名があれば優先、なければ氏名
     formData.userName = formData.simpleName || formData.rawName;

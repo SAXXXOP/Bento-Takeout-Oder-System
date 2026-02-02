@@ -32,6 +32,7 @@ function onFormSubmit(e) {
     console.error("onFormSubmit エラー:", err);
   } finally {
     if (formData && formData.userId) {
+      // 処理が終わったら「変更中フラグ」を消す
       ReservationService.clearTempData(formData.userId);
     }
     lock.releaseLock();
