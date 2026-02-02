@@ -13,105 +13,84 @@ function doPost(e) {
     /* =========================
        postback（Flexボタン）
        ========================= */
+    /* =========================
+       postback（Flexボタン）
+       ========================= */
     if (event.type === "postback") {
       const postData = event.postback.data || "";
 
-      // ▼ 予約選択（修正版：ボタン付きFlexメッセージで返信）
-      // ▼ 詳細確認（G列の内容をテキストで返す）
-      if (postData.startsWith("show_details:")) {
+      // ▼ 予約変更の最終確認と案内
+      if (postData.startsWith("change_confirm:")) {
         const index = Number(postData.split(":")[1]);
         const listJson = props.getProperty(`CHANGE_LIST_${userId}`);
+        
         if (!listJson) {
-          replyText(replyToken, "データが見つかりませんでした。");
+          replyText(replyToken, "データが見つかりませんでした。最初からやり直してください。");
           return;
         }
+
         const list = JSON.parse(listJson);
         const target = list[index];
+
         if (target) {
-          const detailMsg = `【ご注文詳細】\n予約番号: ${target.no}\n------------------\n${target.items}`;
-          replyText(replyToken, detailMsg);
-        }
-        return;
-      }
-
-      // ▼ 予約選択（ここから既存の if (postData.startsWith("change:")) ...）
-      if (postData.startsWith("change:")) {
-        const index = Number(postData.split(":")[1]);
-        const listJson = props.getProperty(`CHANGE_LIST_${userId}`);
-
-        if (!listJson) {
-          replyText(replyToken, "予約情報が見つかりません。最初からやり直してください。");
-          return;
-        }
-
-        const list = JSON.parse(listJson);
-        const target = list[index];
-
-        if (!target) {
-          replyText(replyToken, "選択された予約が見つかりません。");
-          return;
-        }
-
-        // --- フォームのEntry ID ---
-        const ENTRY_LINE_ID = "entry.593652011"; 
-        const ENTRY_NO      = "entry.1781944258"; 
-
-        // URLを組み立て
-        const baseUrl = "https://docs.google.com/forms/d/e/1FAIpQLSc-WHjrgsi9nl8N_NcJaqvRWIX-TJHrWQICc6-i08NfxYRflQ/viewform";
-        const formUrl = `${baseUrl}?${ENTRY_LINE_ID}=${userId}&${ENTRY_NO}=${encodeURIComponent(target.no)}`;
-
-        // ★ 方法2：ボタン型のFlexメッセージを作成
-        const confirmFlex = {
-          type: "flex",
-          altText: "変更フォームを開く",
-          contents: {
-            type: "bubble",
-            size: "kilo",
-            body: {
-              type: "box",
-              layout: "vertical",
-              spacing: "md",
-              contents: [
-                { type: "text", text: "予約変更の準備完了", weight: "bold", size: "md", color: "#2E7D32" },
-                {
-                  type: "box",
-                  layout: "vertical",
-                  backgroundColor: "#F0F0F0",
-                  paddingAll: "10px",
-                  cornerRadius: "md",
-                  contents: [
-                    { type: "text", text: `対象No: ${target.no}`, size: "sm", weight: "bold" },
-                    { type: "text", text: `内容: ${target.items}`, size: "xs", color: "#666666", wrap: true }
-                  ]
-                },
-                { type: "text", text: "下のボタンから新しい予約内容を入力してください。以前の情報は自動入力されています。", size: "xs", color: "#888888", wrap: true }
-              ]
-            },
-            footer: {
-              type: "box",
-              layout: "vertical",
-              contents: [
-                {
-                  type: "button",
-                  style: "primary",
-                  color: "#1DB446",
-                  height: "sm",
-                  action: {
-                    type: "uri",
-                    label: "変更フォームを開く",
-                    uri: formUrl // 長いURLはここに隠れる
+          const confirmFlex = {
+            type: "flex",
+            altText: "予約変更の準備完了",
+            contents: {
+              type: "bubble",
+              size: "kilo",
+              body: {
+                type: "box",
+                layout: "vertical",
+                spacing: "md",
+                contents: [
+                  { type: "text", text: "予約変更の準備完了", weight: "bold", size: "md", color: "#2E7D32" },
+                  {
+                    type: "box",
+                    layout: "vertical",
+                    backgroundColor: "#F0F0F0",
+                    paddingAll: "10px",
+                    cornerRadius: "md",
+                    contents: [
+                      { type: "text", text: `対象No: ${target.no}`, size: "sm", weight: "bold" },
+                      { type: "text", text: `内容: ${target.items}`, size: "xs", color: "#666666", wrap: true }
+                    ]
+                  },
+                  {
+                    type: "box",
+                    layout: "vertical",
+                    spacing: "xs",
+                    contents: [
+                      { type: "text", text: "※新しい内容で「再予約」をお願いします。", size: "xs", color: "#cc0000", weight: "bold", wrap: true },
+                      { type: "text", text: "送信後、古い予約（上記No）は当店にて取消処理を行いますのでご安心ください。", size: "xs", color: "#888888", wrap: true }
+                    ]
                   }
-                }
-              ]
+                ]
+              },
+              footer: {
+                type: "box",
+                layout: "vertical",
+                contents: [
+                  {
+                    type: "button",
+                    style: "primary",
+                    color: "#1DB446",
+                    height: "sm",
+                    action: {
+                      type: "uri",
+                      label: "予約フォームを開く",
+                      uri: target.formUrl // ここでGoogleフォームへ飛ばす
+                    }
+                  }
+                ]
+              }
             }
-          }
-        };
+          };
 
-        // 変更対象を保存
-        props.setProperty(`CHANGE_TARGET_${userId}`, JSON.stringify(target));
-
-        // 返信（Flexメッセージを送信）
-        replyFlex(replyToken, confirmFlex);
+          // 変更対象のデータを一時保持
+          props.setProperty(`CHANGE_TARGET_${userId}`, JSON.stringify(target));
+          replyFlex(replyToken, confirmFlex);
+        }
         return;
       }
     }
@@ -153,7 +132,9 @@ function doPost(e) {
    Flex Message Builders
    ================================================== */
 
-// 1予約 = 1バブル
+/**
+ * 1予約 = 1バブル（カルーセル内）
+ */
 function buildReservationBubble(r, index) {
   return {
     type: "bubble",
@@ -164,19 +145,8 @@ function buildReservationBubble(r, index) {
       backgroundColor: "#2E7D32",
       paddingAll: "12px",
       contents: [
-        {
-          type: "text",
-          text: "予約番号",
-          size: "xs",
-          color: "#FFFFFFCC"
-        },
-        {
-          type: "text",
-          text: r.no,
-          size: "lg",
-          weight: "bold",
-          color: "#FFFFFF"
-        }
+        { type: "text", text: "予約番号", size: "xs", color: "#FFFFFFCC" },
+        { type: "text", text: r.no, size: "lg", weight: "bold", color: "#FFFFFF" }
       ]
     },
     body: {
@@ -188,48 +158,20 @@ function buildReservationBubble(r, index) {
           type: "box",
           layout: "baseline",
           contents: [
-            {
-              type: "text",
-              text: "受取",
-              size: "sm",
-              color: "#888888",
-              flex: 1
-            },
-            {
-              type: "text",
-              text: r.date,
-              size: "sm",
-              wrap: true,
-              flex: 4
-            }
+            { type: "text", text: "受取", size: "sm", color: "#888888", flex: 1 },
+            { type: "text", text: r.date, size: "sm", wrap: true, flex: 4 }
           ]
         },
-        {
-          type: "separator"
-        },
-        /* 修正箇所：flexを調整して文字同士を近づける */
+        { type: "separator" },
         {
           type: "box",
           layout: "baseline",
           margin: "md",
           spacing: "md",
-          justifyContent: "center", // 全体を中央寄せにする
+          justifyContent: "center",
           contents: [
-            {
-              type: "text",
-              text: "ご注文合計",
-              size: "sm",
-              color: "#666666",
-              flex: 0 // 内容に合わせる
-            },
-            {
-              type: "text",
-              text: `${r.total} 点`,
-              size: "lg",
-              weight: "bold",
-              color: "#222222",
-              flex: 0 // 内容に合わせる
-            }
+            { type: "text", text: "ご注文合計", size: "sm", color: "#666666", flex: 0 },
+            { type: "text", text: `${r.total} 点`, size: "lg", weight: "bold", color: "#222222", flex: 0 }
           ]
         }
       ]
@@ -237,7 +179,6 @@ function buildReservationBubble(r, index) {
     footer: {
       type: "box",
       layout: "vertical",
-      spacing: "sm",
       contents: [
         {
           type: "button",
@@ -245,19 +186,9 @@ function buildReservationBubble(r, index) {
           color: "#1DB446",
           height: "sm",
           action: {
-            "type": "uri",          // ★ postback から uri に変更
-            "label": "予約を変更する",
-            "uri": r.formUrl        // ★ 先ほど生成したURLを指定
-          }
-        },
-        {
-          type: "button",
-          style: "secondary",
-          height: "sm",
-          action: {
             type: "postback",
-            label: "詳細を確認",
-            data: `show_details:${index}`
+            label: "この予約を変更する",
+            data: `change_confirm:${index}` // 案内用のアクションへ
           }
         }
       ]
