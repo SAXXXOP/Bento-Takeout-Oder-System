@@ -8,98 +8,97 @@ function doPost(e) {
 
     const replyToken = event.replyToken;
     const userId = event.source.userId;
+
+    // ★ 一時データは UserProperties
     const props = PropertiesService.getUserProperties();
 
     /* =========================
        postback（Flexボタン）
        ========================= */
-
-    if (event.type === "postback") {
-  replyText(replyToken, "postback受信OK");
-  return;
-}
-    // if (event.type === "postback") {
-    //pushText(userId, "【春場所テスト】postbackは届いています 🌸");
-    //return;
-    //}
-
     if (event.type === "postback") {
       const postData = event.postback.data || "";
 
-      // ▼ 予約変更の最終確認と案内
       if (postData.startsWith("change_confirm:")) {
         const index = Number(postData.split(":")[1]);
         const listJson = props.getProperty(`CHANGE_LIST_${userId}`);
-        
+        pushText(userId, "postback時キー: " + props.getKeys().join(","));
+
         if (!listJson) {
-          replyText(replyToken, "データが見つかりませんでした。最初からやり直してください。");
+          replyText(replyToken, "変更情報の有効期限が切れました。最初からやり直してください。");
           return;
         }
 
         const list = JSON.parse(listJson);
         const target = list[index];
 
-        if (target) {
-          const confirmFlex = {
-            type: "flex",
-            altText: "予約変更の準備完了",
-            contents: {
-              type: "bubble",
-              size: "kilo",
-              body: {
-                type: "box",
-                layout: "vertical",
-                spacing: "md",
-                contents: [
-                  { type: "text", text: "予約変更の準備完了", weight: "bold", size: "md", color: "#2E7D32" },
-                  {
-                    type: "box",
-                    layout: "vertical",
-                    backgroundColor: "#F0F0F0",
-                    paddingAll: "10px",
-                    cornerRadius: "md",
-                    contents: [
-                      { type: "text", text: `対象No: ${target.no}`, size: "sm", weight: "bold" },
-                      { type: "text", text: `内容: ${target.items}`, size: "xs", color: "#666666", wrap: true }
-                    ]
-                  },
-                  {
-                    type: "box",
-                    layout: "vertical",
-                    spacing: "xs",
-                    contents: [
-                      { type: "text", text: "※新しい内容で「再予約」をお願いします。", size: "xs", color: "#cc0000", weight: "bold", wrap: true },
-                      { type: "text", text: "送信後、古い予約（上記No）は当店にて取消処理を行いますのでご安心ください。", size: "xs", color: "#888888", wrap: true }
-                    ]
-                  }
-                ]
-              },
-              footer: {
-                type: "box",
-                layout: "vertical",
-                contents: [
-                  {
-                    type: "button",
-                    style: "primary",
-                    color: "#1DB446",
-                    height: "sm",
-                    action: {
-                      type: "uri",
-                      label: "予約フォームを開く",
-                      uri: target.formUrl // ここでGoogleフォームへ飛ばす
-                    }
-                  }
-                ]
-              }
-            }
-          };
-
-          // 変更対象のデータを一時保持
-          props.setProperty(`CHANGE_TARGET_${userId}`, JSON.stringify(target));
-          pushFlex(userId, confirmFlex);
+        if (!target) {
+          replyText(replyToken, "対象の予約が見つかりませんでした。");
+          return;
         }
+
+        // 内容を短縮（長すぎるとFlexが死ぬ）
+        const shortItems = target.items
+          ? (String(target.items).length > 50 ? String(target.items).slice(0, 50) + " 他" : String(target.items))
+          : "（内容不明）";
+
+        // ✅ 安全版 confirmFlex
+        const confirmFlex = {
+          type: "flex",
+          altText: "予約変更の準備完了",
+          contents: {
+            type: "bubble",
+            body: {
+              type: "box",
+              layout: "vertical",
+              spacing: "md",
+              contents: [
+                { type: "text", text: "予約変更の準備完了", weight: "bold", size: "md", color: "#2E7D32" },
+                {
+                  type: "box",
+                  layout: "vertical",
+                  backgroundColor: "#F0F0F0",
+                  paddingAll: "10px",
+                  cornerRadius: "md",
+                  contents: [
+                    { type: "text", text: `対象No: ${target.no || "不明"}`, size: "sm", weight: "bold" },
+                    { type: "text", text: `内容: ${shortItems}`, size: "xs", color: "#666666", wrap: true }
+                  ]
+                },
+                { type: "text", text: "※新しい内容で「再予約」をお願いします。", size: "xs", color: "#cc0000", weight: "bold", wrap: true },
+                { type: "text", text: "送信後、古い予約（上記No）は当店にて取消処理を行います。", size: "xs", color: "#888888", wrap: true }
+              ]
+            },
+            footer: {
+              type: "box",
+              layout: "vertical",
+              contents: [
+                {
+                  type: "button",
+                  style: "primary",
+                  color: "#1DB446",
+                  height: "sm",
+                  action: {
+                    type: "uri",
+                    label: "予約フォームを開く",
+                    uri: CONFIG.FORM.RESERVATION_URL // ★固定URL（undefined回避）
+                  }
+                }
+              ]
+            }
+          }
+        };
+
+        // 変更対象のデータを一時保持
+        props.setProperty(`CHANGE_TARGET_${userId}`, JSON.stringify(target));
+        props.deleteProperty(`CHANGE_LIST_${userId}`);
+
+        // ★ここで返す
+        replyFlex(replyToken, confirmFlex);
         return;
       }
+
+      // 他のpostbackは無視
+      return;
     }
 
     /* =========================
@@ -108,7 +107,6 @@ function doPost(e) {
     if (event.type === "message" && event.message.type === "text") {
       const text = event.message.text.trim();
 
-      // ▼ 予約変更スタート
       if (text === "予約を変更する") {
         const list = getChangeableReservations(userId);
 
@@ -120,17 +118,20 @@ function doPost(e) {
         // 一覧を保存（ユーザー単位）
         props.setProperty(`CHANGE_LIST_${userId}`, JSON.stringify(list));
 
+        // ★保存できたかを push で見える化（デバッグ用）
+pushText(userId, "保存キー: " + props.getKeys().join(","));
+
         const flex = buildReservationCarousel(list);
         replyFlex(replyToken, flex);
         return;
       }
 
-      // ▼ その他（デバッグ）
       replyText(replyToken, `受信内容：【${text}】`);
+      return;
     }
 
   } catch (err) {
-    console.error("doPostエラー: " + err);
+    console.error("doPostエラー: ", err);
   }
 }
 

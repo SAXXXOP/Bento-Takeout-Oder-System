@@ -43,21 +43,18 @@ const LineService = (() => {
   }
 
   function push(userId, text) {
-    UrlFetchApp.fetch(
-      "https://api.line.me/v2/bot/message/push",
-      {
-        method: "post",
-        contentType: "application/json",
-        headers: {
-          Authorization: "Bearer " + getBtnToken()
-        },
-        payload: JSON.stringify({
-          to: userId,
-          messages: [{ type: "text", text }]
-        }),
-        muteHttpExceptions: true
-      }
-    );
+    const res = UrlFetchApp.fetch(url, {
+  method: "post",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": "Bearer " + token
+  },
+  payload: JSON.stringify(payload)
+});
+
+console.log("ここ通過");
+console.log(res.getResponseCode());
+console.log(res.getContentText());
   }
 
   return { sendReservationMessage };
