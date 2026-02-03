@@ -1,35 +1,79 @@
+/**
+ * 【注意：LINE Flex Message】
+ * - replyToken は 1イベントにつき1回のみ使用可能
+ * - テキスト＋Flex を返す場合は replyMulti でまとめて送信すること
+ * - carousel.contents は最大10件現状5件で運用中（超えると400エラー）
+ */
+
 function doPost(e) {
   try {
-    if (!e || !e.postData) return;
+
+        logToSheet("INFO", "doPost called", {  //確認用
+      hasE: !!e,
+      hasPostData: !!(e && e.postData),
+      hasContents: !!(e && e.postData && e.postData.contents)
+    });  // ここまで
+
+    // 確認用 ★ ここに入れる（returnより前）
+    console.log("doPost called");
+    console.log("has e:", !!e);
+    console.log("has postData:", !!(e && e.postData));
+    console.log("has contents:", !!(e && e.postData && e.postData.contents));
+
+    if (!e || !e.postData || !e.postData.contents) return;
+
     const data = JSON.parse(e.postData.contents);
     const event = data.events && data.events[0];
     if (!event) return;
 
+    logToSheet("INFO", "event received", {  // 確認用
+      type: event.type,
+      userId: event.source && event.source.userId,
+      text: event.message && event.message.text,
+      postback: event.postback && event.postback.data
+    });  // ここまで
+
     const replyToken = event.replyToken;
-    const userId = event.source.userId;
+    const userId = event.source && event.source.userId;
     const props = PropertiesService.getUserProperties();
 
+    // 確認用 --- Debug log (必要なら残してOK) ---
+    Logger.log("event.type=" + event.type);
+    Logger.log("userId=" + userId);
+    Logger.log("text=" + (event.message && event.message.text));
+    Logger.log("postback.data=" + (event.postback && event.postback.data));
+
+    /* =========================
+       postback（Flexボタン）
+       ========================= */
     if (event.type === "postback") {
-      const postData = event.postback.data || "";
+      const postData = (event.postback && event.postback.data) || "";
+
+      console.log("postback received:", postData); // 確認用
 
       // ▼ 詳細を確認
       if (postData.startsWith("show_details:")) {
         const index = Number(postData.split(":")[1]);
         const listJson = props.getProperty(`CHANGE_LIST_${userId}`);
         if (!listJson) {
-          replyText(replyToken, "データが見つかりませんでした。");
+          replyText(replyToken, "データが見つかりませんでした。もう一度「予約を変更する」からお願いします。");
           return;
         }
+
         const list = JSON.parse(listJson);
         const target = list[index];
-        if (target) {
-          const detailMsg = `【ご注文詳細】\n予約番号: ${target.no}\n------------------\n${target.itemsShort}`;
-          replyText(replyToken, detailMsg);
+        if (!target) {
+          replyText(replyToken, "対象が見つかりませんでした。もう一度「予約を変更する」からお願いします。");
+          return;
         }
+
+        const detailMsg =
+          `【ご注文詳細】\n予約番号: ${target.no}\n------------------\n${target.itemsFull || target.itemsShort || ""}`;
+        replyText(replyToken, detailMsg);
         return;
       }
 
-      // ▼ この予約を変更する
+      // ▼ この予約を変更する（確認画面＋フォームURL）
       if (postData.startsWith("change_confirm:")) {
         const index = Number(postData.split(":")[1]);
         const listJson = props.getProperty(`CHANGE_LIST_${userId}`);
@@ -41,43 +85,98 @@ function doPost(e) {
         const list = JSON.parse(listJson);
         const target = list[index];
         if (!target) {
-          replyText(replyToken, "対象が見つかりませんでした。");
+          replyText(replyToken, "対象が見つかりませんでした。もう一度「予約を変更する」からお願いします。");
           return;
         }
 
-        const formUrl = buildPrefilledFormUrl(CONFIG.LINE.FORM.FORM_URL, userId, target.no);
+        // ▼ 次のページを表示
+        if (postData.startsWith("change_page:")) {
+          const page = Number(postData.split(":")[1] || "0");
+          const listJson = props.getProperty(`CHANGE_LIST_${userId}`);
+          if (!listJson) {
+            replyText(replyToken, "期限切れです。もう一度「予約を変更する」からお願いします。");
+            return;
+          }
+
+          const list = JSON.parse(listJson);
+
+          const PAGE_SIZE = 5;
+          const totalPages = Math.ceil(list.length / PAGE_SIZE);
+          const safePage = Math.max(0, Math.min(page, totalPages - 1));
+
+          props.setProperty(`CHANGE_PAGE_${userId}`, String(safePage));
+
+          const flex = buildReservationCarouselPaged(list, safePage, PAGE_SIZE);
+          replyFlex(replyToken, flex);
+          return;
+        }
+
+        const baseUrl = CONFIG.LINE.FORM.FORM_URL;
+        const formUrl = buildPrefilledFormUrl(baseUrl, userId, target.no);
         const confirmFlex = buildConfirmFlex(target.no, target.itemsShort, formUrl);
 
+        // 変更対象を保持（必要なら後段で利用）
         props.setProperty(`CHANGE_TARGET_${userId}`, JSON.stringify(target));
+        // 一覧はワンタイム扱い（安全のため消す）
         props.deleteProperty(`CHANGE_LIST_${userId}`);
+
         replyFlex(replyToken, confirmFlex);
         return;
       }
+
+      // 未対応postback
+      replyText(replyToken, "操作が認識できませんでした。もう一度お試しください。");
       return;
     }
 
-    if (event.type === "message" && event.message.type === "text") {
-      const text = event.message.text.trim();
+    /* =========================
+       text message
+       ========================= */
+    if (event.type === "message" && event.message && event.message.type === "text") {
+      const text = (event.message.text || "").trim();
+
+      console.log("text received:", "[" + text + "]"); // 確認用
+
       if (text === "予約を変更する") {
+
+        console.log("ENTER change flow");  // 確認用
+
         const list = getChangeableReservations(userId);
+
         if (!list.length) {
           replyText(replyToken, "変更可能な予約がありません。");
           return;
         }
+
+        // 一覧を保存（ボタンpostbackで参照）
         props.setProperty(`CHANGE_LIST_${userId}`, JSON.stringify(list));
-        const flex = buildReservationCarousel(list);
+
+        // カルーセル返信
+        const MAX = 5; // LINEの安全上限
+        const limitedList = list.slice(0, MAX);
+        const flex = buildReservationCarousel(limitedList);
+
         replyFlex(replyToken, flex);
         return;
       }
 
+      // それ以外
       replyText(replyToken, `受信内容：【${text}】`);
+      return;
     }
+
   } catch (err) {
-    Logger.log("doPostエラー: " + err);
-  }
+  logToSheet("ERROR", "doPost error", {
+    message: String(err),
+    stack: err && err.stack
+  });
+}
 }
 
-/* ========== Flex Builders ========== */
+/* =========================
+   Flex Builders
+   ========================= */
+
 function buildReservationBubble(r, index) {
   return {
     type: "bubble",
@@ -89,7 +188,7 @@ function buildReservationBubble(r, index) {
       paddingAll: "12px",
       contents: [
         { type: "text", text: "予約番号", size: "xs", color: "#FFFFFFCC" },
-        { type: "text", text: r.no, size: "lg", weight: "bold", color: "#FFFFFF" }
+        { type: "text", text: String(r.no || ""), size: "lg", weight: "bold", color: "#FFFFFF" }
       ]
     },
     body: {
@@ -102,7 +201,7 @@ function buildReservationBubble(r, index) {
           layout: "baseline",
           contents: [
             { type: "text", text: "受取", size: "sm", color: "#888888", flex: 1 },
-            { type: "text", text: r.date, size: "sm", wrap: true, flex: 4 }
+            { type: "text", text: String(r.date || ""), size: "sm", wrap: true, flex: 4 }
           ]
         },
         { type: "separator" },
@@ -114,7 +213,7 @@ function buildReservationBubble(r, index) {
           justifyContent: "center",
           contents: [
             { type: "text", text: "ご注文合計", size: "sm", color: "#666666", flex: 0 },
-            { type: "text", text: `${r.total} 点`, size: "lg", weight: "bold", color: "#222222", flex: 0 }
+            { type: "text", text: `${r.total || 0} 点`, size: "lg", weight: "bold", color: "#222222", flex: 0 }
           ]
         }
       ]
@@ -122,6 +221,7 @@ function buildReservationBubble(r, index) {
     footer: {
       type: "box",
       layout: "vertical",
+      spacing: "sm",
       contents: [
         {
           type: "button",
@@ -181,12 +281,13 @@ function buildConfirmFlex(orderNo, itemsText, formUrl) {
             cornerRadius: "md",
             contents: [
               { type: "text", text: `対象No: ${orderNo}`, size: "sm", weight: "bold" },
-              { type: "text", text: `内容:\n${itemsText}`, size: "xs", color: "#666666", wrap: true }
+              { type: "text", text: `内容:\n${itemsText || ""}`, size: "xs", color: "#666666", wrap: true }
             ]
           },
           {
             type: "text",
-            text: "※新しい内容で「再予約」をお願いします。\n送信後、古い予約（上記No）は当店にて取消処理を行いますのでご安心ください。",
+            text:
+              "※新しい内容で「再予約」をお願いします。\n送信後、古い予約（上記No）は当店にて取消処理を行いますのでご安心ください。",
             size: "xs",
             color: "#CC0000",
             wrap: true
@@ -214,11 +315,20 @@ function buildConfirmFlex(orderNo, itemsText, formUrl) {
   };
 }
 
-/* ========== Utility & Data ========== */
+/* =========================
+   Utility & LINE Reply
+   ========================= */
+
 function buildPrefilledFormUrl(baseUrl, lineId, oldNo) {
   const entryLineId = CONFIG.LINE.ENTRY_LINE_ID;
-  const entryOldNo  = CONFIG.LINE.ENTRY_OLD_NO;
-  return `${baseUrl}?${entryLineId}=${encodeURIComponent(lineId)}&${entryOldNo}=${encodeURIComponent(oldNo)}`;
+  const entryOldNo = CONFIG.LINE.ENTRY_OLD_NO;
+
+  const sep = baseUrl.indexOf("?") >= 0 ? "&" : "?";
+  return (
+    `${baseUrl}${sep}` +
+    `${entryLineId}=${encodeURIComponent(lineId)}` +
+    `&${entryOldNo}=${encodeURIComponent(oldNo)}`
+  );
 }
 
 function replyText(token, text) {
@@ -228,77 +338,231 @@ function replyText(token, text) {
 function replyTexts(token, texts) {
   const url = "https://api.line.me/v2/bot/message/reply";
   const accessToken = PropertiesService.getScriptProperties().getProperty("LINE_TOKEN");
-  UrlFetchApp.fetch(url, {
+
+  const payload = {
+    replyToken: token,
+    messages: texts.map(t => ({ type: "text", text: String(t) }))
+  };
+
+  const res = UrlFetchApp.fetch(url, {
     method: "post",
     headers: {
       "Content-Type": "application/json",
       "Authorization": `Bearer ${accessToken}`
     },
-    payload: JSON.stringify({
-      replyToken: token,
-      messages: texts.map(t => ({ type: "text", text: t }))
-    }),
+    payload: JSON.stringify(payload),
     muteHttpExceptions: true
+  });
+
+  logToSheet("INFO", "replyTexts result", {
+    status: res.getResponseCode(),
+    body: res.getContentText()
   });
 }
 
 function replyFlex(token, flexMsg) {
   const url = "https://api.line.me/v2/bot/message/reply";
   const accessToken = PropertiesService.getScriptProperties().getProperty("LINE_TOKEN");
-  UrlFetchApp.fetch(url, {
+
+  const payload = {
+    replyToken: token,
+    messages: [flexMsg]
+  };
+
+  const res = UrlFetchApp.fetch(url, {
     method: "post",
     headers: {
       "Content-Type": "application/json",
       "Authorization": `Bearer ${accessToken}`
     },
-    payload: JSON.stringify({
-      replyToken: token,
-      messages: [flexMsg]
-    }),
+    payload: JSON.stringify(payload),
     muteHttpExceptions: true
+  });
+
+  logToSheet("INFO", "replyFlex result", {
+    status: res.getResponseCode(),
+    body: res.getContentText()
   });
 }
 
+/**
+ * 複数メッセージを1回の reply で送信する
+ * （replyTokenは1回しか使えないため必須）
+ */
+function replyMulti(token, messages) {
+  const url = "https://api.line.me/v2/bot/message/reply";
+  const accessToken = PropertiesService.getScriptProperties().getProperty("LINE_TOKEN");
+
+  const payload = {
+    replyToken: token,
+    messages: messages
+  };
+
+  const res = UrlFetchApp.fetch(url, {
+    method: "post",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${accessToken}`
+    },
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  });
+
+  // ログシートにも残す
+  logToSheet("INFO", "replyMulti result", {
+    status: res.getResponseCode(),
+    body: res.getContentText()
+  });
+}
+
+/* =========================
+   Data: get changeable reservations
+   ========================= */
+
 function getChangeableReservations(userId) {
-  const sheet = SpreadsheetApp.getActive().getSheetByName("注文一覧");
+  const sheet = SpreadsheetApp.getActive().getSheetByName(CONFIG.SHEET.ORDER_LIST);
   if (!sheet) return [];
 
   const data = sheet.getDataRange().getValues();
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  let list = [];
+  const idx = (colNo) => colNo - 1;
+
+  const COL_NO = idx(CONFIG.COLUMN.ORDER_NO);
+  const COL_PICKUP_DATE = idx(CONFIG.COLUMN.PICKUP_DATE);          // E（表示用）
+  const COL_PICKUP_DATE_RAW = idx(CONFIG.COLUMN.PICKUP_DATE_RAW);  // O（Date型）
+  const COL_DETAILS = idx(CONFIG.COLUMN.DETAILS);
+  const COL_TOTAL_COUNT = idx(CONFIG.COLUMN.TOTAL_COUNT);
+  const COL_LINE_ID = idx(CONFIG.COLUMN.LINE_ID);
+  const COL_STATUS = idx(CONFIG.COLUMN.STATUS);
+
+  const list = [];
+
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
-    if (row[9] !== userId) continue;
-    const status = row[12];
-    if (["変更済", "キャンセル", "変更前"].includes(status)) continue;
 
-    const pickupDateStr = row[4]?.toString();
-    const pickupDate = parsePickupDate(pickupDateStr);
-    if (!pickupDate || pickupDate < today) continue;
+    // userId一致
+    if (String(row[COL_LINE_ID] || "") !== String(userId || "")) continue;
 
-    const rawItems = String(row[6] || "");
+    // ステータス除外
+    const status = String(row[COL_STATUS] || "");
+    if (["変更済", "キャンセル", CONFIG.STATUS.CHANGE_BEFORE].includes(status)) continue;
+
+    // 日付（RAW）
+    const pickupDateRaw = row[COL_PICKUP_DATE_RAW];
+    if (!(pickupDateRaw instanceof Date)) continue;
+
+    const rawDateOnly = new Date(pickupDateRaw);
+    rawDateOnly.setHours(0, 0, 0, 0);
+    if (rawDateOnly < today) continue;
+
+    // 表示用文字列（E）
+    const pickupDateStr = row[COL_PICKUP_DATE];
+
+    // 時刻キー（Eから抽出：6:30~7:30 → 390）
+    const pickupTimeKey = extractStartTime(pickupDateStr);
+
+    // 商品文字列
+    const rawItems = String(row[COL_DETAILS] || "");
     const firstLine = rawItems.split("\n").find(l => l.trim()) || "";
     const itemsShort = rawItems.length > 60 ? `${firstLine} 他` : rawItems;
 
     list.push({
-      no: row[1]?.toString().replace("'", ""),
-      date: pickupDateStr,
-      itemsShort,
-      total: row[7]
+      no: String(row[COL_NO] || "").replace(/'/g, ""),
+      date: String(pickupDateStr || ""),
+      // ★ソート用（内部）
+      pickupDateRaw: rawDateOnly,
+      pickupTimeKey: pickupTimeKey,
+
+      itemsShort: itemsShort,
+      itemsFull: rawItems,
+      total: row[COL_TOTAL_COUNT] || 0
     });
   }
+
+  // ★並び替え：日付 → 時刻 → 予約番号
+  list.sort((a, b) => {
+    const d = a.pickupDateRaw - b.pickupDateRaw;
+    if (d !== 0) return d;
+
+    const t = a.pickupTimeKey - b.pickupTimeKey;
+    if (t !== 0) return t;
+
+    return a.no.localeCompare(b.no);
+  });
+
+  // ★内部キーは返却前に削除
+  list.forEach(x => {
+    delete x.pickupDateRaw;
+    delete x.pickupTimeKey;
+  });
+
   return list;
 }
 
-function parsePickupDate(str) {
-  if (!str) return null;
-  const match = str.toString().match(/(\d{1,2})\/(\d{1,2})/);
+/**
+ * "M/D" 形式や Date っぽい文字列から Date を作る（年は今年基準、年跨ぎも軽くケア）
+ */
+function parsePickupDate(value) {
+  if (!value) return null;
+
+  // Date型が来たらそのまま
+  if (Object.prototype.toString.call(value) === "[object Date]" && !isNaN(value.getTime())) {
+    const d = new Date(value);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+
+  const str = String(value);
+  const match = str.match(/(\d{1,2})\/(\d{1,2})/);
   if (!match) return null;
-  const month = parseInt(match[1], 10), day = parseInt(match[2], 10);
-  const now = new Date(), year = now.getFullYear();
+
+  const month = parseInt(match[1], 10);
+  const day = parseInt(match[2], 10);
+
+  const now = new Date();
+  const year = now.getFullYear();
+
   const result = new Date(year, month - 1, day);
+  result.setHours(0, 0, 0, 0);
+
+  // 年末に 1月予約が来たら翌年扱い
   if (now.getMonth() === 11 && month === 1) result.setFullYear(year + 1);
+
   return result;
+}
+
+function logToSheet(level, message, extra) {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName("ログ") || ss.insertSheet("ログ");
+
+    // ヘッダーが無ければ作る
+    if (sheet.getLastRow() === 0) {
+      sheet.appendRow(["timestamp", "level", "message", "extra"]);
+    }
+
+    const ts = Utilities.formatDate(new Date(), "Asia/Tokyo", "yyyy-MM-dd HH:mm:ss");
+    const extraStr = (extra === undefined || extra === null)
+      ? ""
+      : (typeof extra === "string" ? extra : JSON.stringify(extra));
+
+    sheet.appendRow([ts, level, String(message || ""), extraStr]);
+  } catch (e) {
+    // ログに失敗しても doPost を止めない
+  }
+}
+
+function extractStartTime(pickupDateStr) {
+  if (!pickupDateStr) return 24 * 60;
+
+  const str = String(pickupDateStr);
+  const m = str.match(/(\d{1,2}):(\d{2})\s*~/);
+  if (!m) return 24 * 60;
+
+  const h = parseInt(m[1], 10);
+  const min = parseInt(m[2], 10);
+  return h * 60 + min;
 }

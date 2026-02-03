@@ -29,7 +29,7 @@ const CONFIG = {
     ORDER_NO: 2,       // B
     TEL: 3,            // C
     NAME: 4,           // D
-    PICKUP_DATE: 5,    // E
+    PICKUP_DATE: 5,    // E 2/14(土) / 6:30~7:30 表示用／人間向け
     NOTE: 6,           // F
     DETAILS: 7,        // G
     TOTAL_COUNT: 8,    // H
@@ -39,7 +39,7 @@ const CONFIG = {
     REGULAR_FLG: 12,   // L: 常連フラグ
     STATUS: 13,        // M: ステータス（通常/変更前/変更後）
     SOURCE_NO: 14,      // N: 変更元予約No
-    PICKUP_DATE_RAW: 15 // O ★Date型（内部用）
+    PICKUP_DATE_RAW: 15 // O ★Date型 2026/02/14（内部用）
   },
 
   // 4. 「顧客名簿」シートの列配置
