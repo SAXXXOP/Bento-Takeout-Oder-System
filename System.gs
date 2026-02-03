@@ -6,7 +6,7 @@ function onOpen() {
     .addItem('顧客備考を編集（サイドバー）', 'showCustomerEditor')
     .addSeparator()
     .addItem('指定日の予約札を作成', 'createDailyReservationCards')
-    .addItem('当日まとめシートを更新', 'updateDailySummary')
+    .addItem('当日まとめシートを更新', 'createProductionSheet')
     .addToUi();
 }
 
