@@ -6,19 +6,33 @@
  */
 
 function doPost(e) {
-  try {
+  let replyToken = null;
+  let hasReplied = false;
 
-        logToSheet("INFO", "doPost called", {  //確認用
+  function replyTextOnce(token, text) {
+    if (!token || hasReplied) return;
+    hasReplied = true;
+    replyText(token, text);
+  }
+
+  function replyFlexOnce(token, flexMsg) {
+    if (!token || hasReplied) return;
+    hasReplied = true;
+    replyFlex(token, flexMsg);
+  }
+
+  function replyMultiOnce(token, messages) {
+    if (!token || hasReplied) return;
+    hasReplied = true;
+    replyMulti(token, messages);
+  }
+
+  try {
+    logToSheet("INFO", "doPost called", {
       hasE: !!e,
       hasPostData: !!(e && e.postData),
       hasContents: !!(e && e.postData && e.postData.contents)
-    });  // ここまで
-
-    // 確認用 ★ ここに入れる（returnより前）
-    console.log("doPost called");
-    console.log("has e:", !!e);
-    console.log("has postData:", !!(e && e.postData));
-    console.log("has contents:", !!(e && e.postData && e.postData.contents));
+    });
 
     if (!e || !e.postData || !e.postData.contents) return;
 
@@ -26,136 +40,111 @@ function doPost(e) {
     const event = data.events && data.events[0];
     if (!event) return;
 
-    logToSheet("INFO", "event received", {  // 確認用
-      type: event.type,
-      userId: event.source && event.source.userId,
-      text: event.message && event.message.text,
-      postback: event.postback && event.postback.data
-    });  // ここまで
-
-    const replyToken = event.replyToken;
+    replyToken = event.replyToken;
     const userId = event.source && event.source.userId;
 
-    // 確認用 --- Debug log (必要なら残してOK) ---
-    Logger.log("event.type=" + event.type);
-    Logger.log("userId=" + userId);
-    Logger.log("text=" + (event.message && event.message.text));
-    Logger.log("postback.data=" + (event.postback && event.postback.data));
+    logToSheet("INFO", "event received", {
+      type: event.type,
+      userId: userId,
+      text: event.message && event.message.text,
+      postback: event.postback && event.postback.data
+    });
 
-    /* =========================
-       postback（Flexボタン）
-       ========================= */
+    /* postback（Flexボタン） */
     if (event.type === "postback") {
-  const postData = (event.postback && event.postback.data) || "";
+      const postData = (event.postback && event.postback.data) || "";
 
-  // （任意）noop は無視
-  if (postData === "noop") return;
-
-  // ① ページング
-  if (postData.startsWith("change_page:")) {
-    const page = Number(postData.split(":")[1] || "0");
-    const list = getChangeableReservations(userId);
-
-    const PAGE_SIZE = 5;
-    const totalPages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
-    const safePage = Math.max(0, Math.min(page, totalPages - 1));
-
-    const flex = buildReservationCarouselPaged(list, safePage, PAGE_SIZE);
-    replyFlex(replyToken, flex);
-    return;
-  }
-
-  // ② 詳細
-  if (postData.startsWith("show_details_no:")) {
-    const orderNo = postData.split(":")[1] || "";
-    const target = findReservationForUser(userId, orderNo);
-    if (!target) {
-      replyText(replyToken, "対象が見つかりませんでした（期限切れ/変更済の可能性）。もう一度「予約を変更する」からお願いします。");
-      return;
-    }
-
-    const detailMsg =
-      `【ご注文詳細】\n予約番号: ${target.no}\n------------------\n${target.itemsFull || target.itemsShort || ""}`;
-    replyText(replyToken, detailMsg);
-    return;
-  }
-
-  // ③ 変更フォームへ
-  if (postData.startsWith("change_confirm_no:")) {
-  const orderNo = postData.split(":")[1] || "";
-
-  // 確定だけは最新で再検証（直前に他端末で変更された等に強くする）
-  const target = findReservationForUser(userId, orderNo, { forceFresh: true });
-
-  if (!target) {
-    replyText(replyToken, "対象が見つかりませんでした（期限切れ/変更済の可能性）。もう一度「予約を変更する」からお願いします。");
-    return;
-  }
-
-  const formUrl = buildPrefilledFormUrl(CONFIG.LINE.FORM.FORM_URL, userId, target.no);
-  const confirmFlex = buildConfirmFlex(target.no, target.itemsShort, formUrl);
-
-  replyFlex(replyToken, confirmFlex);
-  return;
-}
-
-  // 未対応は何も返さない（誤反応防止）
-  return;
-}
-
-    /* =========================
-       text message
-       ========================= */
-    if (event.type === "message" && event.message && event.message.type === "text") {
-      const text = (event.message.text || "").trim();
-
-      console.log("text received:", "[" + text + "]"); // 確認用
-
-      if (text === "予約を変更する") {
-
-      console.log("ENTER change flow");
-
-      const list = getChangeableReservations(userId);
-
-      // ★ 追加：取得件数をログシートへ
-      logToSheet("INFO", "changeable reservations fetched", {
-        userId: userId,
-        total: list.length
-      });
-
-      if (!list.length) {
-        replyText(replyToken, "変更可能な予約がありません。");
+      if (postData === "noop") {
+        replyTextOnce(replyToken, "この操作はできません。");
         return;
       }
 
-      const page = 0;       // 初期ページ
-      const pageSize = 5;  // 1ページ表示数
-      const totalPages = Math.max(1, Math.ceil(list.length / pageSize));
+      if (postData.startsWith("change_page:")) {
+        const page = Number(postData.split(":")[1] || "0");
+        const list = getChangeableReservations(userId);
 
-      // ★ 追加：ページング計算ログ
-      logToSheet("INFO", "paging info", {
-        page,
-        pageSize,
-        totalPages
-      });
+        const PAGE_SIZE = 5;
+        const totalPages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+        const safePage = Math.max(0, Math.min(page, totalPages - 1));
 
-      const flex = buildReservationCarouselPaged(list, page, pageSize);
+        const flex = buildReservationCarouselPaged(list, safePage, PAGE_SIZE);
+        replyFlexOnce(replyToken, flex);
+        return;
+      }
 
-      replyFlex(replyToken, flex);
+      if (postData.startsWith("show_details_no:")) {
+        const orderNo = postData.split(":")[1] || "";
+        const target = findReservationForUser(userId, orderNo);
+        if (!target) {
+          replyTextOnce(replyToken, "対象が見つかりませんでした（期限切れ/変更済の可能性）。もう一度「予約を変更する」からお願いします。");
+          return;
+        }
+
+        const detailMsg =
+          `【ご注文詳細】\n予約番号: ${target.no}\n------------------\n${target.itemsFull || target.itemsShort || ""}`;
+        replyTextOnce(replyToken, detailMsg);
+        return;
+      }
+
+      if (postData.startsWith("change_confirm_no:")) {
+        const orderNo = postData.split(":")[1] || "";
+        const target = findReservationForUser(userId, orderNo, { forceFresh: true });
+
+        if (!target) {
+          replyTextOnce(replyToken, "対象が見つかりませんでした（期限切れ/変更済の可能性）。もう一度「予約を変更する」からお願いします。");
+          return;
+        }
+
+        const formUrl = buildPrefilledFormUrl(CONFIG.LINE.FORM.FORM_URL, userId, target.no);
+        const confirmFlex = buildConfirmFlex(target.no, target.itemsShort, formUrl);
+
+        replyFlexOnce(replyToken, confirmFlex);
+        return;
+      }
+
+      // 未対応のpostbackも無反応にしない
+      replyTextOnce(replyToken, "操作が期限切れか未対応です。もう一度「予約を変更する」からお願いします。");
       return;
-}
+    }
 
-      // それ以外
-      replyText(replyToken, `受信内容：【${text}】`);
+    /* text message */
+    if (event.type === "message" && event.message && event.message.type === "text") {
+      const text = (event.message.text || "").trim();
+
+      if (text === "予約を変更する") {
+        const list = getChangeableReservations(userId);
+
+        logToSheet("INFO", "changeable reservations fetched", {
+          userId: userId,
+          total: list.length
+        });
+
+        if (!list.length) {
+          replyTextOnce(replyToken, "変更可能な予約がありません（変更は前日20時まで）。必要な場合は店舗へご連絡ください。");
+          return;
+        }
+
+        const page = 0;
+        const pageSize = 5;
+
+        const flex = buildReservationCarouselPaged(list, page, pageSize);
+        replyFlexOnce(replyToken, flex);
+        return;
+      }
+
+      replyTextOnce(replyToken, `受信内容：【${text}】`);
       return;
     }
 
   } catch (err) {
-  logToSheet("ERROR", "doPost error", {
-    message: String(err),
-    stack: err && err.stack
-  });
-}
+    logToSheet("ERROR", "doPost error", {
+      message: String(err),
+      stack: err && err.stack
+    });
+
+    // replyTokenが取れていて、まだ返信していなければ返す
+    replyTextOnce(replyToken, "エラーが発生しました。お手数ですがもう一度お試しください。");
+  }
 }
 
 /* =========================
@@ -487,7 +476,6 @@ function getChangeableReservations(userId, options) {
 
   const forceFresh = !!(options && options.forceFresh);
 
-  // 1) 短時間キャッシュ（ページング/詳細の連打を高速化）
   const cache = CacheService.getUserCache();
   const cacheKey = `CHANGEABLE_LIST_${userId}`;
 
@@ -497,7 +485,7 @@ function getChangeableReservations(userId, options) {
       try {
         return JSON.parse(cached) || [];
       } catch (e) {
-        // 壊れたキャッシュは無視して作り直す
+        // ignore
       }
     }
   }
@@ -505,11 +493,10 @@ function getChangeableReservations(userId, options) {
   const sheet = SpreadsheetApp.getActive().getSheetByName(CONFIG.SHEET.ORDER_LIST);
   if (!sheet) return [];
 
-  // 2) 読む範囲を A:O（= 必要列まで）に限定して無駄転送を減らす
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
 
-  const maxColNeeded = CONFIG.COLUMN.PICKUP_DATE_RAW; // O列まで（= 15）
+  const maxColNeeded = CONFIG.COLUMN.PICKUP_DATE_RAW; // O列まで
   const data = sheet.getRange(1, 1, lastRow, maxColNeeded).getValues();
 
   const today = new Date();
@@ -518,8 +505,8 @@ function getChangeableReservations(userId, options) {
   const idx = (colNo) => colNo - 1;
 
   const COL_NO = idx(CONFIG.COLUMN.ORDER_NO);
-  const COL_PICKUP_DATE = idx(CONFIG.COLUMN.PICKUP_DATE);          // E（表示用）
-  const COL_PICKUP_DATE_RAW = idx(CONFIG.COLUMN.PICKUP_DATE_RAW);  // O（Date型）
+  const COL_PICKUP_DATE = idx(CONFIG.COLUMN.PICKUP_DATE);          // E
+  const COL_PICKUP_DATE_RAW = idx(CONFIG.COLUMN.PICKUP_DATE_RAW);  // O
   const COL_DETAILS = idx(CONFIG.COLUMN.DETAILS);
   const COL_TOTAL_COUNT = idx(CONFIG.COLUMN.TOTAL_COUNT);
   const COL_LINE_ID = idx(CONFIG.COLUMN.LINE_ID);
@@ -530,46 +517,43 @@ function getChangeableReservations(userId, options) {
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
 
-    // userId一致
     if (String(row[COL_LINE_ID] || "") !== String(userId || "")) continue;
 
-    // ステータス除外
     const status = String(row[COL_STATUS] || "");
     if (["変更済", "キャンセル", CONFIG.STATUS.CHANGE_BEFORE].includes(status)) continue;
 
-    // 日付（RAW）
-    const pickupDateRaw = row[COL_PICKUP_DATE_RAW];
-    if (!(pickupDateRaw instanceof Date)) continue;
+    const pickupDateStrRaw = row[COL_PICKUP_DATE];      // E
+    const pickupDateRawCell = row[COL_PICKUP_DATE_RAW]; // O
 
-    const rawDateOnly = new Date(pickupDateRaw);
-    rawDateOnly.setHours(0, 0, 0, 0);
-    if (rawDateOnly < today) continue;
+    let dateOnly = parsePickupDate(pickupDateRawCell);
+    if (!dateOnly) dateOnly = parsePickupDate(pickupDateStrRaw);
+    if (!dateOnly) continue;
+    if (dateOnly < today) continue;
 
-    // 表示用文字列（E）
-    const pickupDateStr = row[COL_PICKUP_DATE];
+    if (!isWithinChangeDeadline(dateOnly, new Date())) continue;
 
-    // 時刻キー（Eから抽出：6:30~7:30 → 390）
+    let pickupDateStr = String(pickupDateStrRaw || "");
+    if (!pickupDateStr) {
+      pickupDateStr = Utilities.formatDate(dateOnly, "Asia/Tokyo", "M/d");
+    }
+
     const pickupTimeKey = extractStartTime(pickupDateStr);
 
-    // 商品文字列
     const rawItems = String(row[COL_DETAILS] || "");
     const firstLine = rawItems.split("\n").find(l => l.trim()) || "";
     const itemsShort = rawItems.length > 60 ? `${firstLine} 他` : rawItems;
 
     list.push({
       no: String(row[COL_NO] || "").replace(/'/g, ""),
-      date: String(pickupDateStr || ""),
-      // ★ソート用（内部）
-      pickupDateRaw: rawDateOnly,
-      pickupTimeKey: pickupTimeKey,
-
+      date: pickupDateStr,
+      pickupDateRaw: dateOnly,      // ソート用
+      pickupTimeKey: pickupTimeKey, // ソート用
       itemsShort: itemsShort,
       itemsFull: rawItems,
       total: row[COL_TOTAL_COUNT] || 0
     });
   }
 
-  // ★並び替え：日付 → 時刻 → 予約番号
   list.sort((a, b) => {
     const d = a.pickupDateRaw - b.pickupDateRaw;
     if (d !== 0) return d;
@@ -580,16 +564,27 @@ function getChangeableReservations(userId, options) {
     return a.no.localeCompare(b.no);
   });
 
-  // ★内部キーは返却前に削除
   list.forEach(x => {
     delete x.pickupDateRaw;
     delete x.pickupTimeKey;
   });
 
-  // キャッシュ保存（60秒：ページ送り/詳細/確定の間を高速化）
   cache.put(cacheKey, JSON.stringify(list), 60);
 
   return list;
+}
+
+function getChangeDeadline(dateOnly) {
+  const d = new Date(dateOnly);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - 1);
+  d.setHours(20, 0, 0, 0);
+  return d;
+}
+
+function isWithinChangeDeadline(dateOnly, now) {
+  const deadline = getChangeDeadline(dateOnly);
+  return now.getTime() <= deadline.getTime();
 }
 
 /**
@@ -598,30 +593,43 @@ function getChangeableReservations(userId, options) {
 function parsePickupDate(value) {
   if (!value) return null;
 
-  // Date型が来たらそのまま
   if (Object.prototype.toString.call(value) === "[object Date]" && !isNaN(value.getTime())) {
     const d = new Date(value);
     d.setHours(0, 0, 0, 0);
     return d;
   }
 
-  const str = String(value);
-  const match = str.match(/(\d{1,2})\/(\d{1,2})/);
-  if (!match) return null;
+  const str = String(value).trim();
 
-  const month = parseInt(match[1], 10);
-  const day = parseInt(match[2], 10);
+  // YYYY/MM/DD or YYYY-MM-DD
+  let m = str.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+  if (m) {
+    const y = parseInt(m[1], 10);
+    const mo = parseInt(m[2], 10);
+    const da = parseInt(m[3], 10);
+    const d = new Date(y, mo - 1, da);
+    d.setHours(0, 0, 0, 0);
+    if (!isNaN(d.getTime())) return d;
+  }
 
-  const now = new Date();
-  const year = now.getFullYear();
+  // M/D（"2/14(土) 6:30~" 等を救済）
+  m = str.match(/(\d{1,2})\/(\d{1,2})/);
+  if (m) {
+    const month = parseInt(m[1], 10);
+    const day = parseInt(m[2], 10);
 
-  const result = new Date(year, month - 1, day);
-  result.setHours(0, 0, 0, 0);
+    const now = new Date();
+    const year = now.getFullYear();
 
-  // 年末に 1月予約が来たら翌年扱い
-  if (now.getMonth() === 11 && month === 1) result.setFullYear(year + 1);
+    const d = new Date(year, month - 1, day);
+    d.setHours(0, 0, 0, 0);
 
-  return result;
+    if (now.getMonth() === 11 && month === 1) d.setFullYear(year + 1);
+
+    if (!isNaN(d.getTime())) return d;
+  }
+
+  return null;
 }
 
 function logToSheet(level, message, extra) {
