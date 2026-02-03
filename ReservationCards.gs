@@ -1,457 +1,192 @@
 /**
- * 予約札（ReservationCards.gs）完成版
- *
- * 仕様：
- * - 文字色は黒のみ（塗りつぶし無し）
- * - 予約札の配置：
- *   1) 予約No
- *   2) （要確認なら）要確認（元No:xxx） ※予約番号の下に1行
- *   3) 名前
- *   4) 電話（ないときは空欄）
- *   5) 商品（明細行）
- *   6) 計:◯点/ ◯円
- *   7) 備考（顧客名簿H/I → 【注】として表示：あれば）
- *   8) フォーム備考（注文一覧F → 【要】として表示：あれば）
- *   9) 前回利用日（なければ行削除）
- *
- * - 46行の中に収める（MAX_PAGE_ROWS=46）
- * - 46行目は空白行を入れて区切る（PAGE_GAP_ROWS=1）
- * - 46行から次の「46行枠」を同じロジックで繰り返す
- * - Bin Packing（高さ大きい順→各列の最小高さへ配置）
+ * 予約札作成（最短列優先 + 背の高い順ソート + 45行ページ境界管理版）
+ * 備考欄の20文字折り返し（【要】込み・スペース無し）対応版
  */
-
-function updateReservationCards() {
+function createDailyReservationCards() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-
-  const src = ss.getSheetByName(CONFIG.SHEET.ORDER_LIST);
-  const master = ss.getSheetByName(CONFIG.SHEET.MENU_MASTER);
-  const customerSheet = ss.getSheetByName(CONFIG.SHEET.CUSTOMER_LIST);
+  const reportSheet = ss.getSheetByName(CONFIG.SHEET.ORDER_LIST);
   const cardSheet = ss.getSheetByName(CONFIG.SHEET.RESERVATION_CARD);
+  const menuSheet = ss.getSheetByName(CONFIG.SHEET.MENU_MASTER);
+  const customerSheet = ss.getSheetByName(CONFIG.SHEET.CUSTOMER_LIST);
+  
+  if (!reportSheet || !cardSheet) return;
 
-  if (!src || !cardSheet) return;
+  const customerMap = getCustomerMap(customerSheet);
+  const menuMap = getMenuMap(menuSheet);
 
   const ui = SpreadsheetApp.getUi();
-  const res = ui.prompt("予約札作成", "日付（例: 2/14）", ui.ButtonSet.OK_CANCEL);
-  if (res.getSelectedButton() !== ui.Button.OK) return;
+  const response = ui.prompt('予約札作成', '日付を入力(例: 1/30)', ui.ButtonSet.OK_CANCEL);
+  if (response.getSelectedButton() !== ui.Button.OK) return;
+  const targetDateRaw = response.getResponseText().replace(/[^0-9]/g, "");
 
-  const target = String(res.getResponseText() || "").replace(/[^0-9]/g, "");
-  if (!target) {
-    ui.alert("日付が読み取れませんでした（例: 2/14）。");
-    return;
-  }
+  const lastRow = reportSheet.getLastRow();
+  if (lastRow < 2) return;
+  const allData = reportSheet.getRange(1, 1, lastRow, CONFIG.COLUMN.SOURCE_NO).getValues();
+  
+  let cardsToPrint = [];
+  allData.slice(1).forEach(row => {
+    const isActive = row[CONFIG.COLUMN.STATUS - 1] !== CONFIG.STATUS.CHANGE_BEFORE;
+    const dateVal = row[CONFIG.COLUMN.PICKUP_DATE - 1];
+    if (isActive && dateVal && dateVal.toString().replace(/[^0-9]/g, "").includes(targetDateRaw)) {
+      
+      const rawDetails = row[CONFIG.COLUMN.DETAILS - 1] || "";
+      let lines = rawDetails.toString().split('\n').filter(l => l.trim() !== "");
+      
+      let items = lines.map(line => {
+        const cleanLine = line.replace(/^[・└\s]+/, "").trim();
+        const parts = cleanLine.split(/\s*x\s*/);
+        const namePart = parts[0].trim();
+        const qtyPart = parts[1] ? "x" + parts[1] : "";
+        const mInfo = menuMap[namePart] || { short: namePart, group: "999" };
+        return { short: mInfo.short + " " + qtyPart, group: mInfo.group };
+      });
 
-  const data = src.getDataRange().getValues();
-  if (data.length < 2) {
-    ui.alert("注文一覧にデータがありません。");
-    return;
-  }
+      items.sort((a, b) => String(a.group).localeCompare(String(b.group)));
+      const lineId = row[CONFIG.COLUMN.LINE_ID - 1];
+      const cInfo = customerMap[lineId] || { specialNote: "", historyLabel: "" };
 
-  const menuShortMap = buildMenuShortMap_(master);
-  const customerMap = buildCustomerMap_(customerSheet);
+      // 【修正】「【要】」を含めた全文字数で必要行数を計算
+      const formNote = row[CONFIG.COLUMN.NOTE - 1] || "";
+      const fullNoteText = formNote ? "【要】" + formNote : "";
+      const formNoteLines = fullNoteText ? Math.ceil(fullNoteText.length / 20) : 0;
 
-  const NEEDS_CHECK = resolveNeedsCheckStatus_();
+      let neededRows = 3 + items.length + 1;
+      if (cInfo.specialNote) neededRows += 1;
+      if (formNoteLines > 0) neededRows += formNoteLines;
+      if (cInfo.historyLabel) neededRows += 1;
 
-  // --- 対象行 → カード化 ---
-  const cardsToPrint = [];
-
-  for (let i = 1; i < data.length; i++) {
-    const row = data[i];
-
-    const status = String(row[CONFIG.COLUMN.STATUS - 1] || "");
-
-    // 印字対象：通常 / 変更後 / 要確認（※要確認は文字列 or CONFIG.STATUS.NEEDS_CHECK）
-    const isPrintable =
-      status === CONFIG.STATUS.NORMAL ||
-      status === CONFIG.STATUS.CHANGE_AFTER ||
-      status === NEEDS_CHECK;
-
-    if (!isPrintable) continue;
-
-    const pickupDateDigits = String(row[CONFIG.COLUMN.PICKUP_DATE - 1] || "").replace(/[^0-9]/g, "");
-    if (!pickupDateDigits || !pickupDateDigits.includes(target)) continue;
-
-    const lineId = row[CONFIG.COLUMN.LINE_ID - 1];
-    const customer = customerMap[String(lineId || "")] || {
-      noteKitchen: "",
-      noteOffice: "",
-      lastVisitLabel: ""
-    };
-
-    const items = parseOrderItemsForCard_(row[CONFIG.COLUMN.DETAILS - 1], menuShortMap);
-
-    const formNote = String(row[CONFIG.COLUMN.NOTE - 1] || "").trim();
-    const customerNote = buildCustomerNoteText_(customer);
-
-    const srcNo = String(row[CONFIG.COLUMN.SOURCE_NO - 1] || "").replace(/'/g, "").trim();
-    const needsCheckText =
-      (status === NEEDS_CHECK)
-        ? (srcNo ? `要確認（元No:${srcNo}）` : "要確認")
-        : "";
-
-    // --- 高さ見積（1セル=1行として計算） ---
-    // No, Name, Tel, Items..., Total, Notes..., LastVisit
-    let neededRows = 0;
-
-    neededRows += 1; // 予約No
-    if (needsCheckText) neededRows += 1; // 要確認
-    neededRows += 1; // 名前
-    neededRows += 1; // 電話（空欄でも行は確保：仕様の並びを固定）
-    neededRows += Math.max(1, items.length); // 商品（最低1行確保）
-    neededRows += 1; // 合計
-
-    const customerNoteLines = splitToChunks_(customerNote, 20).length;
-    const formNoteLines = splitToChunks_(formNote ? "【要】" + formNote : "", 20).length;
-    neededRows += customerNoteLines;
-    neededRows += formNoteLines;
-
-    if (customer.lastVisitLabel) neededRows += 1; // 前回利用日
-
-    // 余白（カード間の1行スペース）は配置側で +1 するので、ここでは含めない
-    cardsToPrint.push({
-      rowData: row,
-      items,
-      customer,
-      needsCheckText,
-      customerNote,
-      formNote,
-      height: neededRows
-    });
-  }
+      cardsToPrint.push({ rowData: row, items: items, customer: cInfo, height: neededRows, fullNoteText: fullNoteText });
+    }
+  });
 
   if (cardsToPrint.length === 0) {
     ui.alert("該当データがありませんでした。");
     return;
   }
 
-  // --- Bin Packing（高さ大きい順） ---
   cardsToPrint.sort((a, b) => b.height - a.height);
-
-  // --- シート初期化（塗りつぶし無し運用なので clearFormats もOK） ---
-  cardSheet.clear({ contentsOnly: true });
-  cardSheet.clearFormats();
-
-  // レイアウト定数
-  const MAX_PAGE_ROWS = 46;
-  const PAGE_GAP_ROWS = 1; // 47行目を空白にする
-  const PAGE_STEP = MAX_PAGE_ROWS + PAGE_GAP_ROWS;
-
-  const colWidths = [230, 230, 230];
-  for (let c = 1; c <= 3; c++) cardSheet.setColumnWidth(c, colWidths[c - 1]);
-
-  // 各列の「今のページ内の積み上げ高さ」
-  let columnHeights = [1, 1, 1];   // 1始まり
-  let pageOffset = 0;             // 0, 46, 92, ...
+  cardSheet.clear().clearFormats();
+  
+  const MAX_PAGE_ROWS = 45; 
+  let columnHeights = [1, 1, 1];
+  let columnPageOffsets = [0, 0, 0];
 
   cardsToPrint.forEach((card) => {
-    // 念のためガード（card が undefined で落ちる事故を防ぐ）
-    if (!card || !card.rowData) return;
-
-    // 現ページに置ける列を探す（最小高さの列へ）
     let targetColIndex = -1;
-    let minHeight = 999999;
+    let minHeightInPage = 999;
 
     for (let i = 0; i < 3; i++) {
       if (columnHeights[i] + card.height <= MAX_PAGE_ROWS) {
-        if (columnHeights[i] < minHeight) {
-          minHeight = columnHeights[i];
+        if (columnHeights[i] < minHeightInPage) {
+          minHeightInPage = columnHeights[i];
           targetColIndex = i;
         }
       }
     }
 
-    // どの列にも入らない → 次ページへ（3列同時にページ送り）
     if (targetColIndex === -1) {
-      pageOffset += PAGE_STEP;      // 46行ぶん進める（46行＋空白1行）
-      columnHeights = [1, 1, 1];    // リセット
-      targetColIndex = 0;           // 新ページの先頭列から
+      let currentMaxOffset = Math.max(...columnPageOffsets);
+      for (let i = 0; i < 3; i++) {
+        columnPageOffsets[i] = currentMaxOffset + MAX_PAGE_ROWS;
+        columnHeights[i] = 1; 
+      }
+      targetColIndex = 0;
     }
 
-    const startRow = pageOffset + columnHeights[targetColIndex];
-
-    ensureSheetRows_(cardSheet, startRow + card.height + 2); // 少し余裕
+    let startRow = columnPageOffsets[targetColIndex] + columnHeights[targetColIndex];
     drawDynamicCard(cardSheet, startRow, targetColIndex + 1, card);
-
-    // カードの次は「1行空白」を必ず挟む（見やすさ）
     columnHeights[targetColIndex] += (card.height + 1);
   });
-
-  // 行高は固定（必要なら調整）
+  
+  for(let c=1; c<=3; c++) cardSheet.setColumnWidth(c, 230);
   cardSheet.setRowHeights(1, cardSheet.getMaxRows(), 17);
-
   cardSheet.activate();
 }
 
 /**
- * カード描画（黒文字のみ・塗りつぶし無し）
+ * 描画補助関数（【注】と【要】の両方を20文字折り返しに対応）
  */
 function drawDynamicCard(sheet, startRow, col, card) {
-  if (!card || !card.rowData) return;
-
-  const rowData = card.rowData;
-  const items = card.items || [];
-  const customer = card.customer || {};
-  const height = card.height || 1;
-
-  const orderNo = String(rowData[CONFIG.COLUMN.ORDER_NO - 1] || "").replace(/'/g, "").trim();
-  const isRegular = String(rowData[CONFIG.COLUMN.REGULAR_FLG - 1] || "") === "常連";
-  const name = (isRegular ? "★ " : "") + String(rowData[CONFIG.COLUMN.NAME - 1] || "不明") + " 様";
-
-  const telRaw = String(rowData[CONFIG.COLUMN.TEL - 1] || "").replace(/'/g, "").trim();
-  const telLine = telRaw ? ("TEL: " + telRaw) : ""; // 電話が無いときは空欄
-
-  const totalCount = Number(rowData[CONFIG.COLUMN.TOTAL_COUNT - 1] || 0);
-  const totalPrice = Number(rowData[CONFIG.COLUMN.TOTAL_PRICE - 1] || 0);
-  const totalStr = `計:${totalCount}点/ ${totalPrice.toLocaleString()}円`;
-
-  const needsCheckText = String(card.needsCheckText || "").trim();
-
-  const customerNote = String(card.customerNote || "").trim();
-  const formNote = String(card.formNote || "").trim();
-  const formNoteText = formNote ? "【要】" + formNote : "";
-
-  const lastVisitLabel = customer.lastVisitLabel ? String(customer.lastVisitLabel) : "";
+  const { rowData, items, customer, height } = card;
+  const orderNo = (rowData[CONFIG.COLUMN.ORDER_NO - 1] || "").toString().replace(/'/g, "");
+  const isRegular = rowData[CONFIG.COLUMN.REGULAR_FLG - 1] === "常連";
+  const name = (isRegular ? "★ " : "") + (rowData[CONFIG.COLUMN.NAME - 1] || "不明") + " 様";
+  const tel = "TEL: " + (rowData[CONFIG.COLUMN.TEL - 1] || "なし").toString().replace(/'/g, "");
+  const totalStr = "計:" + rowData[CONFIG.COLUMN.TOTAL_COUNT - 1] + "点 / " + Number(rowData[CONFIG.COLUMN.TOTAL_PRICE - 1]).toLocaleString() + "円";
+  
+  // 備考と注記のテキスト準備
+  const formNote = (rowData[CONFIG.COLUMN.NOTE - 1] || "").toString();
+  const fullNoteText = formNote ? "【要】" + formNote : "";
+  const fullSpecialNoteText = customer.specialNote ? "【注】" + customer.specialNote : "";
 
   let r = startRow;
+  sheet.getRange(startRow, col, height, 1).setBorder(true, true, true, true, null, null, "#444444", SpreadsheetApp.BorderStyle.SOLID);
+  sheet.getRange(r++, col).setValue("No: " + orderNo).setBackground("#eeeeee").setFontWeight("bold").setFontSize(10);
+  sheet.getRange(r++, col).setValue(name).setFontSize(11).setFontWeight("bold");
+  sheet.getRange(r++, col).setValue(tel).setFontSize(8);
 
-  // 外枠（塗りつぶし無し・黒罫線）
-  sheet.getRange(startRow, col, height, 1)
-    .setBorder(true, true, true, true, null, null, "#000000", SpreadsheetApp.BorderStyle.SOLID);
-
-  // 1) 予約番号
-  setCellText_(sheet, r++, col, "No: " + orderNo, { bold: true, size: 10 });
-
-  // 2) 要確認（予約番号の下に1行）
-  if (needsCheckText) {
-    setCellText_(sheet, r++, col, needsCheckText, { bold: true, size: 10 });
-  }
-
-  // 3) 名前
-  setCellText_(sheet, r++, col, name, { bold: true, size: 11 });
-
-  // 4) 電話（無いときは空欄）
-  setCellText_(sheet, r++, col, telLine, { bold: false, size: 10 });
-
-  // 5) 商品
-  if (items.length === 0) {
-    setCellText_(sheet, r++, col, "", { size: 10 });
-  } else {
-    items.forEach(it => {
-      setCellText_(sheet, r++, col, it.text || "", { size: 10 });
-    });
-  }
-
-  // 6) 合計
-  setCellText_(sheet, r++, col, totalStr, { bold: true, size: 9 });
-
-  // 7) 顧客備考（H/I → 【注】）
-  if (customerNote) {
-    splitToChunks_(customerNote, 20).forEach(chunk => {
-      setCellText_(sheet, r++, col, chunk, { bold: true, size: 9, wrap: true });
-    });
-  }
-
-  // 8) フォーム備考（F → 【要】）
-  if (formNoteText) {
-    splitToChunks_(formNoteText, 20).forEach(chunk => {
-      setCellText_(sheet, r++, col, chunk, { bold: true, size: 8, wrap: true });
-    });
-  }
-
-  // 9) 前回利用日
-  if (lastVisitLabel) {
-    setCellText_(sheet, r++, col, lastVisitLabel, { size: 8 });
-  }
-
-  // 念のため、余った枠は空に（罫線は残る）
-  while (r < startRow + height) {
-    setCellText_(sheet, r++, col, "", { size: 8 });
-  }
-}
-
-/* =========================
-   Helper: build maps
-   ========================= */
-
-function buildCustomerMap_(customerSheet) {
-  const map = {};
-  if (!customerSheet) return map;
-
-  const values = customerSheet.getDataRange().getValues();
-  if (values.length < 2) return map;
-
-  for (let i = 1; i < values.length; i++) {
-    const r = values[i];
-    const lineId = String(r[CONFIG.CUSTOMER_COLUMN.LINE_ID - 1] || "").trim();
-    if (!lineId) continue;
-
-    const noteKitchen = String(r[CONFIG.CUSTOMER_COLUMN.NOTE_COOK - 1] || "").trim();   // H
-    const noteOffice = String(r[CONFIG.CUSTOMER_COLUMN.NOTE_OFFICE - 1] || "").trim(); // I
-
-    const lastVisit = r[CONFIG.CUSTOMER_COLUMN.LAST_VISIT - 1];
-    const lastVisitLabel = formatLastVisitLabel_(lastVisit);
-
-    map[lineId] = { noteKitchen, noteOffice, lastVisitLabel };
-  }
-  return map;
-}
-
-function buildMenuShortMap_(menuSheet) {
-  const map = {};
-  if (!menuSheet) return map;
-
-  const values = menuSheet.getDataRange().getValues();
-  if (values.length < 2) return map;
-
-  // 1行目ヘッダー想定
-  for (let i = 1; i < values.length; i++) {
-    const r = values[i];
-
-    const parent = String(r[CONFIG.MENU_COLUMN.MENU_NAME - 1] || "").trim();
-    const child = String(r[CONFIG.MENU_COLUMN.SUB_MENU - 1] || "").trim();
-    const short = String(r[CONFIG.MENU_COLUMN.SHORT_NAME - 1] || "").trim();
-
-    // 登録（複数キーでヒットしやすくする）
-    // 表示は short 優先、なければ child、なければ parent
-    const disp = short || child || parent;
-    if (!disp) continue;
-
-    addMenuKey_(map, parent, disp);
-    addMenuKey_(map, child, disp);
-    addMenuKey_(map, short, disp);
-
-    // 価格付きなどの揺れ対策（「xxx 500円」→「xxx」）
-    addMenuKey_(map, stripPrice_(parent), disp);
-    addMenuKey_(map, stripPrice_(child), disp);
-    addMenuKey_(map, stripPrice_(short), disp);
-  }
-  return map;
-}
-
-function addMenuKey_(map, key, disp) {
-  const k = String(key || "").trim();
-  if (!k) return;
-  if (!map[k]) map[k] = disp;
-}
-
-/* =========================
-   Helper: parse items
-   ========================= */
-
-function parseOrderItemsForCard_(itemsText, menuShortMap) {
-  const items = [];
-  const text = String(itemsText || "").trim();
-  if (!text) return items;
-
-  text.split("\n").forEach(line => {
-    const m = String(line || "").match(/(.+?)\s*x\s*(\d+)/);
-    if (!m) return;
-
-    const rawName = m[1].replace(/^[・\s└]+/, "").trim();
-    const cleanName = stripPrice_(rawName);
-    const count = Number(m[2] || 0);
-
-    const short = resolveShortName_(cleanName, rawName, menuShortMap);
-
-    items.push({ text: `${short} x${count}` });
+  items.forEach((item) => {
+    sheet.getRange(r++, col).setValue("・" + item.short).setFontSize(10);
   });
 
-  return items;
-}
+  sheet.getRange(r, col).setValue(totalStr).setFontWeight("bold").setFontSize(9).setBorder(true, null, null, null, null, null);
+  r++;
 
-function resolveShortName_(cleanName, rawName, menuShortMap) {
-  if (menuShortMap[cleanName]) return menuShortMap[cleanName];
-  if (menuShortMap[rawName]) return menuShortMap[rawName];
-
-  // 部分一致で救済（ただし最初に見つかったもの）
-  const keys = Object.keys(menuShortMap);
-  for (let i = 0; i < keys.length; i++) {
-    const k = keys[i];
-    if (k && cleanName.includes(k)) return menuShortMap[k];
-  }
-  return cleanName || rawName || "";
-}
-
-function stripPrice_(s) {
-  return String(s || "")
-    .replace(/[¥￥]?\s*\d+\s*円?/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-/* =========================
-   Helper: notes / formatting
-   ========================= */
-
-function buildCustomerNoteText_(customer) {
-  const nk = String(customer.noteKitchen || "").trim();
-  const no = String(customer.noteOffice || "").trim();
-
-  const parts = [];
-  if (nk) parts.push(nk);
-  if (no) parts.push(no);
-
-  if (parts.length === 0) return "";
-  return "【注】" + parts.join(" / ");
-}
-
-function formatLastVisitLabel_(value) {
-  if (!value) return "";
-
-  // Date のとき
-  if (Object.prototype.toString.call(value) === "[object Date]" && !isNaN(value.getTime())) {
-    return "前回: " + Utilities.formatDate(value, "Asia/Tokyo", "yyyy/M/d");
+  // --- 【注】の20文字分割書き込み ---
+  if (fullSpecialNoteText) {
+    for (let i = 0; i < fullSpecialNoteText.length; i += 20) {
+      let chunk = fullSpecialNoteText.substring(i, i + 20);
+      sheet.getRange(r++, col).setValue(chunk).setFontSize(9).setFontColor("#ff0000").setFontWeight("bold");
+    }
   }
 
-  // 文字列のとき
-  const s = String(value).trim();
-  if (!s) return "";
-  return "前回: " + s;
-}
+  // --- 【要】の20文字分割書き込み ---
+  if (fullNoteText) {
+    for (let i = 0; i < fullNoteText.length; i += 20) {
+      let chunk = fullNoteText.substring(i, i + 20);
+      sheet.getRange(r++, col).setValue(chunk).setFontSize(8).setFontColor("#333333");
+    }
+  }
 
-function splitToChunks_(text, chunkSize) {
-  const s = String(text || "");
-  if (!s) return [];
-  const size = Math.max(1, Number(chunkSize || 20));
-  const out = [];
-  for (let i = 0; i < s.length; i += size) out.push(s.substring(i, i + size));
-  return out;
-}
-
-function setCellText_(sheet, row, col, text, opt) {
-  const o = opt || {};
-  const range = sheet.getRange(row, col);
-
-  range.setValue(String(text || ""));
-
-  // 黒のみ（保険で明示）
-  range.setFontColor("#000000");
-
-  range.setFontSize(o.size || 10);
-  range.setFontWeight(o.bold ? "bold" : "normal");
-
-  if (o.wrap) range.setWrap(true);
-  else range.setWrap(false);
-
-  // 塗りつぶしはしない（clearFormats 後なので基本白）
-}
-
-function ensureSheetRows_(sheet, requiredLastRow) {
-  const need = Number(requiredLastRow || 0);
-  if (need <= 0) return;
-
-  const max = sheet.getMaxRows();
-  if (max < need) {
-    sheet.insertRowsAfter(max, need - max);
+  if (customer.historyLabel) {
+    sheet.getRange(r++, col).setValue(customer.historyLabel).setFontSize(8).setFontColor("#666666");
   }
 }
 
 /**
- * CONFIG.STATUS.NEEDS_CHECK が無い時でも動くように吸収
+ * 補助関数：getCustomerMap
  */
-function resolveNeedsCheckStatus_() {
-  try {
-    if (CONFIG && CONFIG.STATUS && CONFIG.STATUS.NEEDS_CHECK) return CONFIG.STATUS.NEEDS_CHECK;
-  } catch (e) {}
-  // 互換：文字列運用
-  return "要確認";
+function getCustomerMap(customerSheet) {
+  const customerMap = {};
+  if (!customerSheet) return customerMap;
+  const cData = customerSheet.getDataRange().getValues();
+  cData.slice(1).forEach(r => {
+    const lineId = r[CONFIG.CUSTOMER_COLUMN.LINE_ID - 1];
+    if (!lineId) return;
+    customerMap[lineId] = {
+      specialNote: r[CONFIG.CUSTOMER_COLUMN.NOTE_COOK - 1] || "", 
+      historyLabel: r[CONFIG.CUSTOMER_COLUMN.HISTORY_1 - 1] ? "前回: " + String(r[CONFIG.CUSTOMER_COLUMN.HISTORY_1 - 1]).split(" ")[0] : "" 
+    };
+  });
+  return customerMap;
+}
+
+/**
+ * 補助関数：getMenuMap
+ */
+function getMenuMap(menuSheet) {
+  const menuMap = {};
+  if (!menuSheet) return menuMap;
+  const mData = menuSheet.getDataRange().getValues();
+  mData.slice(1).forEach(r => {
+    const menuName = r[CONFIG.MENU_COLUMN.MENU_NAME - 1] ? r[CONFIG.MENU_COLUMN.MENU_NAME - 1].toString().trim() : "";
+    const subMenu = r[CONFIG.MENU_COLUMN.SUB_MENU - 1] ? r[CONFIG.MENU_COLUMN.SUB_MENU - 1].toString().trim() : "";
+    const shortName = r[CONFIG.MENU_COLUMN.SHORT_NAME - 1] ? r[CONFIG.MENU_COLUMN.SHORT_NAME - 1].toString().trim() : "";
+    if (!menuName) return;
+    const fullNameKey = subMenu ? `${menuName}(${subMenu})` : menuName;
+    if (shortName && (subMenu !== "" || !menuMap[fullNameKey])) {
+      menuMap[fullNameKey] = { short: shortName, group: r[CONFIG.MENU_COLUMN.GROUP - 1] || "999" };
+    }
+  });
+  return menuMap;
 }

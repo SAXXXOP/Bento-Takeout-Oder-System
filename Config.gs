@@ -63,7 +63,8 @@ const CONFIG = {
   NORMAL: "通常",
   CHANGE_BEFORE: "変更前",
   CHANGE_AFTER: "変更後",
-  NEEDS_CHECK: "要確認"
+  NEEDS_CHECK: "要確認",
+  CHANGED: "変更済"
 },
 
   // 6. 「メニューマスタ」シートの列配置
