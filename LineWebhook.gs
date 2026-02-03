@@ -47,87 +47,59 @@ function doPost(e) {
        postback（Flexボタン）
        ========================= */
     if (event.type === "postback") {
-      const postData = (event.postback && event.postback.data) || "";
+  const postData = (event.postback && event.postback.data) || "";
 
-      console.log("postback received:", postData); // 確認用
+  // （任意）noop は無視
+  if (postData === "noop") return;
 
-      // ▼ 詳細を確認
-      if (postData.startsWith("show_details:")) {
-        const index = Number(postData.split(":")[1]);
-        const listJson = props.getProperty(`CHANGE_LIST_${userId}`);
-        if (!listJson) {
-          replyText(replyToken, "データが見つかりませんでした。もう一度「予約を変更する」からお願いします。");
-          return;
-        }
+  // ① ページング
+  if (postData.startsWith("change_page:")) {
+    const page = Number(postData.split(":")[1] || "0");
+    const list = getChangeableReservations(userId);
 
-        const list = JSON.parse(listJson);
-        const target = list[index];
-        if (!target) {
-          replyText(replyToken, "対象が見つかりませんでした。もう一度「予約を変更する」からお願いします。");
-          return;
-        }
+    const PAGE_SIZE = 5;
+    const totalPages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+    const safePage = Math.max(0, Math.min(page, totalPages - 1));
 
-        const detailMsg =
-          `【ご注文詳細】\n予約番号: ${target.no}\n------------------\n${target.itemsFull || target.itemsShort || ""}`;
-        replyText(replyToken, detailMsg);
-        return;
-      }
+    const flex = buildReservationCarouselPaged(list, safePage, PAGE_SIZE);
+    replyFlex(replyToken, flex);
+    return;
+  }
 
-      // ▼ この予約を変更する（確認画面＋フォームURL）
-      if (postData.startsWith("change_confirm:")) {
-        const index = Number(postData.split(":")[1]);
-        const listJson = props.getProperty(`CHANGE_LIST_${userId}`);
-        if (!listJson) {
-          replyText(replyToken, "期限切れです。もう一度「予約を変更する」からお願いします。");
-          return;
-        }
-
-        const list = JSON.parse(listJson);
-        const target = list[index];
-        if (!target) {
-          replyText(replyToken, "対象が見つかりませんでした。もう一度「予約を変更する」からお願いします。");
-          return;
-        }
-
-        // ▼ 次のページを表示
-        if (postData.startsWith("change_page:")) {
-          const page = Number(postData.split(":")[1] || "0");
-          const listJson = props.getProperty(`CHANGE_LIST_${userId}`);
-          if (!listJson) {
-            replyText(replyToken, "期限切れです。もう一度「予約を変更する」からお願いします。");
-            return;
-          }
-
-          const list = JSON.parse(listJson);
-
-          const PAGE_SIZE = 5;
-          const totalPages = Math.ceil(list.length / PAGE_SIZE);
-          const safePage = Math.max(0, Math.min(page, totalPages - 1));
-
-          props.setProperty(`CHANGE_PAGE_${userId}`, String(safePage));
-
-          const flex = buildReservationCarouselPaged(list, safePage, PAGE_SIZE);
-          replyFlex(replyToken, flex);
-          return;
-        }
-
-        const baseUrl = CONFIG.LINE.FORM.FORM_URL;
-        const formUrl = buildPrefilledFormUrl(baseUrl, userId, target.no);
-        const confirmFlex = buildConfirmFlex(target.no, target.itemsShort, formUrl);
-
-        // 変更対象を保持（必要なら後段で利用）
-        props.setProperty(`CHANGE_TARGET_${userId}`, JSON.stringify(target));
-        // 一覧はワンタイム扱い（安全のため消す）
-        props.deleteProperty(`CHANGE_LIST_${userId}`);
-
-        replyFlex(replyToken, confirmFlex);
-        return;
-      }
-
-      // 未対応postback
-      replyText(replyToken, "操作が認識できませんでした。もう一度お試しください。");
+  // ② 詳細
+  if (postData.startsWith("show_details_no:")) {
+    const orderNo = postData.split(":")[1] || "";
+    const target = findReservationForUser(userId, orderNo);
+    if (!target) {
+      replyText(replyToken, "対象が見つかりませんでした（期限切れ/変更済の可能性）。もう一度「予約を変更する」からお願いします。");
       return;
     }
+
+    const detailMsg =
+      `【ご注文詳細】\n予約番号: ${target.no}\n------------------\n${target.itemsFull || target.itemsShort || ""}`;
+    replyText(replyToken, detailMsg);
+    return;
+  }
+
+  // ③ 変更フォームへ
+  if (postData.startsWith("change_confirm_no:")) {
+    const orderNo = postData.split(":")[1] || "";
+    const target = findReservationForUser(userId, orderNo);
+    if (!target) {
+      replyText(replyToken, "対象が見つかりませんでした（期限切れ/変更済の可能性）。もう一度「予約を変更する」からお願いします。");
+      return;
+    }
+
+    const formUrl = buildPrefilledFormUrl(CONFIG.LINE.FORM.FORM_URL, userId, target.no);
+    const confirmFlex = buildConfirmFlex(target.no, target.itemsShort, formUrl);
+
+    replyFlex(replyToken, confirmFlex);
+    return;
+  }
+
+  // 未対応は何も返さない（誤反応防止）
+  return;
+}
 
     /* =========================
        text message
@@ -151,11 +123,9 @@ function doPost(e) {
         // 一覧を保存（ボタンpostbackで参照）
         props.setProperty(`CHANGE_LIST_${userId}`, JSON.stringify(list));
 
-        // カルーセル返信
-        const MAX = 5; // LINEの安全上限
-        const limitedList = list.slice(0, MAX);
-        const flex = buildReservationCarousel(limitedList);
-
+        // ページング版で1ページ目を表示
+        const PAGE_SIZE = 5;
+        const flex = buildReservationCarouselPaged(list, 0, PAGE_SIZE);
         replyFlex(replyToken, flex);
         return;
       }
@@ -231,7 +201,7 @@ function buildReservationBubble(r, index) {
           action: {
             type: "postback",
             label: "この予約を変更する",
-            data: `change_confirm:${index}`
+            data: `change_confirm_no:${r.no}`
           }
         },
         {
@@ -241,7 +211,7 @@ function buildReservationBubble(r, index) {
           action: {
             type: "postback",
             label: "詳細を確認",
-            data: `show_details:${index}`
+            data: `show_details_no:${r.no}`
           }
         }
       ]
@@ -259,6 +229,78 @@ function buildReservationCarousel(list) {
     }
   };
 }
+
+/* =========================
+   ★ 追加：ページング付きカルーセル
+   ========================= */
+
+function buildReservationCarouselPaged(list, page, pageSize) {
+  const totalPages = Math.max(1, Math.ceil(list.length / pageSize));
+  const start = page * pageSize;
+  const slice = list.slice(start, start + pageSize);
+
+  const bubbles = slice.map(r => buildReservationBubble(r));
+
+  // ナビバブル（必要なときだけ）
+  if (totalPages > 1) {
+    bubbles.push(buildPagerBubble(page, totalPages));
+  }
+
+  return {
+    type: "flex",
+    altText: `変更する予約を選んでください（${start + 1}〜${Math.min(start + pageSize, list.length)} / ${list.length}）`,
+    contents: { type: "carousel", contents: bubbles }
+  };
+}
+
+function buildPagerBubble(page, totalPages) {
+  const hasPrev = page > 0;
+  const hasNext = page < totalPages - 1;
+
+  const buttons = [];
+  if (hasPrev) {
+    buttons.push({
+      type: "button",
+      style: "secondary",
+      height: "sm",
+      action: { type: "postback", label: "前へ", data: `change_page:${page - 1}` }
+    });
+  }
+  if (hasNext) {
+    buttons.push({
+      type: "button",
+      style: "primary",
+      height: "sm",
+      action: { type: "postback", label: "次へ", data: `change_page:${page + 1}` }
+    });
+  }
+
+  return {
+    type: "bubble",
+    size: "kilo",
+    body: {
+      type: "box",
+      layout: "vertical",
+      spacing: "md",
+      contents: [
+        { type: "text", text: "さらに表示", weight: "bold", size: "md" },
+        { type: "text", text: `表示：${page + 1}/${totalPages}ページ`, size: "sm", color: "#666666" }
+      ]
+    },
+    footer: {
+      type: "box",
+      layout: "vertical",
+      spacing: "sm",
+      contents: buttons.length
+        ? buttons
+        : [{ type: "text", text: "（これ以上ありません）", size: "xs", color: "#999999" }]
+    }
+  };
+}
+
+/* =========================
+   既存：確認画面Flex
+   ========================= */
 
 function buildConfirmFlex(orderNo, itemsText, formUrl) {
   return {
@@ -418,6 +460,12 @@ function replyMulti(token, messages) {
 /* =========================
    Data: get changeable reservations
    ========================= */
+
+// ★追加：予約番号から“いま変更可能な予約”を特定する（props不要）
+function findReservationForUser(userId, orderNo) {
+  const list = getChangeableReservations(userId);
+  return list.find(x => String(x.no) === String(orderNo)) || null;
+}
 
 function getChangeableReservations(userId) {
   const sheet = SpreadsheetApp.getActive().getSheetByName(CONFIG.SHEET.ORDER_LIST);
