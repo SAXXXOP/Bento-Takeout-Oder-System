@@ -92,4 +92,6 @@ const CONFIG = {
     // LINE_TOKEN という名前で保存してください
     LINE_TOKEN: PropertiesService.getScriptProperties().getProperty('LINE_TOKEN'),
   },
+
+  
 };
