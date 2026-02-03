@@ -78,10 +78,6 @@ function onFormSubmit(e) {
     throw err;
 
   } finally {
-    // 念のため残骸掃除
-    if (formData && formData.userId) {
-      ReservationService.clearTempData(formData.userId);
-    }
     lock.releaseLock();
-  }
+}
 }

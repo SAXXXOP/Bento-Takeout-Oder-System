@@ -82,19 +82,22 @@ function doPost(e) {
 
   // ③ 変更フォームへ
   if (postData.startsWith("change_confirm_no:")) {
-    const orderNo = postData.split(":")[1] || "";
-    const target = findReservationForUser(userId, orderNo);
-    if (!target) {
-      replyText(replyToken, "対象が見つかりませんでした（期限切れ/変更済の可能性）。もう一度「予約を変更する」からお願いします。");
-      return;
-    }
+  const orderNo = postData.split(":")[1] || "";
 
-    const formUrl = buildPrefilledFormUrl(CONFIG.LINE.FORM.FORM_URL, userId, target.no);
-    const confirmFlex = buildConfirmFlex(target.no, target.itemsShort, formUrl);
+  // 確定だけは最新で再検証（直前に他端末で変更された等に強くする）
+  const target = findReservationForUser(userId, orderNo, { forceFresh: true });
 
-    replyFlex(replyToken, confirmFlex);
+  if (!target) {
+    replyText(replyToken, "対象が見つかりませんでした（期限切れ/変更済の可能性）。もう一度「予約を変更する」からお願いします。");
     return;
   }
+
+  const formUrl = buildPrefilledFormUrl(CONFIG.LINE.FORM.FORM_URL, userId, target.no);
+  const confirmFlex = buildConfirmFlex(target.no, target.itemsShort, formUrl);
+
+  replyFlex(replyToken, confirmFlex);
+  return;
+}
 
   // 未対応は何も返さない（誤反応防止）
   return;
@@ -135,9 +138,6 @@ function doPost(e) {
         pageSize,
         totalPages
       });
-
-      // propsを使うならここ（将来消す予定でもOK）
-      props.setProperty(`CHANGE_LIST_${userId}`, JSON.stringify(list));
 
       const flex = buildReservationCarouselPaged(list, page, pageSize);
 
@@ -477,16 +477,40 @@ function replyMulti(token, messages) {
    ========================= */
 
 // ★追加：予約番号から“いま変更可能な予約”を特定する（props不要）
-function findReservationForUser(userId, orderNo) {
-  const list = getChangeableReservations(userId);
+function findReservationForUser(userId, orderNo, options) {
+  const list = getChangeableReservations(userId, options);
   return list.find(x => String(x.no) === String(orderNo)) || null;
 }
 
-function getChangeableReservations(userId) {
+function getChangeableReservations(userId, options) {
+  if (!userId) return [];
+
+  const forceFresh = !!(options && options.forceFresh);
+
+  // 1) 短時間キャッシュ（ページング/詳細の連打を高速化）
+  const cache = CacheService.getUserCache();
+  const cacheKey = `CHANGEABLE_LIST_${userId}`;
+
+  if (!forceFresh) {
+    const cached = cache.get(cacheKey);
+    if (cached) {
+      try {
+        return JSON.parse(cached) || [];
+      } catch (e) {
+        // 壊れたキャッシュは無視して作り直す
+      }
+    }
+  }
+
   const sheet = SpreadsheetApp.getActive().getSheetByName(CONFIG.SHEET.ORDER_LIST);
   if (!sheet) return [];
 
-  const data = sheet.getDataRange().getValues();
+  // 2) 読む範囲を A:O（= 必要列まで）に限定して無駄転送を減らす
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+
+  const maxColNeeded = CONFIG.COLUMN.PICKUP_DATE_RAW; // O列まで（= 15）
+  const data = sheet.getRange(1, 1, lastRow, maxColNeeded).getValues();
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -561,6 +585,9 @@ function getChangeableReservations(userId) {
     delete x.pickupDateRaw;
     delete x.pickupTimeKey;
   });
+
+  // キャッシュ保存（60秒：ページ送り/詳細/確定の間を高速化）
+  cache.put(cacheKey, JSON.stringify(list), 60);
 
   return list;
 }
