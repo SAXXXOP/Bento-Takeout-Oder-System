@@ -41,8 +41,12 @@ function updateDailySummary() {
     }
     
     const key = child || parent;
-    displayNameMap[key] = short || child || parent;
+    const disp = short || child || parent;
+
+    displayNameMap[key] = disp;
+
     if (itemOrder[key] === undefined) itemOrder[key] = index;
+    if (disp && itemOrder[disp] === undefined) itemOrder[disp] = index; // 追加
   });
 
   // --- 2. データの集計 ---
@@ -71,14 +75,6 @@ function updateDailySummary() {
     status !== CONFIG.STATUS.CHANGE_AFTER &&
     status !== CONFIG.STATUS.NEEDS_CHECK
   ) return;
-
-  // 要確認は注意欄にも必ず出す（場所は後で移動しやすいよう、ここで集約）
-  if (status === CONFIG.STATUS.NEEDS_CHECK) {
-    const no = String(row[CONFIG.COLUMN.ORDER_NO - 1] || "").replace(/'/g, "");
-    const name = row[CONFIG.COLUMN.NAME - 1] || "";
-    const srcNo = String(row[CONFIG.COLUMN.SOURCE_NO - 1] || "").replace(/'/g, "");
-    memos.push(`要確認 No.${no}（元No:${srcNo || "不明"}） ${name}様`);
-  }
 
     const pickupDate = row[CONFIG.COLUMN.PICKUP_DATE - 1]?.toString().replace(/[^0-9]/g, "");
     if (!pickupDate || !pickupDate.includes(target)) return;
@@ -111,15 +107,23 @@ function updateDailySummary() {
       }
 
       const { group, parent, child } = info;
-      
-      // 重要：小メニューが空、または親と同じなら「親自身」として集計
-      const isRedundant = !child || child === parent || displayNameMap[child] === displayNameMap[parent];
-      const childKey = isRedundant ? parent : child;
 
-      if (!detailTree[group]) detailTree[group] = {};
-      if (!detailTree[group][parent]) detailTree[group][parent] = {};
-      detailTree[group][parent][childKey] = (detailTree[group][parent][childKey] || 0) + count;
-      groupCounts[group] = (groupCounts[group] || 0) + count;
+      const groupKey = String(group || "").trim() || "その他";
+      const parentKey = (displayNameMap[parent] || parent || "その他").toString().trim();
+
+      let childRaw = child;
+      if (!childRaw || childRaw === parent) childRaw = parent;
+
+      const childKey = (displayNameMap[childRaw] || childRaw || parentKey).toString().trim();
+
+      // 子キーが親表示と同じなら親に吸収
+      const finalChildKey = (childKey === parentKey) ? parentKey : childKey;
+
+      if (!detailTree[groupKey]) detailTree[groupKey] = {};
+      if (!detailTree[groupKey][parentKey]) detailTree[groupKey][parentKey] = {};
+      detailTree[groupKey][parentKey][finalChildKey] = (detailTree[groupKey][parentKey][finalChildKey] || 0) + count;
+
+      groupCounts[groupKey] = (groupCounts[groupKey] || 0) + count;
       totalAll += count;
     });
   });
@@ -127,66 +131,60 @@ function updateDailySummary() {
   // --- 3. シート初期化 ---
   sheet.clear().clearFormats();
   sheet.getRange("A1").setValue(`【 ${res.getResponseText()} 当日まとめ 】`).setFontSize(14).setFontWeight("bold");
-  sheet.getRange("A2").setValue(`総数: ${totalAll}`).setFontSize(22).setFontWeight("bold").setFontColor("#cc0000");
+  sheet.getRange("A2")
+    .setValue(`総数: ${totalAll}`)
+    .setFontSize(22)
+    .setFontWeight("bold")
+    .setFontColor("#000000")
+    .setBackground("#eeeeee")
+    .setBorder(true, true, true, true, true, true, "#000000", SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
 
-  let colRows = [4, 4, 4]; 
+  let colRows = [3, 3, 3]; 
   const COL_START = [1, 4, 7];
 
   // --- 4. 備考エリア ---
 
   // 4-A. 要確認（先に表示）
   if (needChecks.length > 0) {
-    COL_START.forEach((cIdx, i) => {
-      sheet.getRange(colRows[i], cIdx, 1, 2)
-        .setBackground("#fff2cc")
-        .setFontWeight("bold")
-        .setFontSize(11)
-        .setValue("▼ 要確認");
-      colRows[i]++;
-    });
+  colRows = writeSectionHeaderOnce_(sheet, colRows, "▼ 要確認");
 
-    needChecks.forEach(m => {
-      let idx = colRows.indexOf(Math.min(...colRows));
-      sheet.getRange(colRows[idx], COL_START[idx], 1, 2)
-        .mergeAcross()
-        .setValue(m)
-        .setFontSize(10)
-        .setFontColor("#cc0000")
-        .setFontWeight("bold")
-        .setWrap(true);
-      sheet.setRowHeight(colRows[idx], 35);
-      colRows[idx]++;
-    });
+  needChecks.forEach(m => {
+    const idx = colRows.indexOf(Math.min.apply(null, colRows));
+    sheet.getRange(colRows[idx], COL_START[idx], 1, 2)
+      .mergeAcross()
+      .setValue(m)
+      .setFontSize(10)
+      .setFontColor("#000000")
+      .setFontWeight("bold")
+      .setBackground("#f3f3f3")
+      .setBorder(true, true, true, true, true, true, "#000000", SpreadsheetApp.BorderStyle.SOLID)
+      .setWrap(true);
+    sheet.setRowHeight(colRows[idx], 35);
+    colRows[idx]++;
+  });
 
-    colRows = colRows.map(r => r + 1);
-  }
+  colRows = colRows.map(r => r + 1);
+}
 
-  // 4-B. 既存の特別注意（従来通り）
-  if (memos.length > 0) {
-    COL_START.forEach((cIdx, i) => {
-      sheet.getRange(colRows[i], cIdx, 1, 2)
-        .setBackground("#ffd9d9")
-        .setFontWeight("bold")
-        .setFontSize(11)
-        .setValue("▼ 特別注意");
-      colRows[i]++;
-    });
+  // 4-B. 特別注意
+if (memos.length > 0) {
+  colRows = writeSectionHeaderOnce_(sheet, colRows, "▼ 特別注意");
 
-    memos.forEach(m => {
-      let idx = colRows.indexOf(Math.min(...colRows));
-      sheet.getRange(colRows[idx], COL_START[idx], 1, 2)
-        .mergeAcross()
-        .setValue(m)
-        .setFontSize(10)
-        .setFontColor("#cc0000")
-        .setFontWeight("bold")
-        .setWrap(true);
-      sheet.setRowHeight(colRows[idx], 35);
-      colRows[idx]++;
-    });
+  memos.forEach(m => {
+    let idx = colRows.indexOf(Math.min(...colRows));
+    sheet.getRange(colRows[idx], COL_START[idx], 1, 2)
+      .mergeAcross()
+      .setValue(m)
+      .setFontSize(10)
+      .setFontColor("#cc0000")
+      .setFontWeight("bold")
+      .setWrap(true);
+    sheet.setRowHeight(colRows[idx], 35);
+    colRows[idx]++;
+  });
 
-    colRows = colRows.map(r => r + 1);
-  }
+  colRows = colRows.map(r => r + 1);
+}
 
   // --- 5. 高さ計算（ビンパッキング用） ---
   const sortedGroups = Object.keys(detailTree).map(g => {
@@ -207,9 +205,15 @@ function updateDailySummary() {
     let tCol = COL_START[idx];
     let tRow = colRows[idx];
 
-    sheet.getRange(tRow, tCol, 1, 2).setBackground("#444444").setFontColor("#ffffff").setFontWeight("bold").setFontSize(12);
+    const gRange = sheet.getRange(tRow, tCol, 1, 2);
+    gRange
+      .setFontColor("#000000")
+      .setFontWeight("bold")
+      .setFontSize(12)
+      .setBorder(true, true, true, true, true, true, "#000000", SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
+
     sheet.getRange(tRow, tCol).setValue(g);
-    sheet.getRange(tRow, tCol+1).setValue(groupCounts[g]).setHorizontalAlignment("center");
+    sheet.getRange(tRow, tCol + 1).setValue(groupCounts[g]).setHorizontalAlignment("center");
     tRow++;
 
     const sortedParents = Object.keys(detailTree[g]).sort((a, b) => (itemOrder[a] || 999) - (itemOrder[b] || 999));
@@ -218,8 +222,14 @@ function updateDailySummary() {
       const children = detailTree[g][p];
       const pCount = Object.values(children).reduce((a, b) => a + b, 0);
       
-      sheet.getRange(tRow, tCol, 1, 2).setBackground("#eeeeee").setFontWeight("bold").setFontSize(12);
-      sheet.getRange(tRow, tCol).setValue(" " + (displayNameMap[p] || p));
+      const pRange = sheet.getRange(tRow, tCol, 1, 2);
+      pRange
+        .setFontColor("#000000")
+        .setFontWeight("bold")
+        .setFontSize(12)
+        .setBorder(false, false, true, false, false, false, "#000000", SpreadsheetApp.BorderStyle.SOLID);
+
+      sheet.getRange(tRow, tCol).setValue(" " + p);
       sheet.getRange(tRow, tCol + 1).setValue(pCount).setHorizontalAlignment("center");
       tRow++;
 
@@ -227,11 +237,10 @@ function updateDailySummary() {
 
       sortedChildren.forEach(([c, count]) => {
         // 見出し行（自分自身）は内訳として表示しない
-        if (c === p || displayNameMap[c] === displayNameMap[p]) return;
-        
-        sheet.getRange(tRow, tCol).setValue("    └ " + (displayNameMap[c] || c)).setFontSize(12);
-        sheet.getRange(tRow, tCol + 1).setValue(count).setFontSize(12).setFontWeight("bold").setHorizontalAlignment("center");
-        tRow++;
+      if (c === p) return;
+      sheet.getRange(tRow, tCol).setValue("    └ " + c).setFontSize(12);
+      sheet.getRange(tRow, tCol + 1).setValue(count).setFontSize(12).setFontWeight("bold").setHorizontalAlignment("center");
+      tRow++;
       });
     });
     colRows[idx] = tRow + 1;
@@ -240,15 +249,24 @@ function updateDailySummary() {
   [1, 4, 7].forEach(c => sheet.setColumnWidth(c, 210));
   [2, 5, 8].forEach(c => sheet.setColumnWidth(c, 45));
   sheet.activate();
-
-  // ProductionSheet.gs 末尾などに追加
-function writeSectionHeaderOnce_(sheet, row, title, bgColor) {
-  // A:H（1〜8列）を見出し行として1回だけ表示
-  sheet.getRange(row, 1, 1, 8)
-    .merge()
-    .setValue(title)
-    .setBackground(bgColor)
-    .setFontWeight("bold")
-    .setFontSize(11);
 }
+
+function writeSectionHeaderOnce_(sheet, colRows, title, bgColor) {
+  const headerRow = Math.min.apply(null, colRows);
+
+  function writeSectionHeaderOnce_(sheet, colRows, title) {
+  const headerRow = Math.min.apply(null, colRows);
+
+  const r = sheet.getRange(headerRow, 1, 1, 8);
+  r.merge()
+    .setValue(title)
+    .setFontColor("#000000")
+    .setFontWeight("bold")
+    .setFontSize(11)
+    .setBorder(false, false, true, false, false, false, "#000000", SpreadsheetApp.BorderStyle.SOLID);
+
+  return [headerRow + 1, headerRow + 1, headerRow + 1];
+}
+
+  return [headerRow + 1, headerRow + 1, headerRow + 1];
 }
