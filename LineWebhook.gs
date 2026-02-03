@@ -35,7 +35,6 @@ function doPost(e) {
 
     const replyToken = event.replyToken;
     const userId = event.source && event.source.userId;
-    const props = PropertiesService.getUserProperties();
 
     // 確認用 --- Debug log (必要なら残してOK) ---
     Logger.log("event.type=" + event.type);
@@ -111,24 +110,40 @@ function doPost(e) {
 
       if (text === "予約を変更する") {
 
-        console.log("ENTER change flow");  // 確認用
+      console.log("ENTER change flow");
 
-        const list = getChangeableReservations(userId);
+      const list = getChangeableReservations(userId);
 
-        if (!list.length) {
-          replyText(replyToken, "変更可能な予約がありません。");
-          return;
-        }
+      // ★ 追加：取得件数をログシートへ
+      logToSheet("INFO", "changeable reservations fetched", {
+        userId: userId,
+        total: list.length
+      });
 
-        // 一覧を保存（ボタンpostbackで参照）
-        props.setProperty(`CHANGE_LIST_${userId}`, JSON.stringify(list));
-
-        // ページング版で1ページ目を表示
-        const PAGE_SIZE = 5;
-        const flex = buildReservationCarouselPaged(list, 0, PAGE_SIZE);
-        replyFlex(replyToken, flex);
+      if (!list.length) {
+        replyText(replyToken, "変更可能な予約がありません。");
         return;
       }
+
+      const page = 0;       // 初期ページ
+      const pageSize = 5;  // 1ページ表示数
+      const totalPages = Math.max(1, Math.ceil(list.length / pageSize));
+
+      // ★ 追加：ページング計算ログ
+      logToSheet("INFO", "paging info", {
+        page,
+        pageSize,
+        totalPages
+      });
+
+      // propsを使うならここ（将来消す予定でもOK）
+      props.setProperty(`CHANGE_LIST_${userId}`, JSON.stringify(list));
+
+      const flex = buildReservationCarouselPaged(list, page, pageSize);
+
+      replyFlex(replyToken, flex);
+      return;
+}
 
       // それ以外
       replyText(replyToken, `受信内容：【${text}】`);
