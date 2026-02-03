@@ -127,13 +127,9 @@ function drawDynamicCard(sheet, startRow, col, card) {
   let noLine = "No: " + orderNo;
   if (status === CONFIG.STATUS.NEEDS_CHECK) {
     noLine += srcNo ? "  要確認(元No:" + srcNo + ")" : "  要確認";
-  }
+}
 
-  sheet.getRange(r++, col)
-    .setValue(noLine)
-    .setBackground("#eeeeee")
-    .setFontWeight("bold")
-    .setFontSize(10);
+sheet.getRange(r++, col).setValue(noLine).setBackground("#eeeeee").setFontWeight("bold").setFontSize(10);
   sheet.getRange(r++, col).setValue(name).setFontSize(11).setFontWeight("bold");
   sheet.getRange(r++, col).setValue(tel).setFontSize(8);
 

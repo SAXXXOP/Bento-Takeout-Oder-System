@@ -2,7 +2,7 @@
  * 当日まとめシート作成
  * 修正点：見出し用ID(10,15,21,46等)の重複排除 / ID順 / ビンパッキング
  */
-function createProductionSheet() {
+function updateDailySummary() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const src = ss.getSheetByName(CONFIG.SHEET.ORDER_LIST);
   const master = ss.getSheetByName(CONFIG.SHEET.MENU_MASTER);
@@ -60,6 +60,7 @@ function createProductionSheet() {
   let detailTree = {};
   let totalAll = 0;
   let memos = [];
+  let needChecks = [];
 
   data.slice(1).forEach(row => {
   const status = row[CONFIG.COLUMN.STATUS - 1];
@@ -78,13 +79,20 @@ function createProductionSheet() {
     const srcNo = String(row[CONFIG.COLUMN.SOURCE_NO - 1] || "").replace(/'/g, "");
     memos.push(`要確認 No.${no}（元No:${srcNo || "不明"}） ${name}様`);
   }
-  
+
     const pickupDate = row[CONFIG.COLUMN.PICKUP_DATE - 1]?.toString().replace(/[^0-9]/g, "");
     if (!pickupDate || !pickupDate.includes(target)) return;
 
     const lineId = row[CONFIG.COLUMN.LINE_ID - 1];
     if (customerMap[lineId]) {
       memos.push(`No.${row[CONFIG.COLUMN.ORDER_NO - 1].toString().replace("'","")} ${row[CONFIG.COLUMN.NAME - 1]}様: 【注】${customerMap[lineId]}`);
+    }
+
+    if (status === CONFIG.STATUS.NEEDS_CHECK) {
+      const no = String(row[CONFIG.COLUMN.ORDER_NO - 1] || "").replace(/'/g, "");
+      const name = row[CONFIG.COLUMN.NAME - 1] || "";
+      const srcNo = String(row[CONFIG.COLUMN.SOURCE_NO - 1] || "").replace(/'/g, "");
+      needChecks.push(`No.${no} 要確認（元No:${srcNo || "不明"}） ${name}様`);
     }
 
     const itemsText = row[CONFIG.COLUMN.DETAILS - 1] || "";
@@ -125,17 +133,58 @@ function createProductionSheet() {
   const COL_START = [1, 4, 7];
 
   // --- 4. 備考エリア ---
-  if (memos.length > 0) {
+
+  // 4-A. 要確認（先に表示）
+  if (needChecks.length > 0) {
     COL_START.forEach((cIdx, i) => {
-      sheet.getRange(colRows[i], cIdx, 1, 2).setBackground("#ffd9d9").setFontWeight("bold").setFontSize(11).setValue("▼ 特別注意");
+      sheet.getRange(colRows[i], cIdx, 1, 2)
+        .setBackground("#fff2cc")
+        .setFontWeight("bold")
+        .setFontSize(11)
+        .setValue("▼ 要確認");
       colRows[i]++;
     });
-    memos.forEach(m => {
+
+    needChecks.forEach(m => {
       let idx = colRows.indexOf(Math.min(...colRows));
-      sheet.getRange(colRows[idx], COL_START[idx], 1, 2).mergeAcross().setValue(m).setFontSize(10).setFontColor("#cc0000").setFontWeight("bold").setWrap(true);
+      sheet.getRange(colRows[idx], COL_START[idx], 1, 2)
+        .mergeAcross()
+        .setValue(m)
+        .setFontSize(10)
+        .setFontColor("#cc0000")
+        .setFontWeight("bold")
+        .setWrap(true);
       sheet.setRowHeight(colRows[idx], 35);
       colRows[idx]++;
     });
+
+    colRows = colRows.map(r => r + 1);
+  }
+
+  // 4-B. 既存の特別注意（従来通り）
+  if (memos.length > 0) {
+    COL_START.forEach((cIdx, i) => {
+      sheet.getRange(colRows[i], cIdx, 1, 2)
+        .setBackground("#ffd9d9")
+        .setFontWeight("bold")
+        .setFontSize(11)
+        .setValue("▼ 特別注意");
+      colRows[i]++;
+    });
+
+    memos.forEach(m => {
+      let idx = colRows.indexOf(Math.min(...colRows));
+      sheet.getRange(colRows[idx], COL_START[idx], 1, 2)
+        .mergeAcross()
+        .setValue(m)
+        .setFontSize(10)
+        .setFontColor("#cc0000")
+        .setFontWeight("bold")
+        .setWrap(true);
+      sheet.setRowHeight(colRows[idx], 35);
+      colRows[idx]++;
+    });
+
     colRows = colRows.map(r => r + 1);
   }
 
@@ -191,4 +240,15 @@ function createProductionSheet() {
   [1, 4, 7].forEach(c => sheet.setColumnWidth(c, 210));
   [2, 5, 8].forEach(c => sheet.setColumnWidth(c, 45));
   sheet.activate();
+
+  // ProductionSheet.gs 末尾などに追加
+function writeSectionHeaderOnce_(sheet, row, title, bgColor) {
+  // A:H（1〜8列）を見出し行として1回だけ表示
+  sheet.getRange(row, 1, 1, 8)
+    .merge()
+    .setValue(title)
+    .setBackground(bgColor)
+    .setFontWeight("bold")
+    .setFontSize(11);
+}
 }
