@@ -121,7 +121,19 @@ function drawDynamicCard(sheet, startRow, col, card) {
 
   let r = startRow;
   sheet.getRange(startRow, col, height, 1).setBorder(true, true, true, true, null, null, "#444444", SpreadsheetApp.BorderStyle.SOLID);
-  sheet.getRange(r++, col).setValue("No: " + orderNo).setBackground("#eeeeee").setFontWeight("bold").setFontSize(10);
+  const status = rowData[CONFIG.COLUMN.STATUS - 1];
+  const srcNo = String(rowData[CONFIG.COLUMN.SOURCE_NO - 1] || "").replace(/'/g, "");
+
+  let noLine = "No: " + orderNo;
+  if (status === CONFIG.STATUS.NEEDS_CHECK) {
+    noLine += srcNo ? "  要確認(元No:" + srcNo + ")" : "  要確認";
+  }
+
+  sheet.getRange(r++, col)
+    .setValue(noLine)
+    .setBackground("#eeeeee")
+    .setFontWeight("bold")
+    .setFontSize(10);
   sheet.getRange(r++, col).setValue(name).setFontSize(11).setFontWeight("bold");
   sheet.getRange(r++, col).setValue(tel).setFontSize(8);
 

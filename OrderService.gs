@@ -3,11 +3,17 @@ const OrderService = {
     const sheet = SpreadsheetApp.getActive().getSheetByName(CONFIG.SHEET.ORDER_LIST);
     if (!sheet) return;
 
-    let oldNo = formData.oldReservationNo || "";
+    let oldNo = String(formData.oldReservationNo || "")
+      .replace(/'/g, "")
+      .trim();
 
     // 1. 旧予約の更新（検索と色付け）を先に実行
     if (isChange && oldNo) {
-      this.updateOldReservation(sheet, oldNo);
+      try {
+        this.updateOldReservation(sheet, oldNo);
+      } catch (err) {
+        console.warn("updateOldReservation failed:", String(err));
+      }
     }
 
     const groupText = Object.entries(formData.groupSummary || {})
@@ -30,8 +36,13 @@ const OrderService = {
     rowData[CONFIG.COLUMN.LINE_ID - 1] = formData.userId;
     rowData[CONFIG.COLUMN.DAILY_SUMMARY - 1] = ""; 
     rowData[CONFIG.COLUMN.REGULAR_FLG - 1] = formData.isRegular ? "常連" : "通常";
-    rowData[CONFIG.COLUMN.STATUS - 1] = isChange ? CONFIG.STATUS.CHANGE_AFTER : CONFIG.STATUS.NORMAL;
-    rowData[CONFIG.COLUMN.SOURCE_NO - 1] = oldNo ? "'" + oldNo : ""; // 元予約Noにも ' を付ける
+    
+    rowData[CONFIG.COLUMN.STATUS - 1] =
+    isChange
+      ? CONFIG.STATUS.CHANGE_AFTER
+      : (oldNo ? CONFIG.STATUS.NEEDS_CHECK : CONFIG.STATUS.NORMAL);
+
+    rowData[CONFIG.COLUMN.SOURCE_NO - 1] = oldNo ? "'" + oldNo : "";
 
     sheet.appendRow(rowData);
   },
@@ -74,23 +85,13 @@ const OrderService = {
 
 
 function markReservationAsChanged(orderNo) {
-  const sheet = SpreadsheetApp
-    .getActive()
-    .getSheetByName(CONFIG.SHEET.ORDER_LIST);
-  if (!sheet) return;
+  try {
+    const sheet = SpreadsheetApp.getActive().getSheetByName(CONFIG.SHEET.ORDER_LIST);
+    if (!sheet) return;
 
-  const data = sheet.getDataRange().getValues();
-
-  for (let i = 1; i < data.length; i++) {
-    const no = data[i][CONFIG.COLUMN.ORDER_NO - 1]
-      ?.toString()
-      .replace("'", "");
-
-    if (no === orderNo) {
-      sheet
-        .getRange(i + 1, CONFIG.COLUMN.STATUS)
-        .setValue(CONFIG.STATUS.CHANGE_BEFORE);
-      return;
-    }
+    // 既存呼び出し互換：旧予約更新（ステータス更新＋灰色化）に統一
+    OrderService.updateOldReservation(sheet, orderNo);
+  } catch (e) {
+    console.warn("markReservationAsChanged wrapper failed:", String(e));
   }
-};
+}

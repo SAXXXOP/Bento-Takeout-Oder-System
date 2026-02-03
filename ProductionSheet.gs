@@ -62,13 +62,23 @@ function createProductionSheet() {
   let memos = [];
 
   data.slice(1).forEach(row => {
-const status = row[CONFIG.COLUMN.STATUS - 1];
+  const status = row[CONFIG.COLUMN.STATUS - 1];
 
-// 集計対象は「通常」「変更後」のみ
-if (
-  status !== CONFIG.STATUS.NORMAL &&
-  status !== CONFIG.STATUS.CHANGE_AFTER
-) return;
+  // 集計対象は「通常」「変更後」「要確認」
+  if (
+    status !== CONFIG.STATUS.NORMAL &&
+    status !== CONFIG.STATUS.CHANGE_AFTER &&
+    status !== CONFIG.STATUS.NEEDS_CHECK
+  ) return;
+
+  // 要確認は注意欄にも必ず出す（場所は後で移動しやすいよう、ここで集約）
+  if (status === CONFIG.STATUS.NEEDS_CHECK) {
+    const no = String(row[CONFIG.COLUMN.ORDER_NO - 1] || "").replace(/'/g, "");
+    const name = row[CONFIG.COLUMN.NAME - 1] || "";
+    const srcNo = String(row[CONFIG.COLUMN.SOURCE_NO - 1] || "").replace(/'/g, "");
+    memos.push(`要確認 No.${no}（元No:${srcNo || "不明"}） ${name}様`);
+  }
+  
     const pickupDate = row[CONFIG.COLUMN.PICKUP_DATE - 1]?.toString().replace(/[^0-9]/g, "");
     if (!pickupDate || !pickupDate.includes(target)) return;
 

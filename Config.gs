@@ -60,10 +60,11 @@ const CONFIG = {
 
   // 5. ステータス文言
   STATUS: {
-    NORMAL: "通常",
-    CHANGE_BEFORE: "変更前",
-    CHANGE_AFTER: "変更後"
-  },
+  NORMAL: "通常",
+  CHANGE_BEFORE: "変更前",
+  CHANGE_AFTER: "変更後",
+  NEEDS_CHECK: "★要確認"
+},
 
   // 6. 「メニューマスタ」シートの列配置
   MENU_COLUMN: {

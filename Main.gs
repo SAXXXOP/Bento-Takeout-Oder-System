@@ -25,45 +25,27 @@ function onFormSubmit(e) {
 
     // Main.gs / onFormSubmit(e)
 
-    const oldNo = String(formData.oldReservationNo || "")
-      .replace(/'/g, "")
-      .trim();
+// Main.gs / onFormSubmit(e) 2. 予約変更チェック（propsレス）
 
-    let isChange = !!oldNo;
+const oldNo = String(formData.oldReservationNo || "")
+  .replace(/'/g, "")
+  .trim();
 
-    if (isChange) {
-      const pickupDateOnly = getPickupDateOnlyByOrderNo(oldNo);
+let isChange = !!oldNo;
 
-      if (!pickupDateOnly) {
-        isChange = false;
-        console.warn("change requested but old order not found or date missing:", oldNo);
-      } else if (!isWithinChangeDeadline(pickupDateOnly, new Date())) {
-        isChange = false;
-        console.warn("change requested after deadline:", { oldNo: oldNo, pickupDate: String(pickupDateOnly) });
-      }
-    }
+if (isChange) {
+  const pickupDateOnly = getPickupDateOnlyByOrderNo(oldNo);
 
-    if (isChange) {
-      formData.oldReservationNo = oldNo;
-      try {
-        markReservationAsChanged(oldNo);
-      } catch (err) {
-        console.warn("markReservationAsChanged failed:", String(err));
-      }
-    } else {
-      formData.oldReservationNo = "";
-    }
+  if (!pickupDateOnly) {
+    isChange = false;
+    console.warn("change requested but old order not found or date missing:", oldNo);
+  } else if (!isWithinChangeDeadline(pickupDateOnly, new Date())) {
+    isChange = false;
+    console.warn("change requested after deadline:", { oldNo: oldNo, pickupDate: String(pickupDateOnly) });
+  }
+}
 
-    if (isChange && oldNo) {
-      formData.oldReservationNo = oldNo;
-      try {
-        markReservationAsChanged(oldNo);
-      } catch (err) {
-        console.warn("markReservationAsChanged failed:", String(err));
-      }
-    } else {
-      formData.oldReservationNo = ""; // 念のため
-    }
+formData.oldReservationNo = oldNo || "";
 
     /* =========================
        3. 予約番号生成
@@ -123,39 +105,6 @@ function onFormSubmit(e) {
       }
     }
   }
-}
-
-function getPickupDateOnlyByOrderNo(orderNo) {
-  if (!orderNo) return null;
-
-  const sheet = SpreadsheetApp.getActive().getSheetByName(CONFIG.SHEET.ORDER_LIST);
-  if (!sheet) return null;
-
-  const lastRow = sheet.getLastRow();
-  if (lastRow < 2) return null;
-
-  const colNo = CONFIG.COLUMN.ORDER_NO;
-  const colPickupE = CONFIG.COLUMN.PICKUP_DATE;
-  const colPickupO = CONFIG.COLUMN.PICKUP_DATE_RAW;
-
-  const values = sheet.getRange(2, 1, lastRow - 1, Math.max(colNo, colPickupE, colPickupO)).getValues();
-
-  const targetNo = String(orderNo).replace(/'/g, "");
-
-  for (let i = 0; i < values.length; i++) {
-    const row = values[i];
-    const no = String(row[colNo - 1] || "").replace(/'/g, "");
-    if (no !== targetNo) continue;
-
-    const o = row[colPickupO - 1];
-    const e = row[colPickupE - 1];
-
-    let d = parsePickupDate(o);
-    if (!d) d = parsePickupDate(e);
-    return d || null;
-  }
-
-  return null;
 }
 
 function getPickupDateOnlyByOrderNo(orderNo) {
