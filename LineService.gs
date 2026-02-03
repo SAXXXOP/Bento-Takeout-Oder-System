@@ -13,7 +13,7 @@ const LineService = (() => {
       : "【ご予約ありがとうございます】";
 
     const text = buildMessage(title, reservationNo, formData);
-    push(formData.userId, text);
+    pushText(formData.userId, text);
   }
 
   function buildMessage(title, reservationNo, d) {
