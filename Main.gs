@@ -15,27 +15,32 @@ function onFormSubmit(e) {
     const props = PropertiesService.getUserProperties();
 
     /* =========================
-       2. 予約変更チェック（★司令塔）
-       ========================= */
-    const targetKey = `CHANGE_TARGET_${userId}`;
-    const targetJson = props.getProperty(targetKey);
+   2. 予約変更チェック（★司令塔）
+   - フォームの oldReservationNo を最優先
+   - 予備で CHANGE_TARGET も拾う
+   ========================= */
 
-    let isChange = false;
-    let changeTarget = null;
+    // ① フォームから来た「元予約No」があれば、それだけで変更扱い
+    let oldNo = (formData.oldReservationNo || "").toString().replace(/'/g, "").trim();
+    let isChange = !!oldNo;
 
-    if (targetJson) {
-      // ▼ 変更予約と確定
-      changeTarget = JSON.parse(targetJson);
-      isChange = true;
+    // ② 保険：もしフォームに無くても、LINE側の CHANGE_TARGET が残ってたら拾う
+    if (!isChange) {
+      const targetKey = `CHANGE_TARGET_${userId}`;
+      const targetJson = props.getProperty(targetKey);
 
-      // 旧予約を「変更前」に更新
-      markReservationAsChanged(changeTarget.no);
+      if (targetJson) {
+        const changeTarget = JSON.parse(targetJson);
+        oldNo = (changeTarget.no || "").toString().replace(/'/g, "").trim();
+        isChange = !!oldNo;
+        props.deleteProperty(targetKey);
+      }
+    }
 
-      // 新規行に「元予約No」を明示的に渡す
-      formData.oldReservationNo = changeTarget.no;
-
-      // 一時データは必ず削除
-      props.deleteProperty(targetKey);
+    // ③ 変更なら「旧予約」を変更前にする（2重でもOK）
+    if (isChange && oldNo) {
+      formData.oldReservationNo = oldNo;
+      markReservationAsChanged(oldNo);
     }
 
     /* =========================

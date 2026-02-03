@@ -19,88 +19,61 @@ function doPost(e) {
       const postData = event.postback.data || "";
 
       if (postData.startsWith("change_confirm:")) {
-        const index = Number(postData.split(":")[1]);
-        
-        const listJson = props.getProperty(`CHANGE_LIST_${userId}`);
-        if (!listJson) {
-          replyText(replyToken, "変更情報の有効期限が切れました。最初からやり直してください。");
-          return;
-        }
+ 
+  const index = Number(postData.split(":")[1]);
 
-        const list = JSON.parse(listJson);
-        const target = list[index];
+  const listJson = props.getProperty(`CHANGE_LIST_${userId}`);
+  if (!listJson) {
+    replyText(replyToken, "期限切れです。もう一度「予約を変更する」からお願いします。");
+    return;
+  }
 
-        if (!target) {
-          replyText(replyToken, "対象の予約が見つかりませんでした。");
-          return;
-        }
+  const list = JSON.parse(listJson);
+  const target = list[index];
+  if (!target) {
+    replyText(replyToken, "対象が見つかりませんでした。");
+    return;
+  }
 
-        // ★ 元予約No（念のため ' を除去）
-        const oldNo = String(target.no || "").replace(/'/g, "");
+  // ★ ここから「最終形 1」
+  const baseUrl =
+    "https://docs.google.com/forms/d/e/1FAIpQLSc-WHjrgsi9nl8N_NcJaqvRWIX-TJHrWQICc6-i08NfxYRflQ/viewform?usp=header";
 
-        // ★ 事前入力付きフォームURLを生成
-        const prefilledUrl = buildPrefilledFormUrl(
-          CONFIG.FORM.FORM_URL, // 元のフォームURL
-          userId,               // LINE_ID
-          oldNo                 // 元予約番号
-        );
+  const oldNo = String(target.no || "").replace(/'/g, "");
 
-        // ★ここが修正点：itemsShort を使う（getChangeableReservations側と一致させる）
-        const shortItems = target.itemsShort || "（内容不明）";
+  const prefilledUrl = buildPrefilledFormUrl(baseUrl, userId, oldNo);
 
-        const confirmFlex = {
-          type: "flex",
-          altText: "予約変更の準備完了",
-          contents: {
-            type: "bubble",
-            body: {
-              type: "box",
-              layout: "vertical",
-              spacing: "md",
-              contents: [
-                { type: "text", text: "予約変更の準備完了", weight: "bold", size: "md", color: "#2E7D32" },
-                {
-                  type: "box",
-                  layout: "vertical",
-                  backgroundColor: "#F0F0F0",
-                  paddingAll: "10px",
-                  cornerRadius: "md",
-                  contents: [
-                    { type: "text", text: `対象No: ${target.no || "不明"}`, size: "sm", weight: "bold" },
-                    { type: "text", text: `内容: ${shortItems}`, size: "xs", color: "#666666", wrap: true }
-                  ]
-                },
-                { type: "text", text: "※新しい内容で「再予約」をお願いします。", size: "xs", color: "#cc0000", weight: "bold", wrap: true },
-                { type: "text", text: "送信後、古い予約（上記No）は当店にて取消処理を行います。", size: "xs", color: "#888888", wrap: true }
-              ]
-            },
-            footer: {
-              type: "box",
-              layout: "vertical",
-              contents: [
-                {
-                  type: "button",
-                  style: "primary",
-                  color: "#1DB446",
-                  height: "sm",
-                  action: {
-                  type: "uri",
-                  label: "予約フォームを開く",
-                  uri: prefilledUrl
-                }
-                }
-              ]
-            }
+  const confirmFlex = {
+    type: "flex",
+    altText: "予約変更の準備完了",
+    contents: {
+      type: "bubble",
+      body: {
+        type: "box",
+        layout: "vertical",
+        contents: [{ type: "text", text: "予約変更の準備完了" }]
+      },
+      footer: {
+        type: "box",
+        layout: "vertical",
+        contents: [
+          {
+            type: "button",
+            style: "primary",
+            action: { type: "uri", label: "フォーム", uri: prefilledUrl } // ★ここが「最終形 2」
           }
-        };
-
-        // 変更対象のデータを一時保持
-        props.setProperty(`CHANGE_TARGET_${userId}`, JSON.stringify(target));
-        props.deleteProperty(`CHANGE_LIST_${userId}`);
-
-        replyFlex(replyToken, confirmFlex);
-        return;
+        ]
       }
+    }
+  };
+
+  // 必要ならここで保存
+  props.setProperty(`CHANGE_TARGET_${userId}`, JSON.stringify(target));
+  props.deleteProperty(`CHANGE_LIST_${userId}`);
+
+  replyFlex(replyToken, confirmFlex);
+  return;
+}
 
       // 他のpostbackは無視
       return;
