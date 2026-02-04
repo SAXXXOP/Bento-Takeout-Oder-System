@@ -69,12 +69,12 @@ const OrderService = {
       if (currentNo === targetNo) {
         const rowNum = i + 1;
         
-        // M列（ステータス）を「変更前」に更新
-        sheet.getRange(rowNum, CONFIG.COLUMN.STATUS).setValue(CONFIG.STATUS.CHANGE_BEFORE);
-        
-        // A列(1)からN列(14)までを灰色(#E0E0E0)にする
-        // ※列が増えても大丈夫なように CONFIG.COLUMN.SOURCE_NO を使用
-        sheet.getRange(rowNum, 1, 1, CONFIG.COLUMN.SOURCE_NO).setBackground("#E0E0E0");
+        // ★旧予約を無効化（B案運用）
+      sheet.getRange(rowNum, CONFIG.COLUMN.STATUS).setValue(CONFIG.STATUS.INVALID);
+      sheet.getRange(rowNum, CONFIG.COLUMN.REASON).setValue("予約変更により無効（再予約あり）");
+
+      // 灰色化はそのまま（列が増えたので PICKUP_DATE_RAW まで塗る）
+      sheet.getRange(rowNum, 1, 1, CONFIG.COLUMN.PICKUP_DATE_RAW).setBackground("#E0E0E0");
         
         console.log("マッチしました！行番号: " + rowNum);
         break; // 見つかったらループを抜ける
@@ -82,7 +82,6 @@ const OrderService = {
     }
   }
 }
-
 
 function markReservationAsChanged(orderNo) {
   try {
@@ -94,4 +93,9 @@ function markReservationAsChanged(orderNo) {
   } catch (e) {
     console.warn("markReservationAsChanged wrapper failed:", String(e));
   }
+}
+
+function setStatusAndReason_(sheet, rowNum, status, reason) {
+  sheet.getRange(rowNum, CONFIG.COLUMN.STATUS).setValue(status);
+  sheet.getRange(rowNum, CONFIG.COLUMN.REASON).setValue(reason || "");
 }

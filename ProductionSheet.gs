@@ -62,13 +62,20 @@ function createProductionSheet() {
   let memos = [];
 
   data.slice(1).forEach(row => {
-const status = row[CONFIG.COLUMN.STATUS - 1];
+  const status = String(row[CONFIG.COLUMN.STATUS - 1] || "");
 
-// 集計対象は「通常」「変更後」のみ
-if (
-  status !== CONFIG.STATUS.NORMAL &&
-  status !== CONFIG.STATUS.CHANGE_AFTER
-) return;
+  // 集計対象：有効（空欄）のみ
+  // 旧データ互換を一時的に見るなら OR を残す
+  const isActive =
+    status === CONFIG.STATUS.ACTIVE ||
+    status === CONFIG.STATUS.LEGACY_NORMAL ||
+    status === CONFIG.STATUS.LEGACY_CHANGE_AFTER ||
+    status === "" ||
+    status === "通常" ||
+    status === "変更後";
+
+  if (!isActive) return;
+
     const pickupDate = row[CONFIG.COLUMN.PICKUP_DATE - 1]?.toString().replace(/[^0-9]/g, "");
     if (!pickupDate || !pickupDate.includes(target)) return;
 

@@ -496,7 +496,8 @@ function getChangeableReservations(userId, options) {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
 
-  const maxColNeeded = CONFIG.COLUMN.PICKUP_DATE_RAW; // O列まで
+  // 最終列は「内部用日付列」まで読む（理由列追加で P になる想定）
+  const maxColNeeded = CONFIG.COLUMN.PICKUP_DATE_RAW;
   const data = sheet.getRange(1, 1, lastRow, maxColNeeded).getValues();
 
   const today = new Date();
@@ -520,7 +521,19 @@ function getChangeableReservations(userId, options) {
     if (String(row[COL_LINE_ID] || "") !== String(userId || "")) continue;
 
     const status = String(row[COL_STATUS] || "");
-    if (["変更済", "キャンセル", CONFIG.STATUS.CHANGE_BEFORE].includes(status)) continue;
+
+    // B案：候補に出さない（無効・要確認）
+    const NG = [
+      CONFIG.STATUS.INVALID,
+      CONFIG.STATUS.NEEDS_CHECK,
+
+      // 旧データ互換も除外するなら
+      CONFIG.STATUS.LEGACY_CHANGE_BEFORE,
+      CONFIG.STATUS.LEGACY_CHANGED,
+      "変更前", "変更済", "キャンセル"
+    ];
+
+    if (NG.includes(status)) continue;
 
     const pickupDateStrRaw = row[COL_PICKUP_DATE];      // E
     const pickupDateRawCell = row[COL_PICKUP_DATE_RAW]; // O

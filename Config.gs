@@ -29,17 +29,18 @@ const CONFIG = {
     ORDER_NO: 2,       // B
     TEL: 3,            // C
     NAME: 4,           // D
-    PICKUP_DATE: 5,    // E 2/14(土) / 6:30~7:30 表示用／人間向け
+    PICKUP_DATE: 5,    // E 表示用
     NOTE: 6,           // F
     DETAILS: 7,        // G
     TOTAL_COUNT: 8,    // H
     TOTAL_PRICE: 9,    // I
     LINE_ID: 10,       // J
-    DAILY_SUMMARY: 11, // K: 当日まとめ用
-    REGULAR_FLG: 12,   // L: 常連フラグ
-    STATUS: 13,        // M: ステータス（通常/変更前/変更後）
-    SOURCE_NO: 14,      // N: 変更元予約No
-    PICKUP_DATE_RAW: 15 // O ★Date型 2026/02/14（内部用）
+    DAILY_SUMMARY: 11, // K
+    REGULAR_FLG: 12,   // L
+    STATUS: 13,        // M ★ステータス（B案運用）
+    REASON: 14,        // N ★理由（B案で追加）
+    SOURCE_NO: 15,     // O: 変更元予約No
+    PICKUP_DATE_RAW: 16 // P: Date型（内部用）
   },
 
   // 4. 「顧客名簿」シートの列配置
@@ -58,13 +59,19 @@ const CONFIG = {
     HISTORY_3: 12      // L
   },
 
-  // 5. ステータス文言
-  STATUS: {
-  NORMAL: "通常",
-  CHANGE_BEFORE: "キャンセル",
-  CHANGE_AFTER: "変更後",
-  NEEDS_CHECK: "要確認",
-  CHANGED: "変更済"
+// 5. ステータス文言（B案運用）
+STATUS: {
+  // === 運用（これだけ見ればOK）===
+  ACTIVE: "",              // 有効（作る・集計する）
+  INVALID: "無効",         // 無効（作らない・除外）
+  NEEDS_CHECK: "★要確認", // 要確認（止めて確認）
+
+  // === 旧データ互換（過去行に残っていても壊さない）===
+  LEGACY_NORMAL: "通常",
+  LEGACY_CHANGE_BEFORE: "変更前",
+  LEGACY_CHANGE_AFTER: "変更後",
+  LEGACY_CHANGED: "変更済",
+  LEGACY_CANCEL: "キャンセル"
 },
 
   // 6. 「メニューマスタ」シートの列配置
