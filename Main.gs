@@ -45,12 +45,43 @@ function onFormSubmit(e) {
 
     formData.oldReservationNo = oldNo || "";
 
+    // ★追加：データ不整合チェック（要確認理由を集約）
+    const needsCheckReasons = [];
+
+    // pickupDateRaw が Date でない（内部用日付が壊れてる）
+    if (!(formData.pickupDateRaw instanceof Date) || isNaN(formData.pickupDateRaw.getTime())) {
+      needsCheckReasons.push("受け取り日が取得できません");
+    }
+
+    // 注文内容が空
+    if (!formData.orderDetails || !String(formData.orderDetails).trim()) {
+      needsCheckReasons.push("注文内容が空です");
+    }
+
+    // 合計が不正
+    const items = Number(formData.totalItems);
+    const price = Number(formData.totalPrice);
+    if (!isFinite(items) || items <= 0) needsCheckReasons.push("総数が不正です");
+    if (!isFinite(price) || price < 0) needsCheckReasons.push("合計金額が不正です");
+
+    // LINE_ID が無い（通知できない）
+    if (!formData.userId || !String(formData.userId).trim()) {
+      needsCheckReasons.push("LINE_IDが取得できません");
+    }
+
+    // 電話番号が空（必須運用なら）
+    if (!formData.phoneNumber || !String(formData.phoneNumber).trim()) {
+      needsCheckReasons.push("電話番号が未入力です");
+    }
+
     // ★ここで meta を確定（この1個だけを後段に渡す）
     const changeMeta = {
       isChange,
       changeRequested,
       oldNo,
-      changeFailReason
+      changeFailReason,
+      // 追加：データ不整合系の要確認理由
+      needsCheckReason: needsCheckReasons.join(" / ")
     };
 
     /* =========================

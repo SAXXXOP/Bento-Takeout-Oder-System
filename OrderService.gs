@@ -4,7 +4,8 @@ function normalizeChangeMeta_(metaOrBool, oldNo) {
       isChange: !!metaOrBool.isChange,
       changeRequested: !!metaOrBool.changeRequested || !!oldNo,
       oldNo: String(metaOrBool.oldNo || oldNo || "").replace(/'/g, "").trim(),
-      changeFailReason: String(metaOrBool.changeFailReason || "")
+      changeFailReason: String(metaOrBool.changeFailReason || ""),
+      needsCheckReason: String(metaOrBool.needsCheckReason || "")
     };
   }
   return {
