@@ -1,4 +1,4 @@
-/**
+/**const status = String
  * 当日まとめシート作成
  * 修正点：見出し用ID(10,15,21,46等)の重複排除 / ID順 / ビンパッキング
  */
@@ -63,17 +63,7 @@ function createProductionSheet() {
 
   data.slice(1).forEach(row => {
   const status = String(row[CONFIG.COLUMN.STATUS - 1] || "");
-
-  // 集計対象：有効（空欄）のみ
-  // 旧データ互換を一時的に見るなら OR を残す
-  const isActive =
-    status === CONFIG.STATUS.ACTIVE ||
-    status === CONFIG.STATUS.LEGACY_NORMAL ||
-    status === CONFIG.STATUS.LEGACY_CHANGE_AFTER ||
-    status === "" ||
-    status === "通常" ||
-    status === "変更後";
-
+  const isActive = (status === CONFIG.STATUS.ACTIVE); // ACTIVEは空文字
   if (!isActive) return;
 
     const pickupDate = row[CONFIG.COLUMN.PICKUP_DATE - 1]?.toString().replace(/[^0-9]/g, "");

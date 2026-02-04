@@ -25,18 +25,9 @@ function createDailyReservationCards() {
   
   let cardsToPrint = [];
   allData.slice(1).forEach(row => {
-    const status = String(row[CONFIG.COLUMN.STATUS - 1] || "");
-
-    // 札に出すのは「有効（空欄）」のみ（互換を残すならOR）
-    const isActive =
-      status === CONFIG.STATUS.ACTIVE ||
-      status === CONFIG.STATUS.LEGACY_NORMAL ||
-      status === CONFIG.STATUS.LEGACY_CHANGE_AFTER ||
-      status === "" ||
-      status === "通常" ||
-      status === "変更後";
-
-    if (!isActive) return;
+  const status = String(row[CONFIG.COLUMN.STATUS - 1] || "");
+  const isActive = (status === CONFIG.STATUS.ACTIVE); // ACTIVEは空文字
+  if (!isActive) return;
     const dateVal = row[CONFIG.COLUMN.PICKUP_DATE - 1];
     if (isActive && dateVal && dateVal.toString().replace(/[^0-9]/g, "").includes(targetDateRaw)) {
       

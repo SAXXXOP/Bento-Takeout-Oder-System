@@ -37,11 +37,15 @@ const OrderService = {
     rowData[CONFIG.COLUMN.DAILY_SUMMARY - 1] = ""; 
     rowData[CONFIG.COLUMN.REGULAR_FLG - 1] = formData.isRegular ? "常連" : "通常";
     
+    // B案：新規行は「有効＝空欄」が基本
     rowData[CONFIG.COLUMN.STATUS - 1] =
-    isChange
-      ? CONFIG.STATUS.CHANGE_AFTER
-      : (oldNo ? CONFIG.STATUS.NEEDS_CHECK : CONFIG.STATUS.NORMAL);
+      (oldNo && !isChange) ? CONFIG.STATUS.NEEDS_CHECK : CONFIG.STATUS.ACTIVE;
 
+    // 理由列：要確認のときだけ埋める（空欄運用）
+    rowData[CONFIG.COLUMN.REASON - 1] =
+      (oldNo && !isChange) ? "元予約Noあり（変更フロー未完了/期限切れ等）" : "";
+
+    // 変更元予約No（旧No）
     rowData[CONFIG.COLUMN.SOURCE_NO - 1] = oldNo ? "'" + oldNo : "";
 
     sheet.appendRow(rowData);
