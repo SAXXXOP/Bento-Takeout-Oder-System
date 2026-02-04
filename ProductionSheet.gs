@@ -109,20 +109,31 @@ if (
   // --- 3. シート初期化 ---
   sheet.clear().clearFormats();
   sheet.getRange("A1").setValue(`【 ${res.getResponseText()} 当日まとめ 】`).setFontSize(14).setFontWeight("bold");
-  sheet.getRange("A2").setValue(`総数: ${totalAll}`).setFontSize(22).setFontWeight("bold").setFontColor("#cc0000");
+  sheet.getRange("A2").setValue(`@ ${totalAll}`).setFontSize(22).setFontWeight("bold").setFontColor("#000000");
 
   let colRows = [4, 4, 4]; 
   const COL_START = [1, 4, 7];
 
   // --- 4. 備考エリア ---
   if (memos.length > 0) {
-    COL_START.forEach((cIdx, i) => {
-      sheet.getRange(colRows[i], cIdx, 1, 2).setBackground("#ffd9d9").setFontWeight("bold").setFontSize(11).setValue("▼ 特別注意");
-      colRows[i]++;
-    });
+    // ▼ 特別注意 は 1回だけ（A列側）
+  // 文字：A4 だけ / 枠：A4:B4
+  const memoHeaderRow = Math.min(...colRows); // 通常は 4
+
+  // 枠（A4:B4）
+  sheet.getRange(memoHeaderRow, COL_START[0], 1, 2)
+    .setBorder(true, true, true, true, false, false, "#000000", SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
+
+  // 文字（A4のみ）
+  sheet.getRange(memoHeaderRow, COL_START[0])
+    .setFontWeight("bold").setFontSize(11)
+    .setValue("▼ 特別注意");
+
+  // 3列すべて、本文開始行を1行下げる
+  colRows = colRows.map(r => r + 1);
     memos.forEach(m => {
       let idx = colRows.indexOf(Math.min(...colRows));
-      sheet.getRange(colRows[idx], COL_START[idx], 1, 2).mergeAcross().setValue(m).setFontSize(10).setFontColor("#cc0000").setFontWeight("bold").setWrap(true);
+      sheet.getRange(colRows[idx], COL_START[idx], 1, 2).mergeAcross().setValue(m).setFontSize(10).setFontColor("#000000").setFontWeight("bold").setWrap(true);
       sheet.setRowHeight(colRows[idx], 35);
       colRows[idx]++;
     });
@@ -142,43 +153,75 @@ if (
   }).sort((a, b) => b.height - a.height);
 
   // --- 6. 描画 ---
-  sortedGroups.forEach(item => {
-    const g = item.name;
-    let idx = colRows.indexOf(Math.min(...colRows));
-    let tCol = COL_START[idx];
-    let tRow = colRows[idx];
+sortedGroups.forEach(item => {
+  const g = item.name;
+  let idx = colRows.indexOf(Math.min(...colRows));
+  let tCol = COL_START[idx];
+  let tRow = colRows[idx];
 
-    sheet.getRange(tRow, tCol, 1, 2).setBackground("#444444").setFontColor("#ffffff").setFontWeight("bold").setFontSize(12);
-    sheet.getRange(tRow, tCol).setValue(g);
-    sheet.getRange(tRow, tCol+1).setValue(groupCounts[g]).setHorizontalAlignment("center");
+  const groupStartRow = tRow;
+
+  sheet.getRange(tRow, tCol, 1, 2).setFontWeight("bold").setFontSize(12);
+  sheet.getRange(tRow, tCol).setValue(g);
+  sheet.getRange(tRow, tCol+1).setValue(groupCounts[g]).setHorizontalAlignment("center");
+    
+  tRow++;
+
+  const sortedParents = Object.keys(detailTree[g]).sort((a, b) => (itemOrder[a] || 999) - (itemOrder[b] || 999));
+
+  if (sortedParents.length === 1) {
+  // グループ全体枠＋見出し枠（二重）を「この時点で」確定させるなら、ここで引いて終わる
+  const groupEndRow = tRow - 1; // 見出し行を書いた直後なので、ここは見出し行
+  applyGroupOuterBorder_(sheet, groupStartRow, groupEndRow, tCol, tCol + 1);
+  applyGroupOuterBorder_(sheet, groupStartRow, groupStartRow, tCol, tCol + 1);
+
+  colRows[idx] = tRow + 1;
+  return; // ← このグループの描画をここで終える（親・子を出さない）
+}
+
+  sortedParents.forEach(p => {
+    const children = detailTree[g][p];
+    const pCount = Object.values(children).reduce((a, b) => a + b, 0);
+    
+    sheet.getRange(tRow, tCol, 1, 2).setFontWeight("bold").setFontSize(12);
+    sheet.getRange(tRow, tCol).setValue(" " + (displayNameMap[p] || p)).setFontLine("underline");
+    sheet.getRange(tRow, tCol + 1).setValue(pCount).setHorizontalAlignment("center");
     tRow++;
 
-    const sortedParents = Object.keys(detailTree[g]).sort((a, b) => (itemOrder[a] || 999) - (itemOrder[b] || 999));
+    const sortedChildren = Object.entries(children).sort((a, b) => (itemOrder[a[0]] || 999) - (itemOrder[b[0]] || 999));
 
-    sortedParents.forEach(p => {
-      const children = detailTree[g][p];
-      const pCount = Object.values(children).reduce((a, b) => a + b, 0);
+    sortedChildren.forEach(([c, count]) => {
+      // 見出し行（自分自身）は内訳として表示しない
+      if (c === p || displayNameMap[c] === displayNameMap[p]) return;
       
-      sheet.getRange(tRow, tCol, 1, 2).setBackground("#eeeeee").setFontWeight("bold").setFontSize(12);
-      sheet.getRange(tRow, tCol).setValue(" " + (displayNameMap[p] || p));
-      sheet.getRange(tRow, tCol + 1).setValue(pCount).setHorizontalAlignment("center");
+      sheet.getRange(tRow, tCol).setValue("   " + (displayNameMap[c] || c)).setFontSize(12);
+      sheet.getRange(tRow, tCol + 1).setValue(count).setFontSize(12).setFontWeight("bold").setHorizontalAlignment("center");
       tRow++;
-
-      const sortedChildren = Object.entries(children).sort((a, b) => (itemOrder[a[0]] || 999) - (itemOrder[b[0]] || 999));
-
-      sortedChildren.forEach(([c, count]) => {
-        // 見出し行（自分自身）は内訳として表示しない
-        if (c === p || displayNameMap[c] === displayNameMap[p]) return;
-        
-        sheet.getRange(tRow, tCol).setValue("    └ " + (displayNameMap[c] || c)).setFontSize(12);
-        sheet.getRange(tRow, tCol + 1).setValue(count).setFontSize(12).setFontWeight("bold").setHorizontalAlignment("center");
-        tRow++;
-      });
     });
-    colRows[idx] = tRow + 1;
   });
+
+  const groupEndRow = tRow - 1;
+
+  applyGroupOuterBorder_(sheet, groupStartRow, groupEndRow, tCol, tCol + 1);
+  applyGroupOuterBorder_(sheet, groupStartRow, groupStartRow, tCol, tCol + 1);
+
+  colRows[idx] = tRow + 1;
+});
+
 
   [1, 4, 7].forEach(c => sheet.setColumnWidth(c, 210));
   [2, 5, 8].forEach(c => sheet.setColumnWidth(c, 45));
   sheet.activate();
+}
+
+/**
+ * グループ範囲に四方罫線（外枠のみ）を引く
+ */
+function applyGroupOuterBorder_(sheet, rowStart, rowEnd, colStart, colEnd) {
+  if (!sheet) return;
+  if (rowEnd < rowStart) return;
+
+  sheet.getRange(rowStart, colStart, rowEnd - rowStart + 1, colEnd - colStart + 1)
+    // top, left, bottom, right, vertical, horizontal
+    .setBorder(true, true, true, true, false, false, "#000000", SpreadsheetApp.BorderStyle.SOLID);
 }

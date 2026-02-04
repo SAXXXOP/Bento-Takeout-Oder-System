@@ -7,11 +7,11 @@ const CONFIG = {
     NAME_FULL: "氏名",
     NAME_SHORT: "氏名（簡易）",
     PHONE: "電話番号",
-    PICKUP_DATE: "受け取り希望日",
+    PICKUP_DATE: "受け取り希望日",//プルダウン、日付は営業日のみ(前日20時締切適用)GASで自動作成、
     PICKUP_TIME: "受取り希望時刻",//※現在は未使用
     OLD_RESERVATION_NO: "元予約No",
     LINE_ID: "LINE_ID(自動入力)",
-    NOTE: "抜き物、アレルギーなど" 
+    NOTE: "抜き物、アレルギーなど" //質問形式チェックボックス
   },
 
   // 2. スプレッドシート名
