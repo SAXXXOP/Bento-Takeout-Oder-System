@@ -1,105 +1,97 @@
+function normalizeChangeMeta_(metaOrBool, oldNo) {
+  if (metaOrBool && typeof metaOrBool === "object") {
+    return {
+      isChange: !!metaOrBool.isChange,
+      changeRequested: !!metaOrBool.changeRequested || !!oldNo,
+      oldNo: String(metaOrBool.oldNo || oldNo || "").replace(/'/g, "").trim(),
+      changeFailReason: String(metaOrBool.changeFailReason || "")
+    };
+  }
+  return {
+    isChange: !!metaOrBool,
+    changeRequested: !!oldNo,
+    oldNo: String(oldNo || "").replace(/'/g, "").trim(),
+    changeFailReason: ""
+  };
+}
+
 const OrderService = {
-  saveOrder(reservationNo, formData, isChange) {
+  saveOrder(reservationNo, formData, metaOrBool) {
     const sheet = SpreadsheetApp.getActive().getSheetByName(CONFIG.SHEET.ORDER_LIST);
     if (!sheet) return;
 
-    let oldNo = String(formData.oldReservationNo || "")
-      .replace(/'/g, "")
-      .trim();
+    const oldNoRaw = String(formData.oldReservationNo || "").replace(/'/g, "").trim();
+    const meta = normalizeChangeMeta_(metaOrBool, oldNoRaw);
 
-    // 1. 旧予約の更新（検索と色付け）を先に実行
-    if (isChange && oldNo) {
+    // 1) 旧予約は「変更が成立した時だけ」無効化
+    if (meta.isChange && meta.oldNo) {
       try {
-        this.updateOldReservation(sheet, oldNo);
+        this.updateOldReservation(sheet, meta.oldNo, reservationNo);
       } catch (err) {
         console.warn("updateOldReservation failed:", String(err));
       }
     }
 
-    const groupText = Object.entries(formData.groupSummary || {})
-      .map(([g, c]) => `${g}:${c}`).join("\n");
-
-    // 2. 新規行のデータ作成（Configの列番号を使用）
+    // 2) 新規行データ
     const rowData = [];
     rowData[CONFIG.COLUMN.TIMESTAMP - 1] = new Date();
-    rowData[CONFIG.COLUMN.ORDER_NO - 1] = "'" + reservationNo; // 新規番号にも ' を付ける
+    rowData[CONFIG.COLUMN.ORDER_NO - 1] = "'" + reservationNo;
     rowData[CONFIG.COLUMN.TEL - 1] = formData.phoneNumber;
     rowData[CONFIG.COLUMN.NAME - 1] = formData.userName;
-    // 表示用（既存）
     rowData[CONFIG.COLUMN.PICKUP_DATE - 1] = formData.pickupDate;
-    // ★ 内部判定用（Date型）
     rowData[CONFIG.COLUMN.PICKUP_DATE_RAW - 1] = formData.pickupDateRaw;
     rowData[CONFIG.COLUMN.NOTE - 1] = formData.note;
     rowData[CONFIG.COLUMN.DETAILS - 1] = formData.orderDetails;
     rowData[CONFIG.COLUMN.TOTAL_COUNT - 1] = formData.totalItems;
     rowData[CONFIG.COLUMN.TOTAL_PRICE - 1] = formData.totalPrice;
     rowData[CONFIG.COLUMN.LINE_ID - 1] = formData.userId;
-    rowData[CONFIG.COLUMN.DAILY_SUMMARY - 1] = ""; 
-    rowData[CONFIG.COLUMN.REGULAR_FLG - 1] = formData.isRegular ? "常連" : "通常";
-    
-    // B案：新規行は「有効＝空欄」が基本
+    rowData[CONFIG.COLUMN.DAILY_SUMMARY - 1] = "";
+    rowData[CONFIG.COLUMN.REGULAR_FLG - 1] = formData.isRegular ? "常連" : "";
+
+    // ★B案：新規行は基本「有効＝空欄」
     rowData[CONFIG.COLUMN.STATUS - 1] =
-      (oldNo && !isChange) ? CONFIG.STATUS.NEEDS_CHECK : CONFIG.STATUS.ACTIVE;
+      (meta.changeRequested && !meta.isChange) ? CONFIG.STATUS.NEEDS_CHECK : CONFIG.STATUS.ACTIVE;
 
-    // 理由列：要確認のときだけ埋める（空欄運用）
+    // ★理由列：要確認のときだけ入れる（運用しやすい）
     rowData[CONFIG.COLUMN.REASON - 1] =
-      (oldNo && !isChange) ? "元予約Noあり（変更フロー未完了/期限切れ等）" : "";
+      (meta.changeRequested && !meta.isChange)
+        ? ("予約変更希望だが新規扱い：" + (meta.changeFailReason || "要確認"))
+        : "";
 
-    // 変更元予約No（旧No）
-    rowData[CONFIG.COLUMN.SOURCE_NO - 1] = oldNo ? "'" + oldNo : "";
+    // ★変更元予約No（oldNoは「入ってたら」保持しておく）
+    rowData[CONFIG.COLUMN.SOURCE_NO - 1] = meta.oldNo ? "'" + meta.oldNo : "";
 
     sheet.appendRow(rowData);
   },
 
-  /**
-   * 旧予約を探して「変更前」に更新し、行を灰色にする
-   */
-  updateOldReservation(sheet, oldNo) {
-    // 比較前に、検索キーワードから全ての ' を取り除く
-    const targetNo = oldNo.toString().replace(/'/g, "").trim();
+  updateOldReservation(sheet, oldNo, newNo) {
+    const targetNo = String(oldNo || "").replace(/'/g, "").trim();
     if (!targetNo) return;
 
     const lastRow = sheet.getLastRow();
     if (lastRow < 2) return;
 
-    // B列（予約番号）の範囲を特定して取得
     const range = sheet.getRange(1, CONFIG.COLUMN.ORDER_NO, lastRow, 1);
-    const data = range.getValues(); 
-    
-    for (let i = 0; i < data.length; i++) {
-      // シート上のデータからも全ての ' を取り除いて比較
-      const currentNo = data[i][0].toString().replace(/'/g, "").trim();
-      
-      if (currentNo === targetNo) {
-        const rowNum = i + 1;
-        
-        // ★旧予約を無効化（B案運用）
-      sheet.getRange(rowNum, CONFIG.COLUMN.STATUS).setValue(CONFIG.STATUS.INVALID);
-      sheet.getRange(rowNum, CONFIG.COLUMN.REASON).setValue("予約変更により無効（再予約あり）");
+    const data = range.getValues();
 
-      // 灰色化はそのまま（列が増えたので PICKUP_DATE_RAW まで塗る）
+    for (let i = 0; i < data.length; i++) {
+      const currentNo = String(data[i][0] || "").replace(/'/g, "").trim();
+      if (currentNo !== targetNo) continue;
+
+      const rowNum = i + 1;
+
+      // ★旧予約：無効化
+      sheet.getRange(rowNum, CONFIG.COLUMN.STATUS).setValue(CONFIG.STATUS.INVALID);
+
+      // ★理由：新Noが分かるなら入れる（後追い確認が楽）
+      const reason = newNo
+        ? `予約変更により無効（新予約No: ${newNo}）`
+        : "予約変更により無効（再予約あり）";
+      sheet.getRange(rowNum, CONFIG.COLUMN.REASON).setValue(reason);
+
+      // 灰色化（最終列は内部日付列まで）
       sheet.getRange(rowNum, 1, 1, CONFIG.COLUMN.PICKUP_DATE_RAW).setBackground("#E0E0E0");
-        
-        console.log("マッチしました！行番号: " + rowNum);
-        break; // 見つかったらループを抜ける
-      }
+      return;
     }
   }
-}
-
-function markReservationAsChanged(orderNo) {
-  try {
-    const sheet = SpreadsheetApp.getActive().getSheetByName(CONFIG.SHEET.ORDER_LIST);
-    if (!sheet) return;
-
-    // 既存呼び出し互換：旧予約更新（ステータス更新＋灰色化）に統一
-    OrderService.updateOldReservation(sheet, orderNo);
-  } catch (e) {
-    console.warn("markReservationAsChanged wrapper failed:", String(e));
-  }
-}
-
-function setStatusAndReason_(sheet, rowNum, status, reason) {
-  sheet.getRange(rowNum, CONFIG.COLUMN.STATUS).setValue(status);
-  sheet.getRange(rowNum, CONFIG.COLUMN.REASON).setValue(reason || "");
-}
+};

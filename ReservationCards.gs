@@ -118,12 +118,12 @@ function drawDynamicCard(sheet, startRow, col, card) {
   
   // 備考と注記のテキスト準備
   const formNote = (rowData[CONFIG.COLUMN.NOTE - 1] || "").toString();
-  const fullNoteText = formNote ? "【要】" + formNote : "";
-  const fullSpecialNoteText = customer.specialNote ? "【注】" + customer.specialNote : "";
+  const fullNoteText = formNote ? "[要]" + formNote : "";
+  const fullSpecialNoteText = customer.specialNote ? "[注]" + customer.specialNote : "";
 
   let r = startRow;
   sheet.getRange(startRow, col, height, 1).setBorder(true, true, true, true, null, null, "#444444", SpreadsheetApp.BorderStyle.SOLID);
-  sheet.getRange(r++, col).setValue("No: " + orderNo).setBackground("#eeeeee").setFontWeight("bold").setFontSize(10);
+  sheet.getRange(r++, col).setValue("# " + orderNo).setBackground("#eeeeee").setFontWeight("bold").setFontSize(10);
   sheet.getRange(r++, col).setValue(name).setFontSize(11).setFontWeight("bold");
   sheet.getRange(r++, col).setValue(tel).setFontSize(8);
 
@@ -134,11 +134,11 @@ function drawDynamicCard(sheet, startRow, col, card) {
   sheet.getRange(r, col).setValue(totalStr).setFontWeight("bold").setFontSize(9).setBorder(true, null, null, null, null, null);
   r++;
 
-  // --- 【注】の20文字分割書き込み ---
+  // --- [注]の20文字分割書き込み ---
   if (fullSpecialNoteText) {
     for (let i = 0; i < fullSpecialNoteText.length; i += 20) {
       let chunk = fullSpecialNoteText.substring(i, i + 20);
-      sheet.getRange(r++, col).setValue(chunk).setFontSize(9).setFontColor("#ff0000").setFontWeight("bold");
+      sheet.getRange(r++, col).setValue(chunk).setFontSize(9).setFontColor("#333333").setFontWeight("bold");
     }
   }
 

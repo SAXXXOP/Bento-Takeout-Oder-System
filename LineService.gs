@@ -16,30 +16,30 @@ const LineService = (() => {
 
   function normalizeMeta(meta) {
     if (meta && typeof meta === "object") {
+      const oldNo = meta.oldNo ? String(meta.oldNo) : "";
       return {
         isChange: !!meta.isChange,
-        changeRequested: !!meta.changeRequested,
-        oldNo: meta.oldNo ? String(meta.oldNo) : ""
+        // oldNo があれば「変更希望あり」とみなす（フラグ漏れ対策）
+        changeRequested: !!meta.changeRequested || !!oldNo,
+        oldNo,
+        changeFailReason: String(meta.changeFailReason || "")
       };
     }
-    // 互換：boolean で渡された場合
-    return { isChange: !!meta, changeRequested: false, oldNo: "" };
+    // 互換：boolean の場合
+    return { isChange: !!meta, changeRequested: false, oldNo: "", changeFailReason: "" };
   }
 
   function buildMessage(title, reservationNo, d, meta) {
-    const tel = d.phoneNumber ? String(d.phoneNumber).replace(/^'/, "") : "なし";
-    const pickupInfo = d.pickupDate || "未設定";
-
     let headerNote = "";
     if (meta && meta.isChange) {
-      headerNote =
-        "\n※新しい内容で再予約を承りました。以前のご予約は当店にて取消処理を行います。\n";
+      headerNote = "\n※新しい内容で再予約を承りました。以前のご予約は当店にて取消処理を行います。\n";
     } else if (meta && meta.changeRequested) {
-      // 変更を試みたが isChange にならなかったケース（締切など）
+      const r = meta.changeFailReason || "元予約の確認ができませんでした";
       headerNote =
-        "\n※予約変更として受け付けようとしましたが、変更期限（前日20時）を過ぎていたため、新規予約として受け付けました。\n" +
+        `\n※予約変更の希望がありましたが、${r}ため、新規予約として受け付けました。\n` +
         "※元のご予約の取消が必要な場合は店舗へご連絡ください。\n";
     }
+
 
     const totalPrice = Number(d.totalPrice || 0);
     const totalPriceStr = isFinite(totalPrice) ? totalPrice.toLocaleString() : "0";

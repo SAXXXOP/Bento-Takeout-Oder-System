@@ -18,34 +18,40 @@ function onFormSubmit(e) {
     if (!formData) return;
 
     /* =========================
-       2. 予約変更チェック（propsレス）
-       - フォームの oldReservationNo のみで判定
-       ========================= */
-    // Main.gs / onFormSubmit()
+      2. 予約変更チェック（propsレス）
+      - フォームの oldReservationNo のみで判定
+      ========================= */
+    let oldNo = String(formData.oldReservationNo || "")
+      .replace(/'/g, "")
+      .trim();
 
-    // Main.gs / onFormSubmit(e)
+    const changeRequested = !!oldNo;
+    let isChange = changeRequested;
+    let changeFailReason = "";
 
-// Main.gs / onFormSubmit(e) 2. 予約変更チェック（propsレス）
+    if (changeRequested) {
+      const pickupDateOnly = getPickupDateOnlyByOrderNo(oldNo);
 
-const oldNo = String(formData.oldReservationNo || "")
-  .replace(/'/g, "")
-  .trim();
+      if (!pickupDateOnly) {
+        isChange = false;
+        changeFailReason = "元予約Noが見つかりません";
+        console.warn("change requested but old order not found or date missing:", oldNo);
+      } else if (!isWithinChangeDeadline(pickupDateOnly, new Date())) {
+        isChange = false;
+        changeFailReason = "変更期限（前日20時）を過ぎています";
+        console.warn("change requested after deadline:", { oldNo: oldNo, pickupDate: String(pickupDateOnly) });
+      }
+    }
 
-let isChange = !!oldNo;
+    formData.oldReservationNo = oldNo || "";
 
-if (isChange) {
-  const pickupDateOnly = getPickupDateOnlyByOrderNo(oldNo);
-
-  if (!pickupDateOnly) {
-    isChange = false;
-    console.warn("change requested but old order not found or date missing:", oldNo);
-  } else if (!isWithinChangeDeadline(pickupDateOnly, new Date())) {
-    isChange = false;
-    console.warn("change requested after deadline:", { oldNo: oldNo, pickupDate: String(pickupDateOnly) });
-  }
-}
-
-formData.oldReservationNo = oldNo || "";
+    // ★ここで meta を確定（この1個だけを後段に渡す）
+    const changeMeta = {
+      isChange,
+      changeRequested,
+      oldNo,
+      changeFailReason
+    };
 
     /* =========================
        3. 予約番号生成
@@ -60,7 +66,7 @@ formData.oldReservationNo = oldNo || "";
     /* =========================
        5. 注文保存
        ========================= */
-    OrderService.saveOrder(reservationInfo.no, formData, isChange);
+    OrderService.saveOrder(reservationInfo.no, formData, changeMeta);
 
     /* =========================
        6. 変更候補キャッシュ無効化（存在すれば）
@@ -78,13 +84,12 @@ formData.oldReservationNo = oldNo || "";
        7. LINE送信（失敗しても注文保存は止めない）
        ========================= */
     // Main.gs / onFormSubmit(e) のLINE送信部分
-    try {
-      const changeRequested = !!oldNo;
-
+    // 7. LINE送信
+        try {
       const r = LineService.sendReservationMessage(
         reservationInfo.no,
         formData,
-        { isChange: isChange, changeRequested: changeRequested, oldNo: oldNo }
+        changeMeta
       );
 
       if (!r || r.ok !== true) {
@@ -93,9 +98,9 @@ formData.oldReservationNo = oldNo || "";
     } catch (err) {
       console.warn("LINE push threw:", String(err));
     }
+
   } catch (err) {
-    console.error("onFormSubmit error:", err);
-    // 業務優先：トリガー実行を例外で止めない
+    console.warn("onFormSubmit error:", String(err));
   } finally {
     if (locked) {
       try {
