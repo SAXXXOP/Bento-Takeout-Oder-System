@@ -306,3 +306,272 @@ function listProjectTriggers() {
 function refreshNeedsCheckViewTrigger() {
   refreshNeedsCheckView();
 }
+
+/**
+ * No指定：有効に戻す（STATUS=空欄、REASONも空欄）
+ */
+function markByOrderNoAsActive() {
+  const sheet = getOrderListSheetAny_();
+  const orderNos = promptOrderNos_("有効に戻す（No指定）", "対象の予約Noを入力（例：020501, 020502）");
+  if (!orderNos) return;
+
+  const rows = findRowsByOrderNos_(sheet, orderNos);
+  if (!rows.length) return;
+
+  setStatusReasonForRowList_(sheet, rows, CONFIG.STATUS.ACTIVE, "");
+  refreshNeedsCheckViewSafe_();
+  SpreadsheetApp.getUi().alert(`完了：${rows.length}行を「有効（空欄）」にしました。`);
+}
+
+/**
+ * No指定：無効にする（理由必須）
+ */
+function markByOrderNoAsInvalid() {
+  const sheet = getOrderListSheetAny_();
+  const orderNos = promptOrderNos_("無効にする（No指定）", "対象の予約Noを入力（例：020501, 020502）");
+  if (!orderNos) return;
+
+  const reason = promptReasonFromTemplates_("INVALID");
+  if (reason === null) return;
+
+  const rows = findRowsByOrderNos_(sheet, orderNos);
+  if (!rows.length) return;
+
+  setStatusReasonForRowList_(sheet, rows, CONFIG.STATUS.INVALID, reason);
+  refreshNeedsCheckViewSafe_();
+  SpreadsheetApp.getUi().alert(`完了：${rows.length}行を「無効」にしました。`);
+}
+
+/**
+ * No指定：★要確認にする（理由必須）
+ */
+function markByOrderNoAsNeedsCheck() {
+  const sheet = getOrderListSheetAny_();
+  const orderNos = promptOrderNos_("★要確認にする（No指定）", "対象の予約Noを入力（例：020501, 020502）");
+  if (!orderNos) return;
+
+  const reason = promptReasonFromTemplates_("NEEDS_CHECK");
+  if (reason === null) return;
+
+  const rows = findRowsByOrderNos_(sheet, orderNos);
+  if (!rows.length) return;
+
+  setStatusReasonForRowList_(sheet, rows, CONFIG.STATUS.NEEDS_CHECK, reason);
+  refreshNeedsCheckViewSafe_();
+  SpreadsheetApp.getUi().alert(`完了：${rows.length}行を「★要確認」にしました。`);
+}
+
+/**
+ * No指定：理由だけ編集（STATUSは維持）
+ */
+function editReasonByOrderNo() {
+  const sheet = getOrderListSheetAny_();
+  const orderNos = promptOrderNos_("理由を編集（No指定）", "対象の予約Noを入力（例：020501, 020502）");
+  if (!orderNos) return;
+
+  const ui = SpreadsheetApp.getUi();
+  const res = ui.prompt("理由を編集", "理由を入力（空欄も可）", ui.ButtonSet.OK_CANCEL);
+  if (res.getSelectedButton() !== ui.Button.OK) return;
+
+  const reason = String(res.getResponseText() || "").trim();
+
+  const rows = findRowsByOrderNos_(sheet, orderNos);
+  if (!rows.length) return;
+
+  setReasonForRowList_(sheet, rows, reason);
+  refreshNeedsCheckViewSafe_();
+  SpreadsheetApp.getUi().alert(`完了：${rows.length}行の理由を更新しました。`);
+}
+
+/* =========================
+   内部ヘルパー（追加）
+   ========================= */
+
+// 注文一覧を常に対象（No指定は誤爆しにくい）
+function getOrderListSheetAny_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(CONFIG.SHEET.ORDER_LIST);
+  if (!sheet) throw new Error("注文一覧シートが見つかりません: " + CONFIG.SHEET.ORDER_LIST);
+  return sheet;
+}
+
+// カンマ/空白/改行区切りOK。' は除去。
+function promptOrderNos_(title, message) {
+  const ui = SpreadsheetApp.getUi();
+  const res = ui.prompt(title, message, ui.ButtonSet.OK_CANCEL);
+  if (res.getSelectedButton() !== ui.Button.OK) return null;
+
+  const raw = String(res.getResponseText() || "").trim();
+  if (!raw) {
+    ui.alert("予約Noが空です。");
+    return null;
+  }
+
+  const list = raw
+    .split(/[\s,]+/)
+    .map(s => s.replace(/'/g, "").trim())
+    .filter(Boolean);
+
+  if (!list.length) {
+    ui.alert("予約Noが読み取れませんでした。");
+    return null;
+  }
+
+  return Array.from(new Set(list));
+}
+
+// 同じNoが複数行に存在しても全部拾う（念のため）
+function findRowsByOrderNos_(sheet, orderNos) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) {
+    SpreadsheetApp.getUi().alert("注文一覧にデータがありません。");
+    return [];
+  }
+
+  const colNo = CONFIG.COLUMN.ORDER_NO;
+  const values = sheet.getRange(2, colNo, lastRow - 1, 1).getValues();
+
+  const map = new Map(); // no -> [row...]
+  for (let i = 0; i < values.length; i++) {
+    const no = String(values[i][0] || "").replace(/'/g, "").trim();
+    if (!no) continue;
+    const rowNum = i + 2;
+    if (!map.has(no)) map.set(no, []);
+    map.get(no).push(rowNum);
+  }
+
+  const rows = [];
+  const missing = [];
+
+  orderNos.forEach(no => {
+    const hit = map.get(no);
+    if (hit && hit.length) rows.push(...hit);
+    else missing.push(no);
+  });
+
+  if (missing.length) {
+    SpreadsheetApp.getUi().alert(
+      `見つからない予約Noがありました（処理は見つかった分だけ行います）\n\n` +
+      missing.slice(0, 30).join(", ") + (missing.length > 30 ? "\n…他" : "")
+    );
+  }
+
+  return Array.from(new Set(rows)).sort((a, b) => a - b);
+}
+
+function promptRequiredReason_(title, message) {
+  const ui = SpreadsheetApp.getUi();
+  const res = ui.prompt(title, message, ui.ButtonSet.OK_CANCEL);
+  if (res.getSelectedButton() !== ui.Button.OK) return null;
+
+  const reason = String(res.getResponseText() || "").trim();
+  if (!reason) {
+    ui.alert("理由が空です。理由を入力してください。");
+    return null;
+  }
+  return reason;
+}
+
+function setStatusReasonForRowList_(sheet, rows, status, reason) {
+  rows.forEach(r => {
+    sheet.getRange(r, CONFIG.COLUMN.STATUS).setValue(status);
+    sheet.getRange(r, CONFIG.COLUMN.REASON).setValue(reason || "");
+  });
+}
+
+function setReasonForRowList_(sheet, rows, reason) {
+  rows.forEach(r => {
+    sheet.getRange(r, CONFIG.COLUMN.REASON).setValue(reason || "");
+  });
+}
+
+// 手動操作の後だけビュー更新（失敗しても本処理は止めない）
+function refreshNeedsCheckViewSafe_() {
+  try {
+    if (typeof refreshNeedsCheckView === "function") refreshNeedsCheckView();
+  } catch (e) {
+    console.warn("refreshNeedsCheckView failed:", String(e));
+  }
+}
+
+/* =========================
+   理由テンプレ（追加）
+   ========================= */
+
+// ここを増やすだけでテンプレが増えます
+const REASON_TEMPLATES_ = {
+  INVALID: [
+    "キャンセル（電話）",
+    "キャンセル（LINE）",
+    "重複予約",
+    "予約変更（新予約あり）",
+    "受取日時変更のため作り直し",
+    "店側都合（売り切れ等）",
+    "その他（自由入力）"
+  ],
+  NEEDS_CHECK: [
+    "変更期限切れ（前日20時以降）",
+    "元予約No不明／見つからない",
+    "電話番号未入力",
+    "受取日が不正／判定できない",
+    "注文内容が空／不正",
+    "LINE通知不可（LINE_ID不明）",
+    "その他（自由入力）"
+  ]
+};
+
+/**
+ * テンプレから理由を選ぶ（必須）
+ * type: "INVALID" | "NEEDS_CHECK"
+ * 戻り値：理由文字列 / キャンセル時 null
+ */
+function promptReasonFromTemplates_(type) {
+  const ui = SpreadsheetApp.getUi();
+
+  const list = REASON_TEMPLATES_[type];
+  if (!list || !list.length) {
+    // 保険：テンプレが無い場合は自由入力にフォールバック
+    return promptRequiredReason_("理由を入力", "理由を入力してください");
+  }
+
+  const title =
+    (type === "INVALID") ? "無効にする：理由テンプレ選択" :
+    (type === "NEEDS_CHECK") ? "★要確認：理由テンプレ選択" :
+    "理由テンプレ選択";
+
+  const message =
+    "番号を入力してください（例：1）\n\n" +
+    list.map((t, i) => `${i + 1}. ${t}`).join("\n") +
+    "\n\n※最後の「その他（自由入力）」を選ぶと自由入力できます";
+
+  const res = ui.prompt(title, message, ui.ButtonSet.OK_CANCEL);
+  if (res.getSelectedButton() !== ui.Button.OK) return null;
+
+  const n = parseInt(String(res.getResponseText() || "").trim(), 10);
+  if (!isFinite(n) || n < 1 || n > list.length) {
+    ui.alert("番号が不正です。もう一度やり直してください。");
+    return null;
+  }
+
+  const selected = list[n - 1];
+
+  // 「その他（自由入力）」を選んだ場合
+  if (selected.includes("自由入力")) {
+    const free = promptRequiredReason_("理由を入力", "理由を入力してください（必須）");
+    if (free === null) return null;
+    return free;
+  }
+
+  // 追記（任意）
+  const add = ui.prompt(
+    "理由の追記（任意）",
+    `選択：${selected}\n追記があれば入力してください（例：お客様連絡済／メモなど）\n空欄ならそのまま確定します。`,
+    ui.ButtonSet.OK_CANCEL
+  );
+
+  // ★追記のキャンセルは「追記なし」で確定（処理を止めない）
+  if (add.getSelectedButton() !== ui.Button.OK) return selected;
+
+  const extra = String(add.getResponseText() || "").trim();
+  return extra ? `${selected} / ${extra}` : selected;
+}

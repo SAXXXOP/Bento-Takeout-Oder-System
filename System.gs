@@ -22,5 +22,14 @@ function onOpen() {
     .addSeparator()
     .addItem('★要確認一覧を開く', 'openNeedsCheckView')
     .addItem('★要確認一覧を更新', 'refreshNeedsCheckView')
+
+    
+    // ★追加：ステータス処理（予約No指定）
+    .addSeparator()
+    .addItem('No指定：有効に戻す（空欄）', 'markByOrderNoAsActive')
+    .addItem('No指定：無効にする（理由必須）', 'markByOrderNoAsInvalid')
+    .addItem('No指定：★要確認にする（理由必須）', 'markByOrderNoAsNeedsCheck')
+    .addItem('No指定：理由だけ編集', 'editReasonByOrderNo')
+
     .addToUi();
 }

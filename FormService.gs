@@ -19,6 +19,23 @@ const FormService = {
     let pickupDateObj = null;
     let rawDate = "", rawTime = "";
 
+    // FormService.gs（新規追加：配列/文字列を安全に文字列化）
+    function normalizeMultiAnswer_(answer) {
+      if (answer === null || answer === undefined) return "";
+
+      // チェックボックスは配列で返る
+      if (Array.isArray(answer)) {
+        return answer
+          .map(v => String(v || "").trim())
+          .filter(v => v !== "")
+          .join(" / "); // 好きな区切りに変更OK（例："、"）
+      }
+
+      // その他（記述式など）
+      return String(answer).trim();
+    }
+
+    
     itemResponses.forEach(r => {
       const item = r.getItem();
       if (!item) return;
@@ -31,7 +48,7 @@ const FormService = {
       else if (title === CONFIG.FORM.PICKUP_DATE) rawDate = answer || "";
       else if (title === CONFIG.FORM.PICKUP_TIME) rawTime = answer || "";
       else if (title.includes(CONFIG.FORM.LINE_ID)) formData.userId = answer || "";
-      else if (title.includes(CONFIG.FORM.OLD_RESERVATION_NO)) formData.oldReservationNo = answer || "";
+      else if (title.includes(CONFIG.FORM.NOTE)) { formData.note = normalizeMultiAnswer_(answer);}
       else if (title.includes(CONFIG.FORM.NOTE)) formData.note = answer || "";
       else this.parseOrder(title, answer, formData);
     });
