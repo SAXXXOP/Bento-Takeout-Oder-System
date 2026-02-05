@@ -13,7 +13,12 @@ function createProductionSheet() {
   const ui = SpreadsheetApp.getUi();
   const res = ui.prompt("当日まとめ作成", "日付（例: 2/14）", ui.ButtonSet.OK_CANCEL);
   if (res.getSelectedButton() !== ui.Button.OK) return;
-  const target = res.getResponseText().replace(/[^0-9]/g, "");
+
+  const targetInput = String(res.getResponseText() || "").trim();
+  const targetMD = parseMonthDay_(targetInput);            // {m,d} or null
+  const targetDigits = targetInput.replace(/[^0-9]/g, ""); // フォールバック用
+  let matchedDateRaw = null;                               // ★A1表示用に保持
+
 
   // --- 1. メニューマスタのインデックス化 ---
   const masterData = master.getDataRange().getValues().slice(1);
@@ -66,8 +71,31 @@ function createProductionSheet() {
   const isActive = (status === CONFIG.STATUS.ACTIVE); // ACTIVEは空文字
   if (!isActive) return;
 
-    const pickupDate = row[CONFIG.COLUMN.PICKUP_DATE - 1]?.toString().replace(/[^0-9]/g, "");
-    if (!pickupDate || !pickupDate.includes(target)) return;
+    const rawCol = CONFIG.COLUMN.PICKUP_DATE_RAW; // P列(16)想定（無ければ undefined）
+
+  let isTarget = false;
+
+  const pickupDateRaw = rawCol ? row[rawCol - 1] : null;
+  const hasValidDate = pickupDateRaw instanceof Date && !isNaN(pickupDateRaw.getTime());
+
+  if (targetMD && hasValidDate) {
+    const m = pickupDateRaw.getMonth() + 1;
+    const d = pickupDateRaw.getDate();
+    isTarget = (m === targetMD.m && d === targetMD.d);
+
+    if (isTarget && !matchedDateRaw) matchedDateRaw = pickupDateRaw; // ★最初の一致を保持
+  } else {
+    // フォールバック：従来通り E列文字
+    const pickupDigits = row[CONFIG.COLUMN.PICKUP_DATE - 1]
+      ?.toString()
+      .replace(/[^0-9]/g, "");
+    if (pickupDigits && targetDigits && pickupDigits.includes(targetDigits)) {
+      isTarget = true;
+    }
+  }
+
+  if (!isTarget) return;
+
 
     const lineId = row[CONFIG.COLUMN.LINE_ID - 1];
     if (customerMap[lineId]) {
@@ -105,8 +133,21 @@ function createProductionSheet() {
 
   // --- 3. シート初期化 ---
   sheet.clear().clearFormats();
-  sheet.getRange("A1").setValue(`【 ${res.getResponseText()} 当日まとめ 】`).setFontSize(14).setFontWeight("bold");
-  sheet.getRange("A2").setValue(`@ ${totalAll}`).setFontSize(22).setFontWeight("bold").setFontColor("#000000");
+  const displayDate = matchedDateRaw
+  ? formatMDFromDate_(matchedDateRaw)
+  : (targetMD ? `${targetMD.m}/${targetMD.d}` : targetInput);
+
+  sheet.getRange("A1")
+    .setValue(`【 ${displayDate} 当日まとめ 】`)
+    .setFontSize(14)
+    .setFontWeight("bold");
+
+  sheet.getRange("A2")
+    .setValue(`総数: ${totalAll}`)
+    .setFontSize(22)
+    .setFontWeight("bold")
+    .setFontColor("#000000");
+
 
   let colRows = [4, 4, 4]; 
   const COL_START = [1, 4, 7];
@@ -221,4 +262,32 @@ function applyGroupOuterBorder_(sheet, rowStart, rowEnd, colStart, colEnd) {
   sheet.getRange(rowStart, colStart, rowEnd - rowStart + 1, colEnd - colStart + 1)
     // top, left, bottom, right, vertical, horizontal
     .setBorder(true, true, true, true, false, false, "#000000", SpreadsheetApp.BorderStyle.SOLID);
+}
+
+/**
+ * 入力 "2/14", "2月14日", "0214", "214", "11/1" など → {m,d} にする
+ */
+function parseMonthDay_(input) {
+  const s = String(input || "").trim();
+  if (!s) return null;
+
+  // 1) M/D
+  const slash = s.match(/^(\d{1,2})\s*\/\s*(\d{1,2})$/);
+  if (slash) return { m: Number(slash[1]), d: Number(slash[2]) };
+
+  // 2) M月D日（D日は省略可）
+  const mdj = s.match(/^(\d{1,2})\s*月\s*(\d{1,2})\s*日?$/);
+  if (mdj) return { m: Number(mdj[1]), d: Number(mdj[2]) };
+
+  // 3) 数字だけ（MMDD or MDD）
+  const digits = s.replace(/[^0-9]/g, "");
+  if (digits.length === 4) return { m: Number(digits.slice(0, 2)), d: Number(digits.slice(2, 4)) };
+  if (digits.length === 3) return { m: Number(digits.slice(0, 1)), d: Number(digits.slice(1, 3)) };
+
+  return null;
+}
+
+/** Date → "M/d"（A1表示用） */
+function formatMDFromDate_(dt) {
+  return Utilities.formatDate(dt, Session.getScriptTimeZone(), "M/d");
 }
