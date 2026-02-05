@@ -11,7 +11,7 @@ const CONFIG = {
     PICKUP_TIME: "受取り希望時刻",//※現在は未使用
     OLD_RESERVATION_NO: "元予約No",
     LINE_ID: "LINE_ID(自動入力)",
-    NOTE: "抜き物、アレルギーなど" //質問形式チェックボックス
+    NOTE: "抜き物などご要望" //質問形式チェックボックス
   },
 
   // 2. スプレッドシート名

@@ -26,14 +26,23 @@ const FormService = {
       // チェックボックスは配列で返る
       if (Array.isArray(answer)) {
         return answer
-          .map(v => String(v || "").trim())
+          .map(v => sanitizeSingleLine_(v))
           .filter(v => v !== "")
-          .join(" / "); // 好きな区切りに変更OK（例："、"）
+          .join(" / "); // 区切りはお好みで
       }
 
       // その他（記述式など）
-      return String(answer).trim();
+      return sanitizeSingleLine_(answer);
     }
+
+    // 改行を除去して1行に潰す
+    function sanitizeSingleLine_(value) {
+      return String(value || "")
+        .replace(/\r\n|\n|\r/g, " ") // 改行→スペース
+        .replace(/[ \t\u00A0]+/g, " ") // 連続空白・タブ等を1つに
+        .trim();
+    }
+
 
     
     itemResponses.forEach(r => {

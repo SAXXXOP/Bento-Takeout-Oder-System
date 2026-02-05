@@ -52,7 +52,7 @@ function createDailyReservationCards() {
       const fullNoteText = formNote ? "【要】" + formNote : "";
       const formNoteLines = fullNoteText ? Math.ceil(fullNoteText.length / 20) : 0;
 
-      let neededRows = 3 + items.length + 1;
+      let neededRows = 4 + items.length + 1;
       if (cInfo.specialNote) neededRows += 1;
       if (formNoteLines > 0) neededRows += formNoteLines;
       if (cInfo.historyLabel) neededRows += 1;
@@ -101,7 +101,7 @@ function createDailyReservationCards() {
   });
   
   for(let c=1; c<=3; c++) cardSheet.setColumnWidth(c, 230);
-  cardSheet.setRowHeights(1, cardSheet.getMaxRows(), 17);
+  cardSheet.setRowHeights(1, cardSheet.getMaxRows(), 21);
   cardSheet.activate();
 }
 
@@ -115,7 +115,25 @@ function drawDynamicCard(sheet, startRow, col, card) {
   const name = (isRegular ? "★ " : "") + (rowData[CONFIG.COLUMN.NAME - 1] || "不明") + " 様";
   const tel = "TEL: " + (rowData[CONFIG.COLUMN.TEL - 1] || "なし").toString().replace(/'/g, "");
   const totalStr = "計:" + rowData[CONFIG.COLUMN.TOTAL_COUNT - 1] + "点 / " + Number(rowData[CONFIG.COLUMN.TOTAL_PRICE - 1]).toLocaleString() + "円";
-  
+
+  // ★受取日時（時刻列が無い場合もOK）
+  const tz = Session.getScriptTimeZone();
+  const pickupDateVal = rowData[CONFIG.COLUMN.PICKUP_DATE - 1];
+  const hasPickupTimeCol = CONFIG.COLUMN.PICKUP_TIME != null; // 未定義対策
+  const pickupTimeVal = hasPickupTimeCol ? rowData[CONFIG.COLUMN.PICKUP_TIME - 1] : "";
+
+  const pickupDateStr =
+    pickupDateVal instanceof Date
+      ? Utilities.formatDate(pickupDateVal, tz, "M/d(E)")
+      : (pickupDateVal ? pickupDateVal.toString() : "");
+
+  const pickupTimeStr =
+    pickupTimeVal instanceof Date
+      ? Utilities.formatDate(pickupTimeVal, tz, "H:mm")
+      : (pickupTimeVal ? pickupTimeVal.toString() : "");
+
+  const pickupStr = "受取: " + (pickupDateStr || "-") + (pickupTimeStr ? " " + pickupTimeStr : "");
+
   // 備考と注記のテキスト準備
   const formNote = (rowData[CONFIG.COLUMN.NOTE - 1] || "").toString();
   const fullNoteText = formNote ? "[要]" + formNote : "";
@@ -123,7 +141,9 @@ function drawDynamicCard(sheet, startRow, col, card) {
 
   let r = startRow;
   sheet.getRange(startRow, col, height, 1).setBorder(true, true, true, true, null, null, "#444444", SpreadsheetApp.BorderStyle.SOLID);
+
   sheet.getRange(r++, col).setValue("# " + orderNo).setBackground("#eeeeee").setFontWeight("bold").setFontSize(10);
+  sheet.getRange(r++, col).setValue(pickupStr).setFontSize(9).setFontWeight("bold"); // ★ここが追加行
   sheet.getRange(r++, col).setValue(name).setFontSize(11).setFontWeight("bold");
   sheet.getRange(r++, col).setValue(tel).setFontSize(8);
 
@@ -131,7 +151,7 @@ function drawDynamicCard(sheet, startRow, col, card) {
     sheet.getRange(r++, col).setValue("・" + item.short).setFontSize(10);
   });
 
-  sheet.getRange(r, col).setValue(totalStr).setFontWeight("bold").setFontSize(9).setBorder(true, null, null, null, null, null);
+  sheet.getRange(r, col).setValue(totalStr).setFontWeight("bold").setFontSize(9).setBorder(true, null, null, null, null, null, "#444444", SpreadsheetApp.BorderStyle.DASHED);
   r++;
 
   // --- [注]の20文字分割書き込み ---
@@ -154,6 +174,7 @@ function drawDynamicCard(sheet, startRow, col, card) {
     sheet.getRange(r++, col).setValue(customer.historyLabel).setFontSize(8).setFontColor("#666666");
   }
 }
+
 
 /**
  * 補助関数：getCustomerMap
