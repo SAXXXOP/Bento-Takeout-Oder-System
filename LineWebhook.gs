@@ -82,7 +82,7 @@ function doPost(e) {
         }
 
         const formUrl = buildPrefilledFormUrl(CONFIG.LINE.FORM.FORM_URL, userId, target.no);
-        const confirmFlex = buildConfirmFlex(target.no, target.itemsShort, formUrl);
+        const confirmFlex = buildConfirmFlex(target.no, target.itemsFull, formUrl);
 
         replyFlexOnce(replyToken, confirmFlex);
         return;
@@ -137,6 +137,76 @@ function doPost(e) {
    Flex Builders
    ========================= */
 
+// ★追加：注文概要を「1行」に整形して省略
+function formatOrderSummaryOneLine_(r, maxLen) {
+  const raw = (r && (r.itemsShort || r.itemsFull)) || "";
+  const s = String(raw)
+    .replace(/\r?\n/g, " / ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!s) return "（内容なし）";
+
+  const limit = maxLen || 34;
+  return s.length > limit ? s.slice(0, limit - 1) + "…" : s;
+}
+
+// ★追加：内容を「先頭N品 + 他◯点」に整形（1行表示用）
+function formatOrderSummaryTopN_(r, maxItems, maxLen) {
+  const raw = String((r && r.itemsFull) || (r && r.itemsShort) || "");
+
+  // 改行 or / 区切りを想定して分割（「・」などの先頭記号も除去）
+  const parts = raw
+    .replace(/\r/g, "")
+    .split(/\n|\/|／/)
+    .map(s => s.replace(/^[・└\s]+/, "").trim())
+    .filter(Boolean);
+
+  if (!parts.length) return "（内容なし）";
+
+  const N = Math.max(1, Number(maxItems || 3));
+
+  // "チョコバナナ x1" / "のり弁×2" をパース
+  const parse = (s) => {
+    const m = String(s).match(/^(.+?)\s*[x×]\s*(\d+)\s*$/i);
+    if (m) return { name: m[1].trim(), qty: parseInt(m[2], 10) || 0 };
+    return { name: String(s).trim(), qty: 1 }; // qty不明は1扱い（totalから差し引く用）
+  };
+
+  const items = parts.map(parse);
+
+  const shown = items.slice(0, N);
+  const shownText = shown.map(it => `${it.name}×${it.qty}`).join(" / ");
+
+  const total = Number((r && r.total) || 0);
+  const shownQty = shown.reduce((a, it) => a + (it.qty || 0), 0);
+
+  let otherQty = 0;
+  if (total > 0) {
+    otherQty = Math.max(0, total - shownQty);
+  } else if (items.length > N) {
+    // totalが取れないときの保険（本来は total あるのでほぼ通りません）
+    otherQty = items.length - N;
+  }
+
+  const suffix = otherQty > 0 ? " 他" : "";
+  let out = shownText + suffix;
+
+  // 1行に収める（末尾 …）。suffix はなるべく残す
+  const LIMIT = Math.max(10, Number(maxLen || 26));
+  if (out.length > LIMIT) {
+    const keep = suffix ? Math.min(suffix.length, LIMIT - 1) : 0;
+    const headLimit = LIMIT - keep - 1; // "…" 分
+    const head = shownText.slice(0, Math.max(0, headLimit));
+    out = head + "…" + (suffix ? suffix : "");
+    // それでも長い場合は最後に単純トリム
+    if (out.length > LIMIT) out = out.slice(0, LIMIT - 1) + "…";
+  }
+
+  return out;
+}
+
+
 function buildReservationBubble(r, index) {
   return {
     type: "bubble",
@@ -152,32 +222,53 @@ function buildReservationBubble(r, index) {
       ]
     },
     body: {
+  type: "box",
+  layout: "vertical",
+  spacing: "md",
+  contents: [
+    // 受取
+    {
       type: "box",
-      layout: "vertical",
-      spacing: "md",
+      layout: "baseline",
       contents: [
+        { type: "text", text: "受取", size: "sm", color: "#888888", flex: 1 },
+        { type: "text", text: String(r.date || ""), size: "sm", wrap: true, flex: 4 }
+      ]
+    },
+
+    // 内容：先頭3品 + 他◯点（1行）
+    {
+      type: "box",
+      layout: "baseline",
+      contents: [
+        { type: "text", text: "内容", size: "sm", color: "#888888", flex: 1 },
         {
-          type: "box",
-          layout: "baseline",
-          contents: [
-            { type: "text", text: "受取", size: "sm", color: "#888888", flex: 1 },
-            { type: "text", text: String(r.date || ""), size: "sm", wrap: true, flex: 4 }
-          ]
-        },
-        { type: "separator" },
-        {
-          type: "box",
-          layout: "baseline",
-          margin: "md",
-          spacing: "md",
-          justifyContent: "center",
-          contents: [
-            { type: "text", text: "ご注文合計", size: "sm", color: "#666666", flex: 0 },
-            { type: "text", text: `${r.total || 0} 点`, size: "lg", weight: "bold", color: "#222222", flex: 0 }
-          ]
+          type: "text",
+          text: formatOrderSummaryTopN_(r, 3, 34),
+          size: "sm",
+          wrap: true,
+          maxLines: 2,
+          flex: 4
         }
       ]
     },
+
+    { type: "separator" },
+
+    // 合計◯点
+    {
+      type: "box",
+      layout: "baseline",
+      margin: "md",
+      contents: [
+        { type: "text", text: "合計", size: "sm", color: "#666666", flex: 1 },
+        { type: "text", text: `${r.total || 0}点`, size: "md", weight: "bold", color: "#222222", flex: 0 }
+      ]
+    }
+  ]
+},
+
+
     footer: {
       type: "box",
       layout: "vertical",

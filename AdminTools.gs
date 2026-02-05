@@ -252,7 +252,7 @@ function installNeedsCheckViewTrigger_() {
   deleteNeedsCheckViewTriggers_();
 
   // 30分ごと（必要なら 10分に変更：everyMinutes(10)）
-  ScriptApp.newTrigger("refreshNeedsCheckView")
+  ScriptApp.newTrigger("refreshNeedsCheckViewTrigger")
     .timeBased()
     .everyMinutes(30)
     .create();
@@ -266,7 +266,7 @@ function deleteNeedsCheckViewTriggers_() {
   let deleted = 0;
 
   triggers.forEach(t => {
-    if (t.getHandlerFunction && t.getHandlerFunction() === "refreshNeedsCheckView") {
+    if (t.getHandlerFunction && t.getHandlerFunction() === "refreshNeedsCheckViewTrigger") {
       ScriptApp.deleteTrigger(t);
       deleted++;
     }
@@ -300,4 +300,9 @@ function deleteNeedsCheckViewTriggers() {
 
 function listProjectTriggers() {
   return listProjectTriggers_();
+}
+
+// トリガー専用（UI操作なし）
+function refreshNeedsCheckViewTrigger() {
+  refreshNeedsCheckView();
 }
