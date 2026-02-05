@@ -20,7 +20,8 @@ const CONFIG = {
     CUSTOMER_LIST: "顧客名簿",
     MENU_MASTER: "メニューマスタ",
     DAILY_SUMMARY: "当日まとめ",
-    RESERVATION_CARD: "予約札"
+    RESERVATION_CARD: "予約札",
+    NEEDS_CHECK_VIEW: "★要確認一覧"
   },
 
   // 3. 「注文一覧」シートの列配置

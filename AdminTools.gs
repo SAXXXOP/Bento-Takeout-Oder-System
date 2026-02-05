@@ -212,3 +212,33 @@ function colLetter_(colNo1) {
   }
   return s;
 }
+
+/** 「まだ旧ステータスが残ってないか」を出す */
+function auditStatusValues_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet(); // ★getActive()をやめる
+  if (!ss) throw new Error("アクティブなスプレッドシートが取得できません（シートに紐づいたプロジェクトで実行してください）");
+
+  const sheet = ss.getSheetByName(CONFIG.SHEET.ORDER_LIST);
+  if (!sheet) throw new Error("注文一覧シートが見つかりません: " + CONFIG.SHEET.ORDER_LIST);
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) {
+    SpreadsheetApp.getUi().alert("ステータス監査結果\n\nデータ行がありません。");
+    return;
+  }
+
+  // ★flat()を使わず安定させる
+  const vals2d = sheet.getRange(2, CONFIG.COLUMN.STATUS, lastRow - 1, 1).getValues();
+  const vals = vals2d.map(r => String(r[0] || "").trim());
+
+  const counts = {};
+  vals.forEach(k => {
+    counts[k] = (counts[k] || 0) + 1;
+  });
+
+  const lines = Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([k, v]) => `「${k || "(空欄)"}」: ${v}件`);
+
+  SpreadsheetApp.getUi().alert("ステータス監査結果\n\n" + lines.join("\n"));
+}

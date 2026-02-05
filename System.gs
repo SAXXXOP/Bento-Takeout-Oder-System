@@ -32,3 +32,19 @@ function onOpen() {
     .addItem('理由未記入チェック', 'checkMissingReasons')
     .addToUi();
 }
+
+function onOpen() {
+  SpreadsheetApp.getUi().createMenu('★予約管理')
+    .addItem('顧客備考を編集（サイドバー）', 'showCustomerEditor')
+    .addSeparator()
+    .addItem('指定日の予約札を作成', 'createDailyReservationCards')
+    .addItem('当日まとめシートを更新', 'createProductionSheet')
+
+    // ★追加
+    .addSeparator()
+    .addItem('★要確認一覧を開く', 'openNeedsCheckView')
+    .addItem('★要確認一覧を更新', 'refreshNeedsCheckView')
+
+    .addToUi()
+    .addItem('ステータス監査（値の件数）', 'auditStatusValues_');
+}
