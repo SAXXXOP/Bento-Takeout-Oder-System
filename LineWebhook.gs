@@ -28,15 +28,37 @@ function doPost(e) {
   }
 
   try {
-    logToSheet("INFO", "doPost called", {
-      hasE: !!e,
-      hasPostData: !!(e && e.postData),
-      hasContents: !!(e && e.postData && e.postData.contents)
-    });
+  // 1) 簡易認証：URLに ?key= を必須化
+  const props = PropertiesService.getScriptProperties();
+  const expectedKey = props.getProperty("WEBHOOK_KEY");
+  const providedKey = (e && e.parameter && e.parameter.key) ? String(e.parameter.key) : "";
+  if (expectedKey && providedKey !== expectedKey) {
+    logToSheet("WARN", "unauthorized webhook", { hasKey: !!providedKey });
+    return;
+  }
 
-    if (!e || !e.postData || !e.postData.contents) return;
+  // 2) payloadサイズ制限（DoS/誤爆防止）
+  if (!e || !e.postData || !e.postData.contents) return;
+  const body = e.postData.contents;
+  if (body.length > 200000) { // 200KB目安
+    logToSheet("WARN", "payload too large", { len: body.length });
+    return;
+  }
 
-    const data = JSON.parse(e.postData.contents);
+  // 3) Webhook重複排除（LINEの再送/リトライ対策）
+  const cache = CacheService.getScriptCache();
+  const digest = Utilities.base64EncodeWebSafe(
+    Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, body)
+  ).slice(0, 32);
+  const dedupKey = "WH_" + digest;
+  if (cache.get(dedupKey)) return;
+  cache.put(dedupKey, "1", 600); // 10分
+
+    // ★ここから従来処理
+    logToSheet("DEBUG", "doPost called", { len: body.length });
+
+    const data = JSON.parse(body);
+
     const event = data.events && data.events[0];
     if (!event) return;
 
@@ -45,9 +67,6 @@ function doPost(e) {
 
     logToSheet("INFO", "event received", {
       type: event.type,
-      userId: userId,
-      text: event.message && event.message.text,
-      postback: event.postback && event.postback.data
     });
 
     /* postback（Flexボタン） */
@@ -100,10 +119,10 @@ function doPost(e) {
       if (text === "予約を変更する") {
         const list = getChangeableReservations(userId);
 
-        logToSheet("INFO", "changeable reservations fetched", {
-          userId: userId,
-          total: list.length
-        });
+        logToSheet("DEBUG", "changeable reservations fetched", {
+        total: list.length
+      });
+
 
         if (!list.length) {
           replyTextOnce(replyToken, "変更可能な予約がありません（変更は前日20時まで）。必要な場合は店舗へご連絡ください。");
@@ -467,10 +486,14 @@ function replyTexts(token, texts) {
     muteHttpExceptions: true
   });
 
-  logToSheet("INFO", "replyTexts result", {
-    status: res.getResponseCode(),
-    body: res.getContentText()
-  });
+    const code = res.getResponseCode();
+  if (code < 200 || code >= 300) {
+    logToSheet("WARN", "replyTexts failed", {
+      status: code,
+      body: SECURITY_.truncate(res.getContentText(), 800)
+    });
+  }
+
 }
 
 function replyFlex(token, flexMsg) {
@@ -492,10 +515,14 @@ function replyFlex(token, flexMsg) {
     muteHttpExceptions: true
   });
 
-  logToSheet("INFO", "replyFlex result", {
-    status: res.getResponseCode(),
-    body: res.getContentText()
+  const code = res.getResponseCode();
+if (code < 200 || code >= 300) {
+  logToSheet("WARN", "replyFlex failed", {
+    status: code,
+    body: SECURITY_.truncate(res.getContentText(), 800)
   });
+}
+
 }
 
 /**
@@ -522,10 +549,14 @@ function replyMulti(token, messages) {
   });
 
   // ログシートにも残す
-  logToSheet("INFO", "replyMulti result", {
-    status: res.getResponseCode(),
-    body: res.getContentText()
-  });
+  const code = res.getResponseCode();
+  if (code < 200 || code >= 300) {
+    logToSheet("WARN", "replyMulti failed", {
+      status: code,
+      body: SECURITY_.truncate(res.getContentText(), 800)
+    });
+  }
+
 }
 
 /* =========================
@@ -714,24 +745,42 @@ function parsePickupDate(value) {
 
 function logToSheet(level, message, extra) {
   try {
+    const props = PropertiesService.getScriptProperties();
+    const threshold = String(props.getProperty("LOG_LEVEL") || "WARN").toUpperCase();
+    const maxRows = Number(props.getProperty("LOG_MAX_ROWS") || 2000);
+
+    const order = { DEBUG: 10, INFO: 20, WARN: 30, ERROR: 40 };
+    const lv = String(level || "INFO").toUpperCase();
+    if ((order[lv] || 20) < (order[threshold] || 30)) return;
+
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const sheet = ss.getSheetByName("ログ") || ss.insertSheet("ログ");
 
-    // ヘッダーが無ければ作る
     if (sheet.getLastRow() === 0) {
       sheet.appendRow(["timestamp", "level", "message", "extra"]);
     }
 
-    const ts = Utilities.formatDate(new Date(), "Asia/Tokyo", "yyyy-MM-dd HH:mm:ss");
-    const extraStr = (extra === undefined || extra === null)
-      ? ""
-      : (typeof extra === "string" ? extra : JSON.stringify(extra));
+    // ログ肥大化対策：一定以上なら古い行を削除（頻繁にやりすぎない）
+    if (sheet.getLastRow() > maxRows) {
+      const cache = CacheService.getScriptCache();
+      const k = "LOG_ROTATED_AT";
+      if (!cache.get(k)) {
+        const del = sheet.getLastRow() - maxRows;
+        if (del > 0) sheet.deleteRows(2, del);
+        cache.put(k, "1", 3600); // 1時間に1回まで
+      }
+    }
 
-    sheet.appendRow([ts, level, String(message || ""), extraStr]);
+    const ts = Utilities.formatDate(new Date(), "Asia/Tokyo", "yyyy-MM-dd HH:mm:ss");
+    const msg = SECURITY_.sanitizeForSheet(String(message || ""));
+    const extraStr = extra ? SECURITY_.toLogString(extra, 800) : "";
+
+    sheet.appendRow([ts, lv, msg, extraStr]);
   } catch (e) {
-    // ログに失敗しても doPost を止めない
+    // ログに失敗しても止めない
   }
 }
+
 
 function extractStartTime(pickupDateStr) {
   if (!pickupDateStr) return 24 * 60;

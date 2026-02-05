@@ -118,9 +118,23 @@ const CustomerService = {
    * 備考の保存
    */
   saveCustomerNote: function(row, note, type) {
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.SHEET.CUSTOMER_LIST);
-    const col = (type === 'kitchen') ? CONFIG.CUSTOMER_COLUMN.NOTE_COOK : CONFIG.CUSTOMER_COLUMN.NOTE_OFFICE;
-    sheet.getRange(row, col).setValue(note);
-    return "保存しました";
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.SHEET.CUSTOMER_LIST);
+
+  // kitchen / office 以外は弾く（想定外の書き込み防止）
+  if (type !== 'kitchen' && type !== 'office') return "種別が不正です";
+
+  const col = (type === 'kitchen')
+    ? CONFIG.CUSTOMER_COLUMN.NOTE_COOK
+    : CONFIG.CUSTOMER_COLUMN.NOTE_OFFICE;
+
+  // 注入対策 + 制御文字除去
+  const safe = SECURITY_.sanitizeForSheet(String(note || ""));
+
+  // 長さ制限（過剰入力・ログ爆発防止）
+  const limited = safe.length > 1000 ? safe.slice(0, 1000) : safe;
+
+  sheet.getRange(row, col).setValue(limited);
+  return "保存しました";
   }
+
 }; // ← 最後にセミコロン付きの閉じカッコが必要
