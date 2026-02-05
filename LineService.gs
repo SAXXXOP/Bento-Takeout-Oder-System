@@ -9,7 +9,12 @@ const LineService = (() => {
       ? "【予約変更を承りました】"
       : "【ご予約ありがとうございます】";
 
-    const text = buildMessage(title, reservationNo, formData, normalized);
+    let text = "";
+    try {
+      text = buildMessage(title, reservationNo, formData, normalized);
+    } catch (e) {
+      return { ok: false, reason: "build_error", error: String(e) };
+    }
 
     return pushText(formData.userId, text);
   }
@@ -43,6 +48,9 @@ const LineService = (() => {
 
     const totalPrice = Number(d.totalPrice || 0);
     const totalPriceStr = isFinite(totalPrice) ? totalPrice.toLocaleString() : "0";
+
+    const pickupInfo = String(d.pickupDate || ""); // 例: "2/14(土) / 8:30~9:30"
+    const tel = String(d.phoneNumber || "").replace(/^'/, ""); // シート用の先頭'を除去
 
     return [
       "━━━━━━━━━━━━━",

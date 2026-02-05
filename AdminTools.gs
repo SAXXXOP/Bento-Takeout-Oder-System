@@ -242,3 +242,62 @@ function auditStatusValues_() {
 
   SpreadsheetApp.getUi().alert("ステータス監査結果\n\n" + lines.join("\n"));
 }
+
+/**
+ * ★要確認一覧の定期更新トリガーをインストール（重複は自動で掃除）
+ * デフォルト：30分ごと
+ */
+function installNeedsCheckViewTrigger_() {
+  // 既存の refreshNeedsCheckView トリガーがあれば削除（重複防止）
+  deleteNeedsCheckViewTriggers_();
+
+  // 30分ごと（必要なら 10分に変更：everyMinutes(10)）
+  ScriptApp.newTrigger("refreshNeedsCheckView")
+    .timeBased()
+    .everyMinutes(30)
+    .create();
+
+  SpreadsheetApp.getUi().alert("OK：★要確認一覧の定期更新（30分ごと）を設定しました。");
+}
+
+/** ★要確認一覧の定期更新トリガーを削除 */
+function deleteNeedsCheckViewTriggers_() {
+  const triggers = ScriptApp.getProjectTriggers();
+  let deleted = 0;
+
+  triggers.forEach(t => {
+    if (t.getHandlerFunction && t.getHandlerFunction() === "refreshNeedsCheckView") {
+      ScriptApp.deleteTrigger(t);
+      deleted++;
+    }
+  });
+
+  if (deleted > 0) {
+    console.log(`Deleted refreshNeedsCheckView triggers: ${deleted}`);
+  }
+}
+
+/** トリガー一覧をログに出す（確認用） */
+function listProjectTriggers_() {
+  const triggers = ScriptApp.getProjectTriggers();
+  const lines = triggers.map(t => {
+    const fn = t.getHandlerFunction ? t.getHandlerFunction() : "";
+    const type = t.getEventType ? t.getEventType() : "";
+    return `${fn} / type=${type}`;
+  });
+  console.log(lines.join("\n"));
+  SpreadsheetApp.getUi().alert("トリガー一覧はログに出しました（表示 → ログ）。");
+}
+
+// ▼手動実行したいものだけ、末尾 _ なしのラッパーを用意する
+function installNeedsCheckViewTrigger() {
+  return installNeedsCheckViewTrigger_();
+}
+
+function deleteNeedsCheckViewTriggers() {
+  return deleteNeedsCheckViewTriggers_();
+}
+
+function listProjectTriggers() {
+  return listProjectTriggers_();
+}

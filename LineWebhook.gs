@@ -72,20 +72,6 @@ function doPost(e) {
         return;
       }
 
-      if (postData.startsWith("show_details_no:")) {
-        const orderNo = postData.split(":")[1] || "";
-        const target = findReservationForUser(userId, orderNo);
-        if (!target) {
-          replyTextOnce(replyToken, "対象が見つかりませんでした（期限切れ/変更済の可能性）。もう一度「予約を変更する」からお願いします。");
-          return;
-        }
-
-        const detailMsg =
-          `【ご注文詳細】\n予約番号: ${target.no}\n------------------\n${target.itemsFull || target.itemsShort || ""}`;
-        replyTextOnce(replyToken, detailMsg);
-        return;
-      }
-
       if (postData.startsWith("change_confirm_no:")) {
         const orderNo = postData.split(":")[1] || "";
         const target = findReservationForUser(userId, orderNo, { forceFresh: true });
@@ -208,16 +194,6 @@ function buildReservationBubble(r, index) {
             data: `change_confirm_no:${r.no}`
           }
         },
-        {
-          type: "button",
-          style: "secondary",
-          height: "sm",
-          action: {
-            type: "postback",
-            label: "詳細を確認",
-            data: `show_details_no:${r.no}`
-          }
-        }
       ]
     }
   };

@@ -65,15 +65,15 @@ STATUS: {
   // === 運用（これだけ見ればOK）===
   ACTIVE: "",              // 有効（作る・集計する）
   INVALID: "無効",         // 無効（作らない・除外）
-  NEEDS_CHECK: "★要確認", // 要確認（止めて確認）
-
-  // === 旧データ互換（過去行に残っていても壊さない）===
+  NEEDS_CHECK: "★要確認" // 要確認（止めて確認）
+},
+  /** === 旧データ互換 ===
   LEGACY_NORMAL: "通常",
   LEGACY_CHANGE_BEFORE: "変更前",
   LEGACY_CHANGE_AFTER: "変更後",
   LEGACY_CHANGED: "変更済",
   LEGACY_CANCEL: "キャンセル"
-},
+ */
 
   // 6. 「メニューマスタ」シートの列配置
   MENU_COLUMN: {
