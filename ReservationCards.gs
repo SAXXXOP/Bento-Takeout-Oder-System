@@ -1,5 +1,5 @@
 /**
- * 予約札作成（最短列優先 + 背の高い順ソート + 45行ページ境界管理版）
+ * 予約札作成（最短列優先 + 背の高い順ソート + 46行ページ境界管理版）
  * 備考欄の20文字折り返し（【要】込み・スペース無し）対応版
  */
 function createDailyReservationCards() {
@@ -69,7 +69,7 @@ function createDailyReservationCards() {
   cardsToPrint.sort((a, b) => b.height - a.height);
   cardSheet.clear().clearFormats();
   
-  const MAX_PAGE_ROWS = 45; 
+  const MAX_PAGE_ROWS = 46; 
   let columnHeights = [1, 1, 1];
   let columnPageOffsets = [0, 0, 0];
 

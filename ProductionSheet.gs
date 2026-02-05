@@ -182,7 +182,7 @@ sortedGroups.forEach(item => {
     
     sheet.getRange(tRow, tCol, 1, 2).setFontWeight("bold").setFontSize(12);
     sheet.getRange(tRow, tCol).setValue(" " + (displayNameMap[p] || p)).setFontLine("underline");
-    sheet.getRange(tRow, tCol + 1).setValue(pCount).setHorizontalAlignment("center");
+    sheet.getRange(tRow, tCol + 1).setValue(pCount).setHorizontalAlignment("center").setFontLine("underline");
     tRow++;
 
     const sortedChildren = Object.entries(children).sort((a, b) => (itemOrder[a[0]] || 999) - (itemOrder[b[0]] || 999));
