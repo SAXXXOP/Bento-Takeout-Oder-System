@@ -149,78 +149,96 @@ function createProductionSheet() {
     .setFontColor("#000000");
 
 
-  let colRows = [4, 4, 4]; 
+  const MAX_PAGE_ROWS = 46; // ReservationCards と同じページ境界（46行）
+  let columnHeights = [4, 4, 4];      // ページ内の「次に書ける行」（1-indexed）
+  let columnPageOffsets = [0, 0, 0];  // ページオフセット（0,46,92,...）
   const COL_START = [1, 4, 7];
 
-  // --- 4. 備考エリア ---
-  if (memos.length > 0) {
-    // ▼ 特別注意 は 1回だけ（A列側）
-  // 文字：A4 だけ / 枠：A4:B4
-  const memoHeaderRow = Math.min(...colRows); // 通常は 4
 
-  // 枠（A4:B4）
+  // --- 4. 備考エリア ---
+if (memos.length > 0) {
+  // ヘッダ＋最低1行分が入らないなら次ページへ（ReservationCardsと同様）
+  if (columnHeights[0] + 2 > MAX_PAGE_ROWS) {
+    advanceToNextPage_(columnHeights, columnPageOffsets, MAX_PAGE_ROWS);
+  }
+
+  // ▼ 特別注意 は 1回だけ（A列側）
+  const memoHeaderRow = columnPageOffsets[0] + columnHeights[0];
+
   sheet.getRange(memoHeaderRow, COL_START[0], 1, 2)
     .setBorder(true, true, true, true, false, false, "#000000", SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
 
-  // 文字（A4のみ）
   sheet.getRange(memoHeaderRow, COL_START[0])
     .setFontWeight("bold").setFontSize(11)
     .setValue("▼ 特別注意");
 
   // 3列すべて、本文開始行を1行下げる
-  colRows = colRows.map(r => r + 1);
-    memos.forEach(m => {
-      let idx = colRows.indexOf(Math.min(...colRows));
-      sheet.getRange(colRows[idx], COL_START[idx], 1, 2).mergeAcross().setValue(m).setFontSize(10).setFontColor("#000000").setFontWeight("bold").setWrap(true);
-      sheet.setRowHeight(colRows[idx], 35);
-      colRows[idx]++;
-    });
-    colRows = colRows.map(r => r + 1);
-  }
+  columnHeights = columnHeights.map(h => h + 1);
+
+  // memo本文（1行=1ブロック）を、最短列優先＋ページ境界で配置
+  memos.forEach(m => {
+    const slot = pickSlotWithPageBoundary_(columnHeights, columnPageOffsets, 1, 0, MAX_PAGE_ROWS);
+    const idx = slot.colIndex;
+    const r = slot.startRowAbs;
+
+    sheet.getRange(r, COL_START[idx], 1, 2)
+      .mergeAcross()
+      .setValue(m)
+      .setFontSize(10)
+      .setFontColor("#000000")
+      .setFontWeight("bold")
+      .setWrap(true);
+
+    sheet.setRowHeight(r, 35);
+
+    // 1行進める（メモは区切りの空行を入れない）
+    columnHeights[idx] = slot.startInPage + 1;
+  });
+
+  // memos の後に 1行だけ空ける（3列そろえて）
+  columnHeights = columnHeights.map(h => h + 1);
+}
+
 
   // --- 5. 高さ計算（ビンパッキング用） ---
-  const sortedGroups = Object.keys(detailTree).map(g => {
-    let h = 1; 
-    Object.keys(detailTree[g]).forEach(p => {
-      h++; 
-      const cKeys = Object.keys(detailTree[g][p]);
-      const validChildren = cKeys.filter(c => c !== p && displayNameMap[c] !== displayNameMap[p]);
-      h += validChildren.length;
-    });
-    return { name: g, height: h + 1 };
-  }).sort((a, b) => b.height - a.height);
+  const sortedGroups = Object.keys(detailTree)
+  .map(g => ({ name: g, height: calcGroupHeightForPacking_(g, detailTree, displayNameMap) }))
+  .sort((a, b) => b.height - a.height);
 
   // --- 6. 描画 ---
 sortedGroups.forEach(item => {
   const g = item.name;
-  let idx = colRows.indexOf(Math.min(...colRows));
-  let tCol = COL_START[idx];
-  let tRow = colRows[idx];
+
+  // ReservationCards と同じ：最短列優先 + 46行ページ境界
+  const slot = pickSlotWithPageBoundary_(columnHeights, columnPageOffsets, item.height, 1, MAX_PAGE_ROWS);
+  const idx = slot.colIndex;
+  const tCol = COL_START[idx];
+  let tRow = slot.startRowAbs;
+  const startInPage = slot.startInPage;
 
   const groupStartRow = tRow;
 
   sheet.getRange(tRow, tCol, 1, 2).setFontWeight("bold").setFontSize(12);
   sheet.getRange(tRow, tCol).setValue(g);
-  sheet.getRange(tRow, tCol+1).setValue(groupCounts[g]).setHorizontalAlignment("center");
-    
+  sheet.getRange(tRow, tCol + 1).setValue(groupCounts[g]).setHorizontalAlignment("center");
   tRow++;
 
   const sortedParents = Object.keys(detailTree[g]).sort((a, b) => (itemOrder[a] || 999) - (itemOrder[b] || 999));
 
   if (sortedParents.length === 1) {
-  // グループ全体枠＋見出し枠（二重）を「この時点で」確定させるなら、ここで引いて終わる
-  const groupEndRow = tRow - 1; // 見出し行を書いた直後なので、ここは見出し行
-  applyGroupOuterBorder_(sheet, groupStartRow, groupEndRow, tCol, tCol + 1);
-  applyGroupOuterBorder_(sheet, groupStartRow, groupStartRow, tCol, tCol + 1);
+    const groupEndRow = tRow - 1;
+    applyGroupOuterBorder_(sheet, groupStartRow, groupEndRow, tCol, tCol + 1);
+    applyGroupOuterBorder_(sheet, groupStartRow, groupStartRow, tCol, tCol + 1);
 
-  colRows[idx] = tRow + 1;
-  return; // ← このグループの描画をここで終える（親・子を出さない）
-}
+    const usedRows = tRow - groupStartRow; // 1
+    columnHeights[idx] = startInPage + usedRows + 1; // +1 は区切りの空行
+    return;
+  }
 
   sortedParents.forEach(p => {
     const children = detailTree[g][p];
     const pCount = Object.values(children).reduce((a, b) => a + b, 0);
-    
+
     sheet.getRange(tRow, tCol, 1, 2).setFontWeight("bold").setFontSize(12);
     sheet.getRange(tRow, tCol).setValue(" " + (displayNameMap[p] || p)).setFontLine("underline");
     sheet.getRange(tRow, tCol + 1).setValue(pCount).setHorizontalAlignment("center").setFontLine("underline");
@@ -229,9 +247,8 @@ sortedGroups.forEach(item => {
     const sortedChildren = Object.entries(children).sort((a, b) => (itemOrder[a[0]] || 999) - (itemOrder[b[0]] || 999));
 
     sortedChildren.forEach(([c, count]) => {
-      // 見出し行（自分自身）は内訳として表示しない
       if (c === p || displayNameMap[c] === displayNameMap[p]) return;
-      
+
       sheet.getRange(tRow, tCol).setValue("   " + (displayNameMap[c] || c)).setFontSize(12);
       sheet.getRange(tRow, tCol + 1).setValue(count).setFontSize(12).setFontWeight("bold").setHorizontalAlignment("center");
       tRow++;
@@ -243,8 +260,10 @@ sortedGroups.forEach(item => {
   applyGroupOuterBorder_(sheet, groupStartRow, groupEndRow, tCol, tCol + 1);
   applyGroupOuterBorder_(sheet, groupStartRow, groupStartRow, tCol, tCol + 1);
 
-  colRows[idx] = tRow + 1;
+  const usedRows = tRow - groupStartRow;
+  columnHeights[idx] = startInPage + usedRows + 1; // +1 は区切りの空行
 });
+
 
 
   [1, 4, 7].forEach(c => sheet.setColumnWidth(c, 210));
@@ -263,6 +282,82 @@ function applyGroupOuterBorder_(sheet, rowStart, rowEnd, colStart, colEnd) {
     // top, left, bottom, right, vertical, horizontal
     .setBorder(true, true, true, true, false, false, "#000000", SpreadsheetApp.BorderStyle.SOLID);
 }
+
+/**
+ * グループブロックが占有する「行数」を推定（親子レイアウトのルールはそのまま）
+ * ※createProductionSheet 内の sortedParents.length===1 の早期return挙動も反映
+ */
+function calcGroupHeightForPacking_(groupName, detailTree, displayNameMap) {
+  const parents = Object.keys(detailTree[groupName] || {});
+  if (parents.length === 1) return 1;
+
+  let h = 1; // グループ見出し
+  parents.forEach(p => {
+    h += 1; // 親行
+    const children = detailTree[groupName][p] || {};
+    const cKeys = Object.keys(children);
+    const validChildren = cKeys.filter(c => c !== p && displayNameMap[c] !== displayNameMap[p]);
+    h += validChildren.length;
+  });
+  return h;
+}
+
+/**
+ * ReservationCards と同じ考え方：最短列優先 + 46行ページ境界
+ * @param {number[]} columnHeights - ページ内の次行（1-indexed）
+ * @param {number[]} columnPageOffsets - ページオフセット（0,46,92,...）
+ * @param {number} blockHeight - 内容行数
+ * @param {number} spacerRows - ブロック後に確保したい空行（通常1、メモは0）
+ * @param {number} maxPageRows - 46
+ * @returns {{colIndex:number,startRowAbs:number,startInPage:number}}
+ */
+function pickSlotWithPageBoundary_(columnHeights, columnPageOffsets, blockHeight, spacerRows, maxPageRows) {
+  // 1ページに入り切らない巨大ブロックは、次ページ先頭に置く（はみ出しは許容）
+  if (blockHeight + spacerRows - 1 > maxPageRows) {
+    advanceToNextPage_(columnHeights, columnPageOffsets, maxPageRows);
+    return {
+      colIndex: 0,
+      startInPage: columnHeights[0],
+      startRowAbs: columnPageOffsets[0] + columnHeights[0]
+    };
+  }
+
+  let targetColIndex = -1;
+  let minHeightInPage = 999;
+
+  for (let i = 0; i < 3; i++) {
+    const endRowInPage = columnHeights[i] + blockHeight + spacerRows - 1;
+    if (endRowInPage <= maxPageRows) {
+      if (columnHeights[i] < minHeightInPage) {
+        minHeightInPage = columnHeights[i];
+        targetColIndex = i;
+      }
+    }
+  }
+
+  if (targetColIndex === -1) {
+    advanceToNextPage_(columnHeights, columnPageOffsets, maxPageRows);
+    targetColIndex = 0;
+  }
+
+  return {
+    colIndex: targetColIndex,
+    startInPage: columnHeights[targetColIndex],
+    startRowAbs: columnPageOffsets[targetColIndex] + columnHeights[targetColIndex]
+  };
+}
+
+/**
+ * 3列すべてを次ページへ進める（ReservationCards の columnPageOffsets と同じ）
+ */
+function advanceToNextPage_(columnHeights, columnPageOffsets, maxPageRows) {
+  const currentMaxOffset = Math.max(...columnPageOffsets);
+  for (let i = 0; i < 3; i++) {
+    columnPageOffsets[i] = currentMaxOffset + maxPageRows;
+    columnHeights[i] = 1;
+  }
+}
+
 
 /**
  * 入力 "2/14", "2月14日", "0214", "214", "11/1" など → {m,d} にする

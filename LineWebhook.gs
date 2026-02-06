@@ -54,9 +54,7 @@ function doPost(e) {
   if (cache.get(dedupKey)) return;
   cache.put(dedupKey, "1", 600); // 10分
 
-    // ★ここから従来処理
-    logToSheet("DEBUG", "doPost called", { len: body.length });
-
+    
     const data = JSON.parse(body);
 
     const event = data.events && data.events[0];
@@ -65,13 +63,22 @@ function doPost(e) {
     replyToken = event.replyToken;
     const userId = event.source && event.source.userId;
 
-    logToSheet("INFO", "event received", {
-      type: event.type,
-    });
+    // ★変更系postbackは“最速”でローディング開始（ログより先）
+    let postData = "";
+    if (event.type === "postback") {
+      postData = (event.postback && event.postback.data) || "";
+      if (postData.startsWith("change_confirm_no:") || postData.startsWith("change_page:")) {
+        startLoadingAnimation(userId, 10);
+      }
+    }
+
+    // ログは後回し（必要なら残す）
+    logToSheet("DEBUG", "doPost called", { len: body.length });
+    logToSheet("INFO", "event received", { type: event.type });
 
     /* postback（Flexボタン） */
     if (event.type === "postback") {
-      const postData = (event.postback && event.postback.data) || "";
+      // postData を再利用（上で取っている）
 
       if (postData === "noop") {
         replyTextOnce(replyToken, "この操作はできません。");
@@ -92,20 +99,30 @@ function doPost(e) {
       }
 
       if (postData.startsWith("change_confirm_no:")) {
-        const orderNo = postData.split(":")[1] || "";
-        const target = findReservationForUser(userId, orderNo, { forceFresh: true });
+      // ★追加：押した直後に“読み込み中”を出す（予約確認→準備完了表示までの不安対策）
+      startLoadingAnimation(userId, 10);
 
-        if (!target) {
-          replyTextOnce(replyToken, "対象が見つかりませんでした（期限切れ/変更済の可能性）。もう一度「予約を変更する」からお願いします。");
-          return;
-        }
+      const orderNo = postData.split(":")[1] || "";
 
-        const formUrl = buildPrefilledFormUrl(CONFIG.LINE.FORM.FORM_URL, userId, target.no);
-        const confirmFlex = buildConfirmFlex(target.no, target.itemsFull, formUrl);
+      // まずキャッシュ（速い）→ なければ最新（安全）
+      let target = findReservationForUser(userId, orderNo);
+      if (!target) {
+        target = findReservationForUser(userId, orderNo, { forceFresh: true });
+      }
 
-        replyFlexOnce(replyToken, confirmFlex);
+
+      if (!target) {
+        replyTextOnce(replyToken, "対象が見つかりませんでした（期限切れ/変更済の可能性）。もう一度「予約を変更する」からお願いします。");
         return;
       }
+
+      const formUrl = buildPrefilledFormUrl(CONFIG.LINE.FORM.FORM_URL, userId, target.no);
+      const confirmFlex = buildConfirmFlex(target.no, target.itemsFull, formUrl);
+
+      replyFlexOnce(replyToken, confirmFlex);
+      return;
+    }
+
 
       // 未対応のpostbackも無反応にしない
       replyTextOnce(replyToken, "操作が期限切れか未対応です。もう一度「予約を変更する」からお願いします。");
@@ -116,13 +133,15 @@ function doPost(e) {
     if (event.type === "message" && event.message && event.message.type === "text") {
       const text = (event.message.text || "").trim();
 
-      if (text === "予約を変更する") {
+        if (text === "予約を変更する") {
+        // 先に“読み込み中”を出す（ユーザーが押せたか不安にならない）
+        startLoadingAnimation(userId, 20);
+
         const list = getChangeableReservations(userId);
 
         logToSheet("DEBUG", "changeable reservations fetched", {
-        total: list.length
-      });
-
+          total: list.length
+        });
 
         if (!list.length) {
           replyTextOnce(replyToken, "変更可能な予約がありません（変更は前日20時まで）。必要な場合は店舗へご連絡ください。");
@@ -136,6 +155,8 @@ function doPost(e) {
         replyFlexOnce(replyToken, flex);
         return;
       }
+
+
 
       replyTextOnce(replyToken, `受信内容：【${text}】`);
       return;
@@ -558,6 +579,52 @@ function replyMulti(token, messages) {
   }
 
 }
+
+/**
+ * 読み込み中アニメーション（LINE chat/loading/start）
+ * chatId は 1:1 の userId を渡す
+ */
+function startLoadingAnimation(chatId, loadingSeconds) {
+  if (!chatId) return;
+
+  const token = PropertiesService.getScriptProperties().getProperty("LINE_TOKEN");
+  if (!token) {
+    logToSheet("WARN", "loading animation: missing LINE_TOKEN");
+    return;
+  }
+
+  const url = "https://api.line.me/v2/bot/chat/loading/start";
+
+  // LINE仕様：指定できる秒数が決まっている（未指定は20）
+  const allowed = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60];
+  const sec0 = Number(loadingSeconds || 20);
+  const sec = allowed.includes(sec0) ? sec0 : 20;
+
+  const payload = {
+    chatId: String(chatId),
+    loadingSeconds: sec
+  };
+
+  const res = UrlFetchApp.fetch(url, {
+    method: "post",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer " + token
+    },
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  });
+
+  const code = res.getResponseCode();
+  // 成功は 202
+  if (code !== 202) {
+    logToSheet("WARN", "loading animation failed", {
+      status: code,
+      body: SECURITY_.truncate(res.getContentText(), 800)
+    });
+  }
+}
+
 
 /* =========================
    Data: get changeable reservations
