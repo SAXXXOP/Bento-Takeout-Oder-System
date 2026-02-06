@@ -98,9 +98,26 @@ function createProductionSheet() {
 
 
     const lineId = row[CONFIG.COLUMN.LINE_ID - 1];
-    if (customerMap[lineId]) {
-      memos.push(`No.${row[CONFIG.COLUMN.ORDER_NO - 1].toString().replace("'","")} ${row[CONFIG.COLUMN.NAME - 1]}様: 【注】${customerMap[lineId]}`);
+
+    const orderNo = String(row[CONFIG.COLUMN.ORDER_NO - 1] || "").replace("'", "");
+    const name = String(row[CONFIG.COLUMN.NAME - 1] || "");
+
+    // 注文一覧F列（リクエスト）を拾う：CONFIGに無ければ 6(F列) を使用
+    const REQUEST_COL = (CONFIG.COLUMN && CONFIG.COLUMN.REQUEST) ? CONFIG.COLUMN.REQUEST : 6;
+    const request = String(row[REQUEST_COL - 1] || "").replace(/\r?\n/g, " ").trim();
+
+    // 顧客名簿の調理注意
+    const cookNote = customerMap[lineId] ? String(customerMap[lineId]).replace(/\r?\n/g, " ").trim() : "";
+
+    const parts = [];
+    if (cookNote) parts.push(`⚠ ${cookNote} ⚠`);
+    if (request) parts.push(`◆${request}`);
+    
+
+    if (parts.length > 0) {
+      memos.push(`No.${orderNo}   ${name}様 ${parts.join(" ")}`);
     }
+
 
     const itemsText = row[CONFIG.COLUMN.DETAILS - 1] || "";
     itemsText.toString().split("\n").forEach(line => {
@@ -116,6 +133,8 @@ function createProductionSheet() {
         const hitKey = Object.keys(itemToInfo).find(key => cleanName.includes(key));
         info = hitKey ? itemToInfo[hitKey] : { group: "その他", parent: "その他", child: cleanName, id: 999 };
       }
+
+
 
       const { group, parent, child } = info;
       
@@ -133,50 +152,60 @@ function createProductionSheet() {
 
   // --- 3. シート初期化 ---
   sheet.clear().clearFormats();
+
+  // 既存の結合が残っても壊れないように、A:Hは一旦全部 unmerge
+  sheet.getRange(1, 1, sheet.getMaxRows(), 8).breakApart();
+
   const displayDate = matchedDateRaw
-  ? formatMDFromDate_(matchedDateRaw)
-  : (targetMD ? `${targetMD.m}/${targetMD.d}` : targetInput);
+    ? formatMDWFromDate_(matchedDateRaw) // ★曜日付き
+    : (targetMD ? formatMDWFromMD_(targetMD) : targetInput);
 
-  sheet.getRange("A1")
-    .setValue(`【 ${displayDate} 当日まとめ 】`)
-    .setFontSize(14)
-    .setFontWeight("bold");
-
-  sheet.getRange("A2")
-    .setValue(`総数: ${totalAll}`)
-    .setFontSize(22)
-    .setFontWeight("bold")
-    .setFontColor("#000000");
-
-
-  let colRows = [4, 4, 4]; 
   const COL_START = [1, 4, 7];
 
-  // --- 4. 備考エリア ---
-  if (memos.length > 0) {
-    // ▼ 特別注意 は 1回だけ（A列側）
-  // 文字：A4 だけ / 枠：A4:B4
-  const memoHeaderRow = Math.min(...colRows); // 通常は 4
+  // --- 3.5 メモ塊（A1:H◯）を作成：日付・総数(数字のみ)・メモを全部ここへ ---
+  const MEMO_MAX_CHARS_PER_LINE = 60; // A～H 全幅想定の詰め目安
+  const packed = packIntoLines_(memos, MEMO_MAX_CHARS_PER_LINE); // メモは詰めて行数節約
 
-  // 枠（A4:B4）
-  sheet.getRange(memoHeaderRow, COL_START[0], 1, 2)
+  const headerDate = `【 ${displayDate} 】`;
+  const headerTotal = String(totalAll); // 数字のみ
+
+  const label = "===== ⚠注意  ◆リクエスト =====";
+
+  // 見た目の間隔は「全角スペース」推奨（半角スペースは環境で詰まって見えがち）
+  const gap = "　"; // 全角スペース
+  const headerLine = packed.length
+    ? `${headerDate}${gap}${headerTotal}${gap}${label}`  // ★横並び
+    : `${headerDate}${gap}${headerTotal}`;
+
+  // 2行目以降はメモ本文だけ
+  const memoText = packed.length
+    ? [headerLine, ...packed].join("\n")
+    : headerLine;
+
+
+  const memoRows = Math.max(2, estimateRowsForText_(memoText, MEMO_MAX_CHARS_PER_LINE)); // 最低2行（A1,A2）
+  const memoRange = sheet.getRange(1, 1, memoRows, 8); // A1:H{memoRows}
+
+  memoRange.merge();
+  memoRange
+    .setValue(memoText)
+    .setWrap(true)
+    .setVerticalAlignment("top")
+    .setHorizontalAlignment("left")
     .setBorder(true, true, true, true, false, false, "#000000", SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
 
-  // 文字（A4のみ）
-  sheet.getRange(memoHeaderRow, COL_START[0])
-    .setFontWeight("bold").setFontSize(11)
-    .setValue("▼ 特別注意");
+  // 行高（余白を減らしつつ、上2行だけ少し見やすく）
+  sheet.setRowHeight(1, 22);
+  sheet.setRowHeight(2, 28);
+  if (memoRows >= 3) sheet.setRowHeights(3, memoRows - 2, 18);
 
-  // 3列すべて、本文開始行を1行下げる
-  colRows = colRows.map(r => r + 1);
-    memos.forEach(m => {
-      let idx = colRows.indexOf(Math.min(...colRows));
-      sheet.getRange(colRows[idx], COL_START[idx], 1, 2).mergeAcross().setValue(m).setFontSize(10).setFontColor("#000000").setFontWeight("bold").setWrap(true);
-      sheet.setRowHeight(colRows[idx], 35);
-      colRows[idx]++;
-    });
-    colRows = colRows.map(r => r + 1);
-  }
+    memoRange.setFontSize(11).setFontWeight("bold"); // 好みで 10〜12 に
+
+
+  // --- 4. 調理品3列の開始行（上端揃え） ---
+  const baseRow = memoRows + 2; // メモ塊の下に1行あける
+  let colRows = [baseRow, baseRow, baseRow];
+
 
   // --- 5. 高さ計算（ビンパッキング用） ---
   const sortedGroups = Object.keys(detailTree).map(g => {
@@ -205,45 +234,91 @@ sortedGroups.forEach(item => {
     
   tRow++;
 
+  const dashedParentRows = []; // ★破線を付ける親行を貯める
   const sortedParents = Object.keys(detailTree[g]).sort((a, b) => (itemOrder[a] || 999) - (itemOrder[b] || 999));
 
   if (sortedParents.length === 1) {
-  // グループ全体枠＋見出し枠（二重）を「この時点で」確定させるなら、ここで引いて終わる
-  const groupEndRow = tRow - 1; // 見出し行を書いた直後なので、ここは見出し行
+  const groupEndRow = tRow - 1;
   applyGroupOuterBorder_(sheet, groupStartRow, groupEndRow, tCol, tCol + 1);
   applyGroupOuterBorder_(sheet, groupStartRow, groupStartRow, tCol, tCol + 1);
 
   colRows[idx] = tRow + 1;
-  return; // ← このグループの描画をここで終える（親・子を出さない）
+  return;
 }
+
+  const dashedBelowParentRows = []; // 親→子（親行の下）に破線を入れる親行
+  const dashedAboveParentRows = []; // 子→親（親行の上）に破線を入れる親行
+  let lastPrintedWasChild = false;  // 直前に描いた行が「子」だったか
+
 
   sortedParents.forEach(p => {
     const children = detailTree[g][p];
     const pCount = Object.values(children).reduce((a, b) => a + b, 0);
-    
+
+    // ★直前が「子」だったなら、今回の親行の“上”に破線を入れたい
+    if (lastPrintedWasChild) {
+      dashedAboveParentRows.push(tRow); // この親行の上（=親行のtop border）を後で破線にする
+    }
+
+    const parentRow = tRow; // ★親行
+    lastPrintedWasChild = false; // 親を書いた直後は「子ではない」
+
+    // 親行を描画（既存のままでOK）
     sheet.getRange(tRow, tCol, 1, 2).setFontWeight("bold").setFontSize(12);
     sheet.getRange(tRow, tCol).setValue(" " + (displayNameMap[p] || p)).setFontLine("underline");
     sheet.getRange(tRow, tCol + 1).setValue(pCount).setHorizontalAlignment("center").setFontLine("underline");
     tRow++;
 
-    const sortedChildren = Object.entries(children).sort((a, b) => (itemOrder[a[0]] || 999) - (itemOrder[b[0]] || 999));
+    const sortedChildren = Object.entries(children)
+      .sort((a, b) => (itemOrder[a[0]] || 999) - (itemOrder[b[0]] || 999));
 
+    // ★「表示される子」があるか（今までのルール通りに判定）
+    const hasVisibleChild = sortedChildren.some(([c]) => !(c === p || displayNameMap[c] === displayNameMap[p]));
+
+    // ★親の下に子があるなら「親行の下」に破線（後でまとめて引く）
+    if (hasVisibleChild) {
+      dashedBelowParentRows.push(parentRow);
+    }
+
+    // 子は今までのルール通り
     sortedChildren.forEach(([c, count]) => {
-      // 見出し行（自分自身）は内訳として表示しない
       if (c === p || displayNameMap[c] === displayNameMap[p]) return;
-      
+
       sheet.getRange(tRow, tCol).setValue("   " + (displayNameMap[c] || c)).setFontSize(12);
       sheet.getRange(tRow, tCol + 1).setValue(count).setFontSize(12).setFontWeight("bold").setHorizontalAlignment("center");
       tRow++;
+
+      lastPrintedWasChild = true; // ★最後に描いたのは子
     });
   });
+
+
 
   const groupEndRow = tRow - 1;
 
   applyGroupOuterBorder_(sheet, groupStartRow, groupEndRow, tCol, tCol + 1);
   applyGroupOuterBorder_(sheet, groupStartRow, groupStartRow, tCol, tCol + 1);
 
+  // ★外枠処理の後で破線（先にやると外枠処理で消される可能性あり）
+  dashedBelowParentRows.forEach(r => {
+    sheet.getRange(r, tCol, 1, 2)
+      .setBorder(null, null, true, null, null, null, "#000000", SpreadsheetApp.BorderStyle.DASHED);
+  });
+
+  dashedAboveParentRows.forEach(r => {
+    sheet.getRange(r, tCol, 1, 2)
+      .setBorder(true, null, null, null, null, null, "#000000", SpreadsheetApp.BorderStyle.DASHED);
+  });
+
+
+  // ★親に子が「表示される」時だけ、親行の下に破線（外枠処理の後でやる）
+  dashedParentRows.forEach(r => {
+    sheet.getRange(r, tCol, 1, 2)
+      .setBorder(null, null, true, null, null, null, "#000000", SpreadsheetApp.BorderStyle.DASHED);
+  });
+
   colRows[idx] = tRow + 1;
+
 });
 
 
@@ -290,4 +365,74 @@ function parseMonthDay_(input) {
 /** Date → "M/d"（A1表示用） */
 function formatMDFromDate_(dt) {
   return Utilities.formatDate(dt, Session.getScriptTimeZone(), "M/d");
+}
+
+function packIntoLines_(items, maxCharsPerLine) {
+  const cleaned = (items || [])
+    .map(s => String(s || "").replace(/\r?\n/g, " ").trim())
+    .filter(Boolean);
+
+  const lines = [];
+  let line = "";
+
+  cleaned.forEach(m => {
+    const tokenFirst = `・${m}`;
+    const tokenNext  = `  ／  ${m}`;
+
+    if (!line) { line = tokenFirst; return; }
+
+    if ((line + tokenNext).length <= maxCharsPerLine) {
+      line += tokenNext;
+    } else {
+      lines.push(line);
+      line = tokenFirst;
+    }
+  });
+
+  if (line) lines.push(line);
+  return lines;
+}
+
+function estimateRowsForText_(text, maxCharsPerLine) {
+  const rawLines = String(text || "").split("\n");
+  return rawLines.reduce((sum, ln) => {
+    const n = Math.max(1, Math.ceil(ln.length / Math.max(1, maxCharsPerLine)));
+    return sum + n;
+  }, 0);
+}
+
+// 任意：メモ塊の中で「日付」「総数」だけ大きくする（見た目が良い）
+function applyMemoRichText_(range, memoText, line1Len, line2Len) {
+  const titleStyle = SpreadsheetApp.newTextStyle().setBold(true).setFontSize(14).build();
+  const totalStyle = SpreadsheetApp.newTextStyle().setBold(true).setFontSize(22).build();
+  const bodyStyle  = SpreadsheetApp.newTextStyle().setBold(true).setFontSize(10).build();
+
+  const i1End = line1Len;          // 1行目終端
+  const i2Start = i1End + 1;       // 2行目開始（\nの次）
+  const i2End = i2Start + line2Len; // 2行目終端
+
+  let rt = SpreadsheetApp.newRichTextValue().setText(memoText);
+
+  rt = rt.setTextStyle(0, i1End, titleStyle);
+  rt = rt.setTextStyle(i2Start, i2End, totalStyle);
+  if (i2End + 1 <= memoText.length) {
+    rt = rt.setTextStyle(i2End + 1, memoText.length, bodyStyle);
+  }
+
+  range.setRichTextValue(rt.build());
+}
+
+function formatMDWFromDate_(dt) {
+  const md = Utilities.formatDate(dt, Session.getScriptTimeZone(), "M/d");
+  const w = ["日","月","火","水","木","金","土"][dt.getDay()];
+  return `${md} ${w}`;
+}
+
+function formatMDWFromMD_(md) {
+  // targetMD しか無い場合は「今年」として曜日を計算
+  const y = new Date().getFullYear();
+  const d = new Date(y, md.m - 1, md.d);
+  // 不正日付（2/30など）ガード
+  if (d.getMonth() + 1 !== md.m || d.getDate() !== md.d) return `${md.m}/${md.d}`;
+  return formatMDWFromDate_(d);
 }
