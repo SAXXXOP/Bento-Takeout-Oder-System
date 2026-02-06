@@ -438,13 +438,27 @@ function buildConfirmFlex(orderNo, itemsText, formUrl) {
             ]
           },
           {
-            type: "text",
-            text:
-              "※新しい内容で「再予約」をお願いします。\n送信後、古い予約（上記No）は当店にて取消処理を行いますのでご安心ください。",
-            size: "xs",
-            color: "#CC0000",
-            wrap: true
+            type: "box",
+            layout: "vertical",
+            spacing: "xs",
+            contents: [
+              {
+                type: "text",
+                text: "※新しい内容で「再予約」をお願いします。",
+                size: "xs",
+                color: "#CC0000",
+                wrap: true
+              },
+              {
+                type: "text",
+                text: "送信後、古い予約（上記No）は当店にて取消処理を行いますのでご安心ください。",
+                size: "xs",
+                color: "#000000",
+                wrap: true
+              }
+            ]
           }
+
         ]
       },
       footer: {

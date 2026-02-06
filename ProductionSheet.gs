@@ -3,11 +3,14 @@
  * 修正点：見出し用ID(10,15,21,46等)の重複排除 / ID順 / ビンパッキング
  */
 function createProductionSheet() {
+  const DEBUG_UNMATCHED_LOG = false; // ★その他が出るときなど必要なときだけ true にして原因CHECK
+
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const src = ss.getSheetByName(CONFIG.SHEET.ORDER_LIST);
   const master = ss.getSheetByName(CONFIG.SHEET.MENU_MASTER);
   const customerSheet = ss.getSheetByName(CONFIG.SHEET.CUSTOMER_LIST);
   const sheet = ss.getSheetByName(CONFIG.SHEET.DAILY_SUMMARY);
+  
   if (!src || !sheet || !master) return;
 
   const ui = SpreadsheetApp.getUi();
@@ -66,7 +69,11 @@ function createProductionSheet() {
   let totalAll = 0;
   let memos = [];
 
-  data.slice(1).forEach(row => {
+  // ★「その他」ログ用（DEBUGがtrueのときだけ使う）
+  const unmatchedMap = {};
+
+  data.slice(1).forEach((row, idx) => {
+  const sheetRow = idx + 2; // 注文一覧シート上の行番号（ヘッダ1行を考慮）
   const status = String(row[CONFIG.COLUMN.STATUS - 1] || "");
   const isActive = (status === CONFIG.STATUS.ACTIVE); // ACTIVEは空文字
   if (!isActive) return;
@@ -131,8 +138,33 @@ function createProductionSheet() {
       let info = itemToInfo[cleanName] || itemToInfo[rawName];
       if (!info) {
         const hitKey = Object.keys(itemToInfo).find(key => cleanName.includes(key));
-        info = hitKey ? itemToInfo[hitKey] : { group: "その他", parent: "その他", child: cleanName, id: 999 };
+
+        if (hitKey) {
+          info = itemToInfo[hitKey];
+        } else {
+          // ★ここが「その他」行き確定
+          if (DEBUG_UNMATCHED_LOG) {
+          const key = cleanName || rawName || "(空)";
+          if (!unmatchedMap[key]) unmatchedMap[key] = { count: 0, examples: [] };
+          unmatchedMap[key].count++;
+
+          if (unmatchedMap[key].examples.length < 3) {
+            unmatchedMap[key].examples.push({
+              sheetRow,
+              orderNo,
+              name,
+              rawName,
+              cleanName,
+              originalLine: line
+            });
+          }
+        }
+
+          info = { group: "その他", parent: "その他", child: cleanName, id: 999 };
       }
+
+    }
+
 
 
 
@@ -150,6 +182,24 @@ function createProductionSheet() {
     });
   });
 
+  // --- 2.5 「その他」ログ出力（Execution log） ---
+  if (DEBUG_UNMATCHED_LOG) {
+    const keys = Object.keys(unmatchedMap);
+    if (keys.length > 0) {
+      Logger.log("=== 未マスタ品（その他）一覧 ===");
+      keys.sort((a, b) => unmatchedMap[b].count - unmatchedMap[a].count).forEach(k => {
+        Logger.log(`・${k}  x${unmatchedMap[k].count}`);
+        unmatchedMap[k].examples.forEach(ex => {
+          Logger.log(`   例) 行${ex.sheetRow} No.${ex.orderNo} ${ex.name} / raw="${ex.rawName}" clean="${ex.cleanName}" / "${ex.originalLine}"`);
+        });
+      });
+    } else {
+      Logger.log("未マスタ品（その他）はありませんでした");
+    }
+  }
+
+
+
   // --- 3. シート初期化 ---
   sheet.clear().clearFormats();
 
@@ -163,8 +213,47 @@ function createProductionSheet() {
   const COL_START = [1, 4, 7];
 
   // --- 3.5 メモ塊（A1:H◯）を作成：日付・総数(数字のみ)・メモを全部ここへ ---
-  const MEMO_MAX_CHARS_PER_LINE = 60; // A～H 全幅想定の詰め目安
+  const MEMO_MAX_CHARS_PER_LINE = 65; // A～H 全幅想定の詰め目安
   const packed = packIntoLines_(memos, MEMO_MAX_CHARS_PER_LINE); // メモは詰めて行数節約
+
+  /**
+ * 1行が長すぎる場合、maxCharsPerLine で分割して「行を増やす」。
+ * 絵文字なども壊れにくいよう code point 単位で分割する。
+ */
+function expandLinesByCharLimit_(lines, maxCharsPerLine) {
+  const out = [];
+  const max = Math.max(1, Number(maxCharsPerLine) || 65);
+
+  (lines || []).forEach((ln) => {
+    const s = String(ln || "");
+    if (!s) return;
+
+    const isBullet = s.startsWith("・");
+    const contPrefix = isBullet ? "   " : "  "; // 継続行は少しインデント
+    const prefixLen = Array.from(contPrefix).length;
+
+    let chars = Array.from(s);
+
+    if (chars.length <= max) {
+      out.push(s);
+      return;
+    }
+
+    // 1行目
+    out.push(chars.slice(0, max).join(""));
+    chars = chars.slice(max);
+
+    // 続き（prefix込みで max に収める）
+    while (chars.length > 0) {
+      const take = Math.max(1, max - prefixLen);
+      out.push(contPrefix + chars.slice(0, take).join(""));
+      chars = chars.slice(take);
+    }
+  });
+
+  return out;
+}
+
 
   const headerDate = `【 ${displayDate} 】`;
   const headerTotal = String(totalAll); // 数字のみ
@@ -183,29 +272,51 @@ function createProductionSheet() {
     : headerLine;
 
 
-  const memoRows = Math.max(2, estimateRowsForText_(memoText, MEMO_MAX_CHARS_PER_LINE)); // 最低2行（A1,A2）
-  const memoRange = sheet.getRange(1, 1, memoRows, 8); // A1:H{memoRows}
-
-  memoRange.merge();
-  memoRange
-    .setValue(memoText)
-    .setWrap(true)
-    .setVerticalAlignment("top")
+  // --- 3.5 見出しは1行目、メモは2行目以降（縦結合はしない） ---
+  const headerRange = sheet.getRange(1, 1, 1, 8); // A1:H1
+  headerRange.merge(); // ★1行だけ横結合はOK（縦結合しない）
+  headerRange
+    .setValue(headerLine)
+    .setWrap(false)
+    .setVerticalAlignment("middle")
     .setHorizontalAlignment("left")
+    .setFontSize(11)
+    .setFontWeight("normal");
+
+  // packed（メモ行）を「長文は分割して行追加」したものにする
+  const memoLines = expandLinesByCharLimit_(packed, MEMO_MAX_CHARS_PER_LINE);
+
+  let lastMemoRow = 1; // ヘッダだけなら1
+  if (memoLines.length > 0) {
+    const memoStartRow = 2;
+    lastMemoRow = memoStartRow + memoLines.length - 1;
+
+    // 2行目〜に1行ずつ書く（各行A:Hを横結合）
+    memoLines.forEach((line, i) => {
+      const r = memoStartRow + i;
+      const rowRange = sheet.getRange(r, 1, 1, 8); // A?:H?
+      rowRange.merge();
+      rowRange
+        .setValue(line)
+        .setWrap(true)
+        .setVerticalAlignment("top")
+        .setHorizontalAlignment("left")
+        .setFontSize(11)
+        .setFontWeight("normal");
+    });
+  }
+
+  // 外枠（A1:H{lastMemoRow}）だけ太線で囲む
+  sheet.getRange(1, 1, lastMemoRow, 8)
     .setBorder(true, true, true, true, false, false, "#000000", SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
 
-  // 行高（余白を減らしつつ、上2行だけ少し見やすく）
+  // 行高（必要なら好みで調整）
   sheet.setRowHeight(1, 22);
-  sheet.setRowHeight(2, 28);
-  if (memoRows >= 3) sheet.setRowHeights(3, memoRows - 2, 18);
-
-    memoRange.setFontSize(11).setFontWeight("bold"); // 好みで 10〜12 に
-
+  if (memoLines.length > 0) sheet.setRowHeights(2, memoLines.length, 18);
 
   // --- 4. 調理品3列の開始行（上端揃え） ---
-  const baseRow = memoRows + 2; // メモ塊の下に1行あける
+  const baseRow = lastMemoRow + 2; // 見出し＋メモの下に1行あける
   let colRows = [baseRow, baseRow, baseRow];
-
 
   // --- 5. 高さ計算（ビンパッキング用） ---
   const sortedGroups = Object.keys(detailTree).map(g => {
@@ -266,7 +377,7 @@ sortedGroups.forEach(item => {
     // 親行を描画（既存のままでOK）
     sheet.getRange(tRow, tCol, 1, 2).setFontWeight("bold").setFontSize(12);
     sheet.getRange(tRow, tCol).setValue(" " + (displayNameMap[p] || p)).setFontLine("underline");
-    sheet.getRange(tRow, tCol + 1).setValue(pCount).setHorizontalAlignment("center").setFontLine("underline");
+    sheet.getRange(tRow, tCol + 1).setValue(pCount).setHorizontalAlignment("center");
     tRow++;
 
     const sortedChildren = Object.entries(children)

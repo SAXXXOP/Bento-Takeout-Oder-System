@@ -30,6 +30,13 @@ function onOpen() {
     .addItem('No指定：無効にする（理由必須）', 'markByOrderNoAsInvalid')
     .addItem('No指定：★要確認にする（理由必須）', 'markByOrderNoAsNeedsCheck')
     .addItem('No指定：理由だけ編集', 'editReasonByOrderNo')
+    
+    // ★追加：バックアップ（手動スナップショット）
+    .addSeparator()
+    .addSubMenu(
+      SpreadsheetApp.getUi().createMenu('バックアップ')
+        .addItem('手動スナップショット作成', 'createManualSnapshot')
+    )
 
     .addToUi();
 }
