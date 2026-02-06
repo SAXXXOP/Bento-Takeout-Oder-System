@@ -1,150 +1,140 @@
-/**
- * ================================
- * FormService.gs
- * フォーム回答の取得・解析
- * ================================
- */
 const FormService = {
+  parse(e) {
+    let response;
+    if (e && e.response) {
+      response = e.response;
+    } else {
+      const formUrl = SpreadsheetApp.getActiveSpreadsheet().getFormUrl();
+      response = FormApp.openByUrl(formUrl).getResponses().pop();
+    }
 
-  /**
-   * 最新のフォーム回答を取得
-   */
-  getLatestResponse(e) {
-    if (e && e.response) return e.response;
-
-    const ss = SpreadsheetApp.getActive();
-    const formUrl = ss.getFormUrl();
-    if (!formUrl) return null;
-
-    const responses = FormApp.openByUrl(formUrl).getResponses();
-    return responses.length ? responses.pop() : null;
-  },
-
-  /**
-   * フォーム回答を解析して業務用データに変換
-   */
-  parseResponse(response, menuMap) {
     const itemResponses = response.getItemResponses();
+    const formData = {
+      userId: "", userName: "", rawName: "", simpleName: "",
+      phoneNumber: "", pickupDate: "", note: "",
+      orderDetails: "", totalItems: 0, totalPrice: 0,
+      groupSummary: {}, isRegular: false
+    };
 
-    let userId = "";
-    let userName = "";
-    let phoneNumber = "";
-    let pickupDate = "";
-    let pickupTime = "";
-    let note = "";
-    let orderDetails = "";
-    let totalItems = 0;
-    let totalPrice = 0;
-    let groupSummary = {};
-    let isRegular = "";
-    let isChange = false;
+    let pickupDateObj = null;
+    let rawDate = "", rawTime = "";
 
-    for (const ir of itemResponses) {
-      const item = ir.getItem();
-      const title = item.getTitle().trim();
-      const res = ir.getResponse();
-      if (!res || res === "" || (Array.isArray(res) && res.every(v => v === null))) continue;
+    // FormService.gs（新規追加：配列/文字列を安全に文字列化）
+    function normalizeMultiAnswer_(answer) {
+      if (answer === null || answer === undefined) return "";
 
-      // --- デバッグログ（既存維持） ---
-      console.log("チェック中の項目名: [" + title + "]");
-
-      // --- 変更予約判定 ---
-      if (title.includes("元予約No")) {
-        console.log("★元予約Noを検出しました！ 値: " + res);
-        isChange = true;
-        continue;
+      // チェックボックスは配列で返る
+      if (Array.isArray(answer)) {
+        return answer
+          .map(v => sanitizeSingleLine_(v))
+          .filter(v => v !== "")
+          .join(" / "); // 区切りはお好みで
       }
 
-      // --- 基本情報 ---
-      if (title.toUpperCase().includes("LINE_ID")) {
-        userId = res;
-        continue;
-      }
-      if (title.includes("氏名")) {
-        userName = res;
-        if (title.includes("簡易")) isRegular = "常連";
-        continue;
-      }
-      if (title.includes("電話")) {
-        phoneNumber = "'" + res;
-        continue;
-      }
-      if (title.includes("受け取り希望日")) {
-        pickupDate = res;
-        continue;
-      }
-      if (title.includes("受取希望時刻")) {
-        pickupTime = res;
-        continue;
-      }
-      if (title.includes("ご要望")) {
-        note += (note ? " / " : "") + res;
-        continue;
-      }
+      // その他（記述式など）
+      return sanitizeSingleLine_(answer);
+    }
 
-      // 除外項目
-      if (
-        title.includes("ご利用されるのは") ||
-        title.includes("商品を選ぶ") ||
-        title.includes("注文を送信")
-      ) {
-        continue;
-      }
+    // 改行を除去して1行に潰す
+    function sanitizeSingleLine_(value) {
+      return String(value || "")
+        .replace(/\r\n|\n|\r/g, " ") // 改行→スペース
+        .replace(/[ \t\u00A0]+/g, " ") // 連続空白・タブ等を1つに
+        .trim();
+    }
 
-      // --- 商品集計 ---
-      if (item.getType() === FormApp.ItemType.GRID) {
-        const rows = item.asGridItem().getRows();
-        let gridDetails = "";
 
-        for (let i = 0; i < rows.length; i++) {
-          const count = Number(res[i]);
-          if (!count || isNaN(count)) continue;
+    
+    itemResponses.forEach(r => {
+      const item = r.getItem();
+      if (!item) return;
+      const title = item.getTitle() ? item.getTitle().trim() : "";
+      const answer = r.getResponse();
 
-          const childLabel = rows[i].trim();
-          const info = menuMap.children[childLabel];
+      if (title.includes(CONFIG.FORM.NAME_SHORT)) formData.simpleName = answer || "";
+      else if (title === CONFIG.FORM.NAME_FULL) formData.rawName = answer || "";
+      else if (title.includes(CONFIG.FORM.PHONE)) formData.phoneNumber = answer ? "'" + answer : "";
+      else if (title === CONFIG.FORM.PICKUP_DATE) rawDate = answer || "";
+      else if (title === CONFIG.FORM.PICKUP_TIME) rawTime = answer || "";
+      else if (title.includes(CONFIG.FORM.LINE_ID)) formData.userId = answer || "";
+      else if (title.includes(CONFIG.FORM.NOTE)) { formData.note = normalizeMultiAnswer_(answer);}
+      else if (title.includes(CONFIG.FORM.NOTE)) formData.note = answer || "";
+      else this.parseOrder(title, answer, formData);
+    });
 
-          gridDetails += `  ${childLabel} x ${count}\n`;
-          totalItems += count;
-
-          if (info) {
-            totalPrice += info.price * count;
-            groupSummary[info.group] = (groupSummary[info.group] || 0) + count;
-          }
-        }
-
-        if (gridDetails) {
-          orderDetails += `・${title}:\n${gridDetails}`;
-        }
-
-      } else {
-        const count = Number(res);
-        if (!isNaN(count) && count > 0) {
-          const info = menuMap.parents[title];
-
-          orderDetails += `・${title} x ${count}\n`;
-          totalItems += count;
-
-          if (info) {
-            totalPrice += info.price * count;
-            groupSummary[info.group] = (groupSummary[info.group] || 0) + count;
-          }
-        }
+    // --- Date生成 ---
+    if (rawDate) {
+      const m = rawDate.match(/(\d{1,2})\/(\d{1,2})/);
+      if (m) {
+        const month = Number(m[1]);
+        const day   = Number(m[2]);
+        const now = new Date();
+        let year = now.getFullYear();
+        if (now.getMonth() === 11 && month === 1) year++;
+        pickupDateObj = new Date(year, month - 1, day);
       }
     }
 
-    return {
-      userId,
-      userName,
-      phoneNumber,
-      pickupDate,
-      pickupTime,
-      note,
-      orderDetails: orderDetails.trim(),
-      totalItems,
-      totalPrice,
-      groupSummary,
-      isRegular,
-      isChange
-    };
+    // ★ 内部用 Date
+    formData.pickupDateRaw = pickupDateObj;
+
+    // 表示用（既存仕様）
+    formData.pickupDate =
+      (rawDate || rawTime) ? `${rawDate} / ${rawTime}` : "";
+
+    // ユーザー名確定
+    formData.userName = formData.simpleName || formData.rawName || "";
+
+    return formData;
+  },
+
+  parseOrder(title, answer, formData) {
+    const menuData = MenuRepository.getMenu();
+    const safeTitle = title ? String(title).trim() : "";
+    const targets = menuData.filter(m => m.parentName === safeTitle);
+    
+    if (targets.length === 0) return;
+
+    const counts = Array.isArray(answer) ? answer : String(answer).split(',');
+
+    // 【重要】マスタの何行目を参照するかを管理するポインタ
+    let masterPointer = 0;
+
+    counts.forEach((countStr, index) => {
+      if (!countStr || countStr.trim() === "") return;
+      
+      const count = parseInt(String(countStr).trim());
+      if (isNaN(count) || count <= 0) {
+        // 個数が0や空の場合は、マスタのポインタだけ進めて次の回答へ
+        // ※グリッド形式の場合、回答の並びとマスタの並びは1:1で対応しているはずなので
+        masterPointer++;
+        return;
+      }
+
+      // 参照先の項目を取得
+      let menu = targets[masterPointer];
+
+      // 【修正の核心】
+      // もし参照した項目が「親項目（小メニュー空）」だった場合、
+      // それはグリッドの選択肢（具材）ではないので、その行を飛ばして次を見る
+      while (menu && (!menu.childName || menu.childName.trim() === "") && targets.length > masterPointer + 1) {
+        masterPointer++;
+        menu = targets[masterPointer];
+      }
+
+      if (!menu) return;
+
+      const displayName = menu.shortName || (menu.childName ? `${menu.parentName}(${menu.childName})` : menu.parentName);
+      
+      formData.orderDetails += `・${displayName} x ${count}\n`;
+      formData.totalItems += count;
+      formData.totalPrice += (menu.price || 0) * count;
+      
+      const group = menu.group || "その他";
+      formData.groupSummary[group] = (formData.groupSummary[group] || 0) + count;
+
+      // この回答の処理が終わったので、次の回答のためにマスタのポインタを進める
+      masterPointer++;
+    });
   }
 };

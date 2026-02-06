@@ -1,81 +1,51 @@
-/**
- * ================================
- * ReservationService.gs
- * 予約番号・変更予約管理
- * ================================
- */
+// ReservationService.gs
+// ===============================
+// 予約番号の生成と一時データ掃除だけを担当する
+// 「予約変更かどうか」の判断は一切しない
+// ===============================
+
 const ReservationService = {
 
   /**
-   * 予約番号を発行
+   * 予約番号を生成する
+   * 形式: MMdd-連番（例: 0203-1）
    */
-  issueReservationNo() {
-    const props = PropertiesService.getScriptProperties();
-    const todayStr = Utilities.formatDate(new Date(), "JST", "MMdd");
+  create(formData) {
+    const ss = SpreadsheetApp.getActive();
+    const sheet = ss.getSheetByName("注文一覧");
+    if (!sheet) {
+      throw new Error("注文一覧シートが見つかりません");
+    }
 
-    const lastDate = props.getProperty("LAST_DATE");
-    const lastNum  = Number(props.getProperty("LAST_NUM") || 0);
+    const lastRow = sheet.getLastRow();
+    const now = new Date();
+    const prefix = Utilities.formatDate(now, "JST", "MMdd") + "-";
+    let nextNum = 1;
 
-    const dailyCount = (lastDate === todayStr) ? lastNum + 1 : 1;
+    if (lastRow > 1) {
+      const lastNo = sheet.getRange(lastRow, 2).getValue().toString();
 
-    props.setProperty("LAST_DATE", todayStr);
-    props.setProperty("LAST_NUM", dailyCount.toString());
-
-    const no = `${todayStr}-${("0" + dailyCount).slice(-2)}`;
+      // 同日の予約なら連番を引き継ぐ
+      if (lastNo.indexOf(prefix) === 0) {
+        const currentNum = parseInt(lastNo.split("-")[1], 10);
+        if (!isNaN(currentNum)) {
+          nextNum = currentNum + 1;
+        }
+      }
+    }
 
     return {
-      no,
-      isChange: false
+      no: prefix + nextNum
     };
   },
 
   /**
-   * 変更予約があれば、元予約を無効化
-   */
-  handleChangeReservation(formData) {
-    if (!formData.userId) return;
-
-    const userProps = PropertiesService.getUserProperties();
-    const json = userProps.getProperty(`CHANGE_TARGET_${formData.userId}`);
-    if (!json) return;
-
-    const changeTarget = JSON.parse(json);
-    const ss = SpreadsheetApp.getActive();
-    const sheet = ss.getSheetByName("注文一覧");
-    if (!sheet) return;
-
-    const data = sheet.getDataRange().getValues();
-
-    for (let i = 1; i < data.length; i++) {
-      if (data[i][1].toString().replace("'", "") === changeTarget.no) {
-        const row = i + 1;
-
-        // M列：変更済
-        sheet.getRange(row, 13).setValue("変更済");
-
-        // 行全体をグレーアウト
-        sheet.getRange(row, 1, 1, 14).setBackground("#cccccc");
-        break;
-      }
-    }
-  },
-
-  /**
-   * 変更元予約Noを取得
-   */
-  getChangeSourceNo(userId) {
-    if (!userId) return "";
-    const props = PropertiesService.getUserProperties();
-    const json = props.getProperty(`CHANGE_TARGET_${userId}`);
-    if (!json) return "";
-    return JSON.parse(json).no || "";
-  },
-
-  /**
-   * 一時データ削除
+   * 一時データの掃除
+   * Main.gs の finally から呼ばれる
    */
   clearTempData(userId) {
     if (!userId) return;
+
     const props = PropertiesService.getUserProperties();
     props.deleteProperty(`CHANGE_TARGET_${userId}`);
     props.deleteProperty(`CHANGE_LIST_${userId}`);

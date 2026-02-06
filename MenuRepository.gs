@@ -1,81 +1,29 @@
-/**
- * ================================
- * MenuRepository.gs
- * メニューマスタ（スプレッドシート読込）
- * ================================
- */
-const MenuRepository = (() => {
-
-  let cache = null;
-
-  function load() {
-    if (cache) return cache;
-
-    const sheet = SpreadsheetApp
-      .getActive()
-      .getSheetByName("メニューMST");
-    if (!sheet) throw new Error("メニューMST が見つかりません");
-
-    const values = sheet.getDataRange().getValues();
-    values.shift(); // ヘッダ除去
-
-    cache = {};
-
-    values.forEach(row => {
-      const key   = row[5];              // 略称（内部キー）
-      const price = Number(row[4]);      // 価格
-
-      if (!key || !price) return;
-
-      // ※ key が重複する場合は「後勝ち」
-      // （グリッド／大盛り／トッピングを優先）
-      cache[key] = {
-        price,
-        group: row[1],
-        menuName: row[2],
-        subMenu: row[3] || ""
-      };
-    });
-
-    return cache;
-  }
-
-  return {
-
-    /** 全件取得 */
-    getAll() {
-      return load();
-    },
-
-    /** キー指定取得 */
-    getByKey(key) {
-      return load()[key] || null;
-    },
-
-    /** 価格取得 */
-    getPrice(key) {
-      return load()[key]?.price || 0;
-    },
-
-    /** メニュー名取得 */
-    getMenuName(key) {
-      return load()[key]?.menuName || "";
-    },
-
-    /** グループ取得 */
-    getGroup(key) {
-      return load()[key]?.group || "";
-    },
-
-    /** 存在チェック */
-    exists(key) {
-      return key in load();
-    },
-
-    /** キャッシュクリア（マスタ変更時用） */
-    clearCache() {
-      cache = null;
+const MenuRepository = {
+  getMenu() {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName("メニューマスタ");
+    // getLastRow()を使用して、実際にデータがある最後の行まで確実に取得する
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) return [];
+    
+    // A列からF列までを明示的に指定して取得
+    const values = sheet.getRange(1, 1, lastRow, 6).getValues();
+    const data = [];
+    
+    for (let i = 1; i < values.length; i++) {
+      const row = values[i];
+      // C列(メニュー名)が空の場合はスキップ
+      if (!row[2] || row[2].toString().trim() === "") continue; 
+      
+      data.push({
+        id: row[0],         // A: ID
+        group: row[1],      // B: グループ
+        parentName: row[2], // C: メニュー名
+        childName: row[3],  // D: 小メニュー
+        price: row[4],      // E: 価格
+        shortName: row[5]   // F: 略称
+      });
     }
-  };
-
-})();
+    return data;
+  }
+};

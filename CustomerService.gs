@@ -1,118 +1,140 @@
 /**
- * ================================
- * CustomerService.gs
- * 顧客名簿管理
- * ================================
+ * 顧客管理に関連するサービス
  */
 const CustomerService = {
 
   /**
-   * 顧客名簿を更新
+   * フォーム送信時の名簿更新（CONFIG対応版）
+   * 既存顧客なら更新してtrueを返し、新規なら追加してfalseを返す
    */
-  update(userId, userName, phoneNumber, price, orderDetails, totalItems) {
-    if (!userId) return;
+  checkAndUpdateCustomer: function(formData) {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.SHEET.CUSTOMER_LIST);
+    if (!sheet) return false;
 
-    const ss = SpreadsheetApp.getActive();
-    let sheet = ss.getSheetByName("顧客名簿");
-
-    if (!sheet) {
-      sheet = ss.insertSheet("顧客名簿");
-      sheet.appendRow([
-        "LINE ID", "氏名", "電話番号", "初回来店日", "最終来店日",
-        "合計回数", "合計金額", "備考(調理)", "備考(事務)",
-        "履歴1", "履歴2", "履歴3"
-      ]);
-      sheet.setFrozenRows(1);
-    }
-
-    const data = sheet.getDataRange().getValues();
-    const today = new Date();
-    const todayStr = Utilities.formatDate(today, "JST", "MM/dd");
-
-    const summary = `${todayStr} (${totalItems}点) ${price.toLocaleString()}円`;
-    const detail = orderDetails.trim();
+    const values = sheet.getDataRange().getValues();
+    const lineId = formData.userId;
+    const phone = formData.phoneNumber;
+    const newName = formData.userName;
+    const now = new Date();
 
     let foundRow = -1;
-    for (let i = 1; i < data.length; i++) {
-      if (data[i][0] === userId) {
-        foundRow = i + 1;
-        break;
+
+    // --- ① LINE ID で検索 ---
+    if (lineId) {
+      const idIdx = CONFIG.CUSTOMER_COLUMN.LINE_ID - 1;
+      for (let i = 1; i < values.length; i++) {
+        if (values[i][idIdx] === lineId) {
+          foundRow = i + 1;
+          break;
+        }
       }
     }
 
-    if (foundRow > 0) {
-      // --- 既存顧客 ---
-      const historyRange = sheet.getRange(foundRow, 10, 1, 2);
-      const oldValues = historyRange.getValues()[0];
-      const oldNotes  = historyRange.getNotes()[0];
-
-      const rowValues = data[foundRow - 1];
-      const basicInfo = [
-        userId,
-        userName,
-        phoneNumber,
-        rowValues[3],
-        today,
-        Number(rowValues[5] || 0) + 1,
-        Number(rowValues[6] || 0) + price
-      ];
-      sheet.getRange(foundRow, 1, 1, 7).setValues([basicInfo]);
-
-      // 履歴スライド
-      sheet.getRange(foundRow, 10).setValue(summary).setNote(detail);
-      sheet.getRange(foundRow, 11).setValue(oldValues[0]).setNote(oldNotes[0]);
-      sheet.getRange(foundRow, 12).setValue(oldValues[1]).setNote(oldNotes[1]);
-
-    } else {
-      // --- 新規顧客 ---
-      sheet.appendRow([
-        userId, userName, phoneNumber,
-        today, today, 1, price,
-        "", "", summary, "", ""
-      ]);
-      sheet.getRange(sheet.getLastRow(), 10).setNote(detail);
+    // --- ② 保険：電話番号で検索（LINE IDで見つからなかった場合） ---
+    if (foundRow === -1 && phone) {
+      const telIdx = CONFIG.CUSTOMER_COLUMN.TEL - 1;
+      const searchPhone = phone.toString().replace(/'/g, "");
+      for (let i = 1; i < values.length; i++) {
+        const currentPhone = values[i][telIdx].toString().replace(/'/g, "");
+        if (currentPhone === searchPhone) {
+          foundRow = i + 1;
+          break;
+        }
+      }
     }
+
+    // === 既存顧客の更新 ===
+    if (foundRow !== -1) {
+      const row = values[foundRow - 1];
+      const oldName = row[CONFIG.CUSTOMER_COLUMN.NAME - 1];
+      const betterName = (newName && newName.length > (oldName || "").length) ? newName : oldName;
+      const currentCount = parseInt(row[CONFIG.CUSTOMER_COLUMN.VISIT_COUNT - 1]) || 0;
+      const currentTotal = parseInt(row[CONFIG.CUSTOMER_COLUMN.TOTAL_SPEND - 1]) || 0;
+
+      sheet.getRange(foundRow, CONFIG.CUSTOMER_COLUMN.LINE_ID).setValue(lineId || row[CONFIG.CUSTOMER_COLUMN.LINE_ID - 1]);
+      sheet.getRange(foundRow, CONFIG.CUSTOMER_COLUMN.NAME).setValue(betterName);
+      sheet.getRange(foundRow, CONFIG.CUSTOMER_COLUMN.LAST_VISIT).setValue(now);
+      sheet.getRange(foundRow, CONFIG.CUSTOMER_COLUMN.VISIT_COUNT).setValue(currentCount + 1);
+      sheet.getRange(foundRow, CONFIG.CUSTOMER_COLUMN.TOTAL_SPEND).setValue(currentTotal + (formData.totalPrice || 0));
+
+      return true;
+    }
+
+    // === 新規顧客の追加 ===
+    const newRow = [];
+    newRow[CONFIG.CUSTOMER_COLUMN.LINE_ID - 1] = lineId;
+    newRow[CONFIG.CUSTOMER_COLUMN.NAME - 1] = newName;
+    newRow[CONFIG.CUSTOMER_COLUMN.TEL - 1] = phone ? "'" + phone : "";
+    newRow[CONFIG.CUSTOMER_COLUMN.FIRST_VISIT - 1] = now;
+    newRow[CONFIG.CUSTOMER_COLUMN.LAST_VISIT - 1] = now;
+    newRow[CONFIG.CUSTOMER_COLUMN.VISIT_COUNT - 1] = 1;
+    newRow[CONFIG.CUSTOMER_COLUMN.TOTAL_SPEND - 1] = formData.totalPrice || 0;
+    newRow[CONFIG.CUSTOMER_COLUMN.NOTE_COOK - 1] = "";
+    newRow[CONFIG.CUSTOMER_COLUMN.NOTE_OFFICE - 1] = "";
+    newRow[CONFIG.CUSTOMER_COLUMN.HISTORY_1 - 1] = "";
+    newRow[CONFIG.CUSTOMER_COLUMN.HISTORY_2 - 1] = "";
+    newRow[CONFIG.CUSTOMER_COLUMN.HISTORY_3 - 1] = "";
+
+    sheet.appendRow(newRow);
+    return false;
   },
 
   /**
-   * 名前検索
+   * サイドバー検索（氏名・電話番号での検索）
    */
-  search(query) {
+  searchCustomers: function(query) {
     if (!query) return [];
-    const sheet = SpreadsheetApp.getActive().getSheetByName("顧客名簿");
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.SHEET.CUSTOMER_LIST);
     const data = sheet.getDataRange().getValues();
+    const results = [];
+    const nameIdx = CONFIG.CUSTOMER_COLUMN.NAME - 1;
+    const telIdx = CONFIG.CUSTOMER_COLUMN.TEL - 1;
 
-    return data.slice(1)
-      .filter(r => r[1].toString().includes(query))
-      .map(r => ({
-        row: data.indexOf(r) + 1,
-        name: r[1],
-        tel: r[2].toString()
-      }));
+    for (let i = 1; i < data.length; i++) {
+      const name = String(data[i][nameIdx] || "");
+      const tel = String(data[i][telIdx] || "");
+      if (name.includes(query) || tel.includes(query)) {
+        results.push({ name: name, tel: tel, row: i + 1 });
+      }
+    }
+    return results;
   },
 
   /**
-   * 行番号から顧客取得
+   * 選択された行の顧客情報を取得
    */
-  getByRow(row) {
-    const sheet = SpreadsheetApp.getActive().getSheetByName("顧客名簿");
-    const data = sheet.getRange(row, 1, 1, 9).getValues()[0];
-
+  getCustomerByRow: function(row) {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.SHEET.CUSTOMER_LIST);
+    const data = sheet.getRange(row, 1, 1, sheet.getLastColumn()).getValues()[0];
     return {
-      row,
-      name: data[1],
-      noteKitchen: data[7],
-      noteOffice: data[8]
+      row: row,
+      name: data[CONFIG.CUSTOMER_COLUMN.NAME - 1],
+      noteKitchen: data[CONFIG.CUSTOMER_COLUMN.NOTE_COOK - 1],
+      noteOffice: data[CONFIG.CUSTOMER_COLUMN.NOTE_OFFICE - 1]
     };
   },
 
   /**
-   * 備考保存
+   * 備考の保存
    */
-  saveNote(row, note, type) {
-    const sheet = SpreadsheetApp.getActive().getSheetByName("顧客名簿");
-    const col = (type === "kitchen") ? 8 : 9;
-    sheet.getRange(row, col).setValue(note);
-    return "保存しました！";
+  saveCustomerNote: function(row, note, type) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.SHEET.CUSTOMER_LIST);
+
+  // kitchen / office 以外は弾く（想定外の書き込み防止）
+  if (type !== 'kitchen' && type !== 'office') return "種別が不正です";
+
+  const col = (type === 'kitchen')
+    ? CONFIG.CUSTOMER_COLUMN.NOTE_COOK
+    : CONFIG.CUSTOMER_COLUMN.NOTE_OFFICE;
+
+  // 注入対策 + 制御文字除去
+  const safe = SECURITY_.sanitizeForSheet(String(note || ""));
+
+  // 長さ制限（過剰入力・ログ爆発防止）
+  const limited = safe.length > 1000 ? safe.slice(0, 1000) : safe;
+
+  sheet.getRange(row, col).setValue(limited);
+  return "保存しました";
   }
-};
+
+}; // ← 最後にセミコロン付きの閉じカッコが必要
