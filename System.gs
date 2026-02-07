@@ -38,5 +38,17 @@ function onOpen() {
         .addItem('手動スナップショット作成', 'createManualSnapshot')
     )
 
+    .addSeparator()
+    .addItem('初期設定チェック（Script Properties）', 'checkScriptProperties')
     .addToUi();
+}
+
+function checkScriptProperties() {
+  const ui = SpreadsheetApp.getUi();
+  const r = ScriptProps.validate();
+  if (r.ok) {
+    ui.alert("OK：必須の Script Properties は設定済みです。");
+  } else {
+    ui.alert("NG：未設定の Script Properties があります。\n\n- " + r.missing.join("\n- "));
+  }
 }

@@ -25,26 +25,26 @@ function backupSpreadsheetDaily() {
 
   try {
     const props = PropertiesService.getScriptProperties();
-    const folderId = String(props.getProperty("BACKUP_FOLDER_ID") || "").trim();
+    const folderId = String(props.getProperty(CONFIG.PROPS.BACKUP_FOLDER_ID) || "").trim();
     if (!folderId) {
       throw new Error("BACKUP_FOLDER_ID が未設定です（Script Properties に親フォルダIDを入れてください）。");
     }
 
     // ▼運用方針：日次60日 + 月次12ヶ月
     const dailyRetentionDays = parseInt(
-      props.getProperty("BACKUP_DAILY_RETENTION_DAYS") ||
+      props.getProperty(CONFIG.PROPS.BACKUP_DAILY_RETENTION_DAYS) ||
       props.getProperty("BACKUP_RETENTION_DAYS") || // 互換
       "60",
       10
     );
     const monthlyRetentionMonths = parseInt(
-      props.getProperty("BACKUP_MONTHLY_RETENTION_MONTHS") || "12",
+      props.getProperty(CONFIG.PROPS.BACKUP_MONTHLY_RETENTION_MONTHS) || "12",
       10
     );
 
-    const useMonthly = String(props.getProperty("BACKUP_USE_MONTHLY_FOLDER") || "1") === "1";
-    const keepDailyFolderMonths = parseInt(props.getProperty("BACKUP_DAILY_FOLDER_KEEP_MONTHS") || "3", 10);
-    const monthlyFolderName = String(props.getProperty("BACKUP_MONTHLY_FOLDER_NAME") || "MonthlySnapshots");
+    const useMonthly = String(props.getProperty(CONFIG.PROPS.BACKUP_USE_MONTHLY_FOLDER) || "1") === "1";
+    const keepDailyFolderMonths = parseInt(props.getProperty(CONFIG.PROPS.BACKUP_DAILY_FOLDER_KEEP_MONTHS) || "3", 10);
+    const monthlyFolderName = String(props.getProperty(CONFIG.PROPS.BACKUP_MONTHLY_FOLDER_NAME) || "MonthlySnapshots");
 
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     if (!ss) {
@@ -91,7 +91,7 @@ function backupSpreadsheetDaily() {
  */
 function installDailyBackupTrigger() {
   const props = PropertiesService.getScriptProperties();
-  const atHour = parseInt(props.getProperty("BACKUP_AT_HOUR") || "3", 10);
+  const atHour = parseInt(props.getProperty(CONFIG.PROPS.BACKUP_AT_HOUR) || "3", 10);
 
   deleteDailyBackupTriggers_();
 
@@ -297,7 +297,7 @@ function createManualSnapshot() {
 
   try {
     const props = PropertiesService.getScriptProperties();
-    const folderId = String(props.getProperty("BACKUP_FOLDER_ID") || "").trim();
+    const folderId = String(props.getProperty(CONFIG.PROPS.BACKUP_FOLDER_ID) || "").trim();
     if (!folderId) throw new Error("BACKUP_FOLDER_ID が未設定です。");
 
     const manualFolderName = String(props.getProperty("BACKUP_MANUAL_FOLDER_NAME") || "ManualSnapshots");
