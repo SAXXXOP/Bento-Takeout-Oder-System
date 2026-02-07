@@ -27,31 +27,26 @@ Googleフォームの予約を **スプレッドシート台帳に集約**し、
 ---
 
 ## スクリプトプロパティ（Script Properties）
-このプロジェクトは Apps Script の **スクリプトプロパティ** に設定値を保存します。  
-※セキュリティのため、README には **「キー名」だけ**を記載し、値（トークン等）は書きません。
+Apps Script の「プロジェクトの設定」→「スクリプト プロパティ」に設定します。  
+コード側では `getProperty("KEY")` 直書きを避け、`Config.gs` の `CONFIG.PROPS` 経由で参照する運用を推奨します。
 
-### 必須（最低限）
-- `LINE_TOKEN`：LINE Messaging API のチャネルアクセストークン（LINE送信・通知で使用）
+### 必須
+- `LINE_TOKEN`：LINEチャネルアクセストークン
+- `WEBHOOK_KEY`：Webhook URL の簡易認証キー（`/exec?key=...`）
+- `BACKUP_FOLDER_ID`：バックアップ保存先（親フォルダ）の Drive フォルダID
 
-### 強く推奨（セキュリティ）
-- `WEBHOOK_KEY`：Webhook の簡易認証キー（WebアプリURLに `?key=...` を付けて運用）
+### 推奨（バックアップ運用）
+- `BACKUP_DAILY_RETENTION_DAYS`：日次バックアップ保持日数（例：60）
+- `BACKUP_MONTHLY_RETENTION_MONTHS`：月次スナップショット保持月数（例：12）
+- `BACKUP_USE_MONTHLY_FOLDER`：`1`=日次を `Backups_YYYYMM` 配下へ、`0`=親直下
+- `BACKUP_DAILY_FOLDER_KEEP_MONTHS`：古い `Backups_YYYYMM` フォルダ掃除（月）
+- `BACKUP_MONTHLY_FOLDER_NAME`：月次スナップショット用フォルダ名（例：MonthlySnapshots）
+- `BACKUP_AT_HOUR`：日次バックアップの実行時刻（installDailyBackupTrigger 用、例：3）
 
-### バックアップ機能を使う場合（必須/任意）
-- `BACKUP_FOLDER_ID`（必須）：バックアップ保存先（親フォルダ）のフォルダID
+### 任意（ログ）
+- `LOG_LEVEL`：ログ出力レベル（例：WARN / INFO / DEBUG）
+- `LOG_MAX_ROWS`：ログ最大行数（例：2000）
 
-#### 追加設定（任意・未設定ならデフォルト）
-- `BACKUP_DAILY_RETENTION_DAYS`：日次を何日残すか（デフォルト 60）
-- `BACKUP_MONTHLY_RETENTION_MONTHS`：月次を何ヶ月残すか（デフォルト 12）
-- `BACKUP_USE_MONTHLY_FOLDER`：`1`=日次を `Backups_YYYYMM` に分ける（デフォルト 1）
-- `BACKUP_DAILY_FOLDER_KEEP_MONTHS`：古い `Backups_YYYYMM` フォルダ整理（月）（デフォルト 3）
-- `BACKUP_MONTHLY_FOLDER_NAME`：月次スナップショット用フォルダ名（デフォルト `MonthlySnapshots`）
-- `BACKUP_AT_HOUR`：日次バックアップトリガーの実行時刻（デフォルト 3）
-- `BACKUP_MANUAL_FOLDER_NAME`：手動スナップショット保存フォルダ名（デフォルト `ManualSnapshots`）
-
-### ログ/デバッグ（任意）
-- `LOG_LEVEL`：ログ閾値（デフォルト `WARN`）
-- `LOG_MAX_ROWS`：ログシート最大行数（デフォルト 2000）
-- `DEBUG_ORDER_SAVE`：`1`で注文保存のデバッグを有効化（開発/検証用）
 
 ### 設定場所
 Apps Script エディタ → **プロジェクトの設定** → **スクリプト プロパティ**
@@ -149,7 +144,7 @@ flowchart TD
   C --> C1["必要シート作成/命名\n注文一覧 / 顧客名簿 / メニューマスタ / 当日まとめ / 予約札 / ★要確認一覧"]
   C1 --> D["Apps Script プロジェクト作成\n（シートに紐づけ）"]
   D --> D1["Config設定（店舗用）\n・フォーム質問タイトル\n・シート名/列は原則固定"]
-  D1 --> E["スクリプトプロパティ設定\n・LINE_TOKEN\n・WEBHOOK_KEY\n・BACKUP_FOLDER_ID（バックアップ利用時）"]
+  D1 --> E["スクリプトプロパティ設定\n・LINE_TOKEN\n・WEBHOOK_KEY\n・LOG_LEVEL / LOG_MAX_ROWS\n・BACKUP_*（README.md参照）"]
   E --> F["Webアプリとしてデプロイ\n/exec を取得"]
   F --> G["Googleフォーム準備\n・新規予約フォーム\n・（任意）予約変更用フォーム"]
   G --> G1["フォームの項目/entry確認\nLINE_ID(自動入力)/元予約No/受取日/氏名/電話番号/要望"]
