@@ -16,6 +16,22 @@ function normalizeChangeMeta_(metaOrBool, oldNo) {
   };
 }
 
+function isDebugOrderSave_() {
+  return PropertiesService.getScriptProperties().getProperty("DEBUG_ORDER_SAVE") === "1";
+}
+
+function assertColumns_(colObj, keys) {
+  const bad = keys.filter(k => !Number.isFinite(Number(colObj && colObj[k])));
+  if (bad.length) {
+    logToSheet("ERROR", "CONFIG.COLUMN missing/invalid", {
+      bad,
+      snapshot: keys.reduce((o, k) => (o[k] = colObj && colObj[k], o), {})
+    });
+    throw new Error("CONFIG.COLUMN is invalid: " + bad.join(", "));
+  }
+}
+
+
 const OrderService = {
   saveOrder(reservationNo, formData, metaOrBool) {
       const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -48,8 +64,20 @@ const OrderService = {
       }
     }
 
+    // ★書き込む列を“全部”ここに集約（空行事故を防ぐ）
+    const COLS_USED = [
+      "TIMESTAMP","ORDER_NO","TEL","NAME",
+      "PICKUP_DATE","PICKUP_DATE_RAW",
+      "NOTE","DETAILS","TOTAL_COUNT","TOTAL_PRICE",
+      "LINE_ID","DAILY_SUMMARY","REGULAR_FLG",
+      "STATUS","REASON","SOURCE_NO"
+    ];
+    assertColumns_(CONFIG.COLUMN, COLS_USED);
+
+
     // 2) 新規行データ
-    const rowData = [];
+    const maxCol = Math.max(...COLS_USED.map(k => Number(CONFIG.COLUMN[k])));
+    const rowData = Array(maxCol).fill(""); // ← sparse配列事故を防ぐ
     rowData[CONFIG.COLUMN.TIMESTAMP - 1] = new Date();
     rowData[CONFIG.COLUMN.ORDER_NO - 1] = "'" + reservationNo;
     rowData[CONFIG.COLUMN.TEL - 1] = SECURITY_.sanitizeForSheet(formData.phoneNumber);
@@ -77,7 +105,43 @@ const OrderService = {
     // ★変更元予約No（oldNoは「入ってたら」保持しておく）
     rowData[CONFIG.COLUMN.SOURCE_NO - 1] = meta.oldNo ? "'" + meta.oldNo : "";
 
+    const before = sheet.getLastRow();
     sheet.appendRow(rowData);
+    const after = sheet.getLastRow();
+    if (after <= before) {
+      // 異常：増えていない（空行扱い/何かにより追加されてない）
+      logToSheet("WARN", "saveOrder: lastRow not increased", {
+        reservationNo, before, after, rowDataLen: rowData.length
+      });
+    }
+    // ★調査モードのみ：位置特定やフィルタ状態まで見る（重い）
+    if (isDebugOrderSave_()) {
+      SpreadsheetApp.flush();
+      const filter = sheet.getFilter();
+      const filterRange = filter ? filter.getRange().getA1Notation() : "";
+      const foundRow = findOrderRowByNo_(sheet, reservationNo);
+      let hiddenByFilter = null;
+      let hiddenByUser = null;
+      try {
+        if (foundRow) {
+          hiddenByFilter = sheet.isRowHiddenByFilter(foundRow);
+          hiddenByUser = sheet.isRowHiddenByUser(foundRow);
+        }
+      } catch (e) {}
+      logToSheet("INFO", "saveOrder appended(debug)", {
+        reservationNo, before, after, filterRange, foundRow,
+        hiddenByFilter, hiddenByUser, rowDataLen: rowData.length
+      });
+
+      if (!foundRow) {
+        logToSheet("ERROR", "saveOrder: reservationNo not found after appendRow", {
+          reservationNo, filterRange
+        });
+      }
+    }
+
+
+
   },
 
   updateOldReservation(sheet, oldNo, newNo) {
@@ -111,3 +175,21 @@ const OrderService = {
     }
   }
 };
+
+function findOrderRowByNo_(sheet, reservationNo) {
+  const target = String(reservationNo || "").replace(/'/g, "").trim();
+  if (!target) return null;
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return null;
+
+  const col = CONFIG.COLUMN.ORDER_NO;
+  const values = sheet.getRange(2, col, lastRow - 1, 1).getValues();
+
+  // ★後ろから探す（同じNoがあっても“最後に入ったやつ”を拾いやすい）
+  for (let i = values.length - 1; i >= 0; i--) {
+    const v = String(values[i][0] || "").replace(/^'/, "").replace(/'/g, "").trim();
+    if (v === target) return i + 2;
+  }
+  return null;
+}

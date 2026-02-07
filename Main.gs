@@ -12,13 +12,18 @@ function onFormSubmit(e) {
       return;
     }
 
+  function isDebugMain_() {
+    return PropertiesService.getScriptProperties().getProperty("DEBUG_MAIN") === "1";
+  }
+
+
     /* =========================
        1. フォーム解析
        ========================= */
     formData = FormService.parse(e);
     if (!formData) return;
 
-       logToSheet("INFO", "onFormSubmit parsed", {
+    if (isDebugMain_()) logToSheet("INFO", "onFormSubmit parsed", {
      userId: formData.userId,
      pickupDate: formData.pickupDate,
      totalItems: formData.totalItems,
@@ -103,7 +108,7 @@ function onFormSubmit(e) {
     formData.isRegular = CustomerService.checkAndUpdateCustomer(formData);
 
    
-      logToSheet("INFO", "before saveOrder", { reservationNo: reservationInfo.no });
+      if (isDebugMain_()) logToSheet("INFO", "before saveOrder", { reservationNo: reservationInfo.no });
 
 
     /* =========================
@@ -112,7 +117,7 @@ function onFormSubmit(e) {
     OrderService.saveOrder(reservationInfo.no, formData, changeMeta);
 
 
-      logToSheet("INFO", "after saveOrder", { reservationNo: reservationInfo.no });
+      if (isDebugMain_()) logToSheet("INFO", "after saveOrder", { reservationNo: reservationInfo.no });
 
 
     /* =========================
