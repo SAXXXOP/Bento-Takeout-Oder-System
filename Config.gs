@@ -49,7 +49,8 @@ const CONFIG = {
     BACKUP_MANUAL_FOLDER_NAME: "BACKUP_MANUAL_FOLDER_NAME",
 
     // Debug（任意）
-    DEBUG_MAIN: "DEBUG_MAIN"
+    DEBUG_MAIN: "DEBUG_MAIN",
+    DEBUG_ORDER_SAVE: "DEBUG_ORDER_SAVE"
   },
 
   // 3. 「注文一覧」シートの列配置

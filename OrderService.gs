@@ -17,7 +17,7 @@ function normalizeChangeMeta_(metaOrBool, oldNo) {
 }
 
 function isDebugOrderSave_() {
-  return PropertiesService.getScriptProperties().getProperty("DEBUG_ORDER_SAVE") === "1";
+  return ScriptProps.getBool(ScriptProps.KEYS.DEBUG_ORDER_SAVE, false);
 }
 
 function assertColumns_(colObj, keys) {

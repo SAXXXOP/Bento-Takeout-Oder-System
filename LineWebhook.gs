@@ -29,7 +29,6 @@ function doPost(e) {
 
   try {
   // 1) 簡易認証：URLに ?key= を必須化
-  const props = PropertiesService.getScriptProperties();
   const expectedKey = ScriptProps.get(ScriptProps.KEYS.WEBHOOK_KEY, "");
   const providedKey = (e && e.parameter && e.parameter.key) ? String(e.parameter.key) : "";
   if (expectedKey && providedKey !== expectedKey) {
