@@ -49,6 +49,10 @@ Apps Script の「プロジェクトの設定」→「スクリプト プロパ�
 ### 任意（ログ）
 - `LOG_LEVEL`：ログ出力レベル（例：WARN / INFO / DEBUG）
 - `LOG_MAX_ROWS`：ログ最大行数（例：2000）
+  
+### 任意（デバッグ）
+- `DEBUG_ORDER_SAVE`：`1` で注文保存デバッグを有効化
+- `DEBUG_MAIN`：`1` で Main のデバッグを有効化
 
 ## コーディングルール（Script Properties）
 - Script Properties の読み取りは **直アクセス禁止**：
