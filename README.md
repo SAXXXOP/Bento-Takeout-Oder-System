@@ -25,6 +25,37 @@ Googleフォームの予約を **スプレッドシート台帳に集約**し、
 - **日次バックアップ（デフォルト：日次60日＋月次12ヶ月）＋手動スナップショット**
 
 ---
+
+## スクリプトプロパティ（Script Properties）
+このプロジェクトは Apps Script の **スクリプトプロパティ** に設定値を保存します。  
+※セキュリティのため、README には **「キー名」だけ**を記載し、値（トークン等）は書きません。
+
+### 必須（最低限）
+- `LINE_TOKEN`：LINE Messaging API のチャネルアクセストークン（LINE送信・通知で使用）
+
+### 強く推奨（セキュリティ）
+- `WEBHOOK_KEY`：Webhook の簡易認証キー（WebアプリURLに `?key=...` を付けて運用）
+
+### バックアップ機能を使う場合（必須/任意）
+- `BACKUP_FOLDER_ID`（必須）：バックアップ保存先（親フォルダ）のフォルダID
+
+#### 追加設定（任意・未設定ならデフォルト）
+- `BACKUP_DAILY_RETENTION_DAYS`：日次を何日残すか（デフォルト 60）
+- `BACKUP_MONTHLY_RETENTION_MONTHS`：月次を何ヶ月残すか（デフォルト 12）
+- `BACKUP_USE_MONTHLY_FOLDER`：`1`=日次を `Backups_YYYYMM` に分ける（デフォルト 1）
+- `BACKUP_DAILY_FOLDER_KEEP_MONTHS`：古い `Backups_YYYYMM` フォルダ整理（月）（デフォルト 3）
+- `BACKUP_MONTHLY_FOLDER_NAME`：月次スナップショット用フォルダ名（デフォルト `MonthlySnapshots`）
+- `BACKUP_AT_HOUR`：日次バックアップトリガーの実行時刻（デフォルト 3）
+- `BACKUP_MANUAL_FOLDER_NAME`：手動スナップショット保存フォルダ名（デフォルト `ManualSnapshots`）
+
+### ログ/デバッグ（任意）
+- `LOG_LEVEL`：ログ閾値（デフォルト `WARN`）
+- `LOG_MAX_ROWS`：ログシート最大行数（デフォルト 2000）
+- `DEBUG_ORDER_SAVE`：`1`で注文保存のデバッグを有効化（開発/検証用）
+
+### 設定場所
+Apps Script エディタ → **プロジェクトの設定** → **スクリプト プロパティ**
+
 # 店舗運用手順書（チェックリスト）｜弁当予約（Googleフォーム × スプレッドシート × LINE）
 
 ## 0) 基本ルール（これだけ覚える）
