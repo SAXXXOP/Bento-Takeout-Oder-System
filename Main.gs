@@ -18,6 +18,13 @@ function onFormSubmit(e) {
     formData = FormService.parse(e);
     if (!formData) return;
 
+       logToSheet("INFO", "onFormSubmit parsed", {
+     userId: formData.userId,
+     pickupDate: formData.pickupDate,
+     totalItems: formData.totalItems,
+     totalPrice: formData.totalPrice
+   });
+
     /* =========================
       2. 予約変更チェック（propsレス）
       - フォームの oldReservationNo のみで判定
@@ -95,10 +102,18 @@ function onFormSubmit(e) {
        ========================= */
     formData.isRegular = CustomerService.checkAndUpdateCustomer(formData);
 
+   
+      logToSheet("INFO", "before saveOrder", { reservationNo: reservationInfo.no });
+
+
     /* =========================
        5. 注文保存
        ========================= */
     OrderService.saveOrder(reservationInfo.no, formData, changeMeta);
+
+
+      logToSheet("INFO", "after saveOrder", { reservationNo: reservationInfo.no });
+
 
     /* =========================
        6. 変更候補キャッシュ無効化（存在すれば）

@@ -18,11 +18,23 @@ function normalizeChangeMeta_(metaOrBool, oldNo) {
 
 const OrderService = {
   saveOrder(reservationNo, formData, metaOrBool) {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    if (!ss) throw new Error("アクティブなスプレッドシートが取得できません（紐づけを確認）");
-    const sheet = ss.getSheetByName(CONFIG.SHEET.ORDER_LIST);
-    if (!sheet) throw new Error("注文一覧が見つかりません: " + CONFIG.SHEET.ORDER_LIST);
+      const ss = SpreadsheetApp.getActiveSpreadsheet();
+    if (!ss) {
+      logToSheet("ERROR", "アクティブなスプレッドシートが取得できません（コンテナバインドで実行されていますか？）");
+      throw new Error("ActiveSpreadsheet is null");
+    }
 
+    const sheet = ss.getSheetByName(CONFIG.SHEET.ORDER_LIST);
+    if (!sheet) {
+      // どのファイルを見ていて、どんなシートがあるか出す（原因特定用）
+      logToSheet("ERROR", "注文一覧が見つかりません", {
+        expected: CONFIG.SHEET.ORDER_LIST,
+        ssName: ss.getName(),
+        ssId: ss.getId(),
+        sheets: ss.getSheets().map(s => s.getName()).join(", ")
+      });
+      throw new Error("注文一覧が見つかりません: " + CONFIG.SHEET.ORDER_LIST);
+    }
 
     const oldNoRaw = String(formData.oldReservationNo || "").replace(/'/g, "").trim();
     const meta = normalizeChangeMeta_(metaOrBool, oldNoRaw);
