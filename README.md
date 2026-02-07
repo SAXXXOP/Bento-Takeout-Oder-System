@@ -41,7 +41,8 @@ Apps Script の「プロジェクトの設定」→「スクリプト プロパ�
 - `BACKUP_USE_MONTHLY_FOLDER`：`1`=日次を `Backups_YYYYMM` 配下へ、`0`=親直下
 - `BACKUP_DAILY_FOLDER_KEEP_MONTHS`：古い `Backups_YYYYMM` フォルダ掃除（月）
 - `BACKUP_MONTHLY_FOLDER_NAME`：月次スナップショット用フォルダ名（例：MonthlySnapshots）
-- `BACKUP_AT_HOUR`：日次バックアップの実行時刻（installDailyBackupTrigger 用、例：3）
+ - `BACKUP_AT_HOUR`：日次バックアップの実行時刻（installDailyBackupTrigger 用、例：3）
+ - `BACKUP_MANUAL_FOLDER_NAME`：手動スナップショット用フォルダ名（例：ManualSnapshots、未設定なら既定値）
 
 ### 任意（ログ）
 - `LOG_LEVEL`：ログ出力レベル（例：WARN / INFO / DEBUG）
