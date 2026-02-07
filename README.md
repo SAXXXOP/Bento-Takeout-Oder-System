@@ -149,7 +149,7 @@ flowchart TD
   C --> C1["必要シート作成/命名\n注文一覧 / 顧客名簿 / メニューマスタ / 当日まとめ / 予約札 / ★要確認一覧"]
   C1 --> D["Apps Script プロジェクト作成\n（シートに紐づけ）"]
   D --> D1["Config設定（店舗用）\n・フォーム質問タイトル\n・シート名/列は原則固定"]
-  D1 --> E["スクリプトプロパティ設定\n・LINE_TOKEN\n・WEBHOOK_KEY"]
+  D1 --> E["スクリプトプロパティ設定\n・LINE_TOKEN\n・WEBHOOK_KEY\n・BACKUP_FOLDER_ID（バックアップ利用時）"]
   E --> F["Webアプリとしてデプロイ\n/exec を取得"]
   F --> G["Googleフォーム準備\n・新規予約フォーム\n・（任意）予約変更用フォーム"]
   G --> G1["フォームの項目/entry確認\nLINE_ID(自動入力)/元予約No/受取日/氏名/電話番号/要望"]
