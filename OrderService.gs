@@ -18,8 +18,11 @@ function normalizeChangeMeta_(metaOrBool, oldNo) {
 
 const OrderService = {
   saveOrder(reservationNo, formData, metaOrBool) {
-    const sheet = SpreadsheetApp.getActive().getSheetByName(CONFIG.SHEET.ORDER_LIST);
-    if (!sheet) return;
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    if (!ss) throw new Error("アクティブなスプレッドシートが取得できません（紐づけを確認）");
+    const sheet = ss.getSheetByName(CONFIG.SHEET.ORDER_LIST);
+    if (!sheet) throw new Error("注文一覧が見つかりません: " + CONFIG.SHEET.ORDER_LIST);
+
 
     const oldNoRaw = String(formData.oldReservationNo || "").replace(/'/g, "").trim();
     const meta = normalizeChangeMeta_(metaOrBool, oldNoRaw);

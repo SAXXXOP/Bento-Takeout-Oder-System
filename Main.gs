@@ -8,6 +8,7 @@ function onFormSubmit(e) {
     locked = lock.tryLock(20000);
     if (!locked) {
       console.warn("onFormSubmit: could not acquire lock");
+      logToSheet("WARN", "onFormSubmit: could not acquire lock");
       return;
     }
 
@@ -130,8 +131,15 @@ function onFormSubmit(e) {
       console.warn("LINE push threw:", String(err));
     }
 
-  } catch (err) {
-    console.warn("onFormSubmit error:", String(err));
+    } catch (err) {
+      console.warn("onFormSubmit error:", String(err));
+      logToSheet("ERROR", "onFormSubmit error", {
+        message: String(err),
+        stack: err && err.stack,
+        userId: formData && formData.userId,
+        oldReservationNo: formData && formData.oldReservationNo
+      });
+      throw err; // 実行履歴を失敗にして原因を追える（不要なら後で外してOK）
   } finally {
     if (locked) {
       try {
@@ -146,7 +154,8 @@ function onFormSubmit(e) {
 function getPickupDateOnlyByOrderNo(orderNo) {
   if (!orderNo) return null;
 
-  const sheet = SpreadsheetApp.getActive().getSheetByName(CONFIG.SHEET.ORDER_LIST);
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss && ss.getSheetByName(CONFIG.SHEET.ORDER_LIST);
   if (!sheet) return null;
 
   const lastRow = sheet.getLastRow();
