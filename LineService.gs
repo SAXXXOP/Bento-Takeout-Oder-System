@@ -71,7 +71,7 @@ const LineService = (() => {
   }
 
   function pushText(toUserId, text) {
-    const token = PropertiesService.getScriptProperties().getProperty(CONFIG.PROPS.LINE_TOKEN);
+    const token = ScriptProps.get(ScriptProps.KEYS.LINE_TOKEN);
     if (!token) return { ok: false, reason: "missing_LINE_TOKEN" };
 
     const url = "https://api.line.me/v2/bot/message/push";

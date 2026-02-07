@@ -24,27 +24,21 @@ function backupSpreadsheetDaily() {
   if (!lock.tryLock(30 * 1000)) return;
 
   try {
-    const props = PropertiesService.getScriptProperties();
-    const folderId = String(props.getProperty(CONFIG.PROPS.BACKUP_FOLDER_ID) || "").trim();
+    const folderId = String(ScriptProps.get(ScriptProps.KEYS.BACKUP_FOLDER_ID, "")).trim();
     if (!folderId) {
       throw new Error("BACKUP_FOLDER_ID が未設定です（Script Properties に親フォルダIDを入れてください）。");
     }
 
     // ▼運用方針：日次60日 + 月次12ヶ月
-    const dailyRetentionDays = parseInt(
-      props.getProperty(CONFIG.PROPS.BACKUP_DAILY_RETENTION_DAYS) ||
-      props.getProperty("BACKUP_RETENTION_DAYS") || // 互換
-      "60",
-      10
+    const dailyRetentionDays = ScriptProps.getInt(
+      ScriptProps.KEYS.BACKUP_DAILY_RETENTION_DAYS,
+      ScriptProps.getInt(ScriptProps.KEYS.BACKUP_RETENTION_DAYS, 60) // 互換
     );
-    const monthlyRetentionMonths = parseInt(
-      props.getProperty(CONFIG.PROPS.BACKUP_MONTHLY_RETENTION_MONTHS) || "12",
-      10
-    );
+    const monthlyRetentionMonths = ScriptProps.getInt(ScriptProps.KEYS.BACKUP_MONTHLY_RETENTION_MONTHS, 12);
 
-    const useMonthly = String(props.getProperty(CONFIG.PROPS.BACKUP_USE_MONTHLY_FOLDER) || "1") === "1";
-    const keepDailyFolderMonths = parseInt(props.getProperty(CONFIG.PROPS.BACKUP_DAILY_FOLDER_KEEP_MONTHS) || "3", 10);
-    const monthlyFolderName = String(props.getProperty(CONFIG.PROPS.BACKUP_MONTHLY_FOLDER_NAME) || "MonthlySnapshots");
+    const useMonthly = ScriptProps.getBool(ScriptProps.KEYS.BACKUP_USE_MONTHLY_FOLDER, true);
+    const keepDailyFolderMonths = ScriptProps.getInt(ScriptProps.KEYS.BACKUP_DAILY_FOLDER_KEEP_MONTHS, 3);
+    const monthlyFolderName = String(ScriptProps.get(ScriptProps.KEYS.BACKUP_MONTHLY_FOLDER_NAME, "MonthlySnapshots"));
 
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     if (!ss) {
@@ -90,8 +84,7 @@ function backupSpreadsheetDaily() {
  * 毎日バックアップのトリガーを設定（重複は削除）
  */
 function installDailyBackupTrigger() {
-  const props = PropertiesService.getScriptProperties();
-  const atHour = parseInt(props.getProperty(CONFIG.PROPS.BACKUP_AT_HOUR) || "3", 10);
+  const atHour = ScriptProps.getInt(ScriptProps.KEYS.BACKUP_AT_HOUR, 3);
 
   deleteDailyBackupTriggers_();
 
@@ -296,11 +289,8 @@ function createManualSnapshot() {
   if (!lock.tryLock(30 * 1000)) return;
 
   try {
-    const props = PropertiesService.getScriptProperties();
-    const folderId = String(props.getProperty(CONFIG.PROPS.BACKUP_FOLDER_ID) || "").trim();
-    if (!folderId) throw new Error("BACKUP_FOLDER_ID が未設定です。");
-
-    const manualFolderName = String(props.getProperty(CONFIG.PROPS.BACKUP_MANUAL_FOLDER_NAME) || "ManualSnapshots");
+    const folderId = String(ScriptProps.get(ScriptProps.KEYS.BACKUP_FOLDER_ID, "")).trim();
+    const manualFolderName = String(ScriptProps.get(ScriptProps.KEYS.BACKUP_MANUAL_FOLDER_NAME, "ManualSnapshots")).trim();
 
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     if (!ss) throw new Error("アクティブなスプレッドシートが取得できません（コンテナバインドで実行してください）。");

@@ -9,7 +9,9 @@ const ScriptProps = (() => {
     LOG_MAX_ROWS: CONFIG.PROPS.LOG_MAX_ROWS,
 
     // debug
-    DEBUG_ORDER_SAVE: "DEBUG_ORDER_SAVE",
+    DEBUG_ORDER_SAVE: CONFIG.PROPS.DEBUG_ORDER_SAVE,
+    // optional debug flags
+    DEBUG_MAIN: CONFIG.PROPS.DEBUG_MAIN,
 
     // backup
     BACKUP_FOLDER_ID: CONFIG.PROPS.BACKUP_FOLDER_ID,
@@ -24,7 +26,37 @@ const ScriptProps = (() => {
   };
 
   function props_() {
-    return PropertiesService.getScriptProperties();
+    // 直アクセス撲滅：ScriptProperties は ScriptProps 内でのみ参照し、
+    // 取得はキャッシュを介して統一する（読み取り頻度が高いので少しだけ最適化）
+    const cache = CacheService.getScriptCache();
+    const key = "SCRIPT_PROPS_CACHE_V1";
+
+    const cached = cache.get(key);
+    if (cached) {
+      try {
+        const obj = JSON.parse(cached);
+        // getProperty互換の薄いラッパを返す
+        return {
+          getProperty: (k) => (k in obj ? String(obj[k]) : null),
+        };
+      } catch (e) {
+        // キャッシュ破損時はフォールバック
+      }
+    }
+
+    // ※ここが唯一の「実体アクセス」だが、ルール上は ScriptProps 内だけに閉じる
+    const props = PropertiesService.getScriptProperties();
+    const all = props.getProperties(); // 全取得
+    cache.put(key, JSON.stringify(all), 300); // 5分キャッシュ
+
+    return {
+      getProperty: (k) => props.getProperty(k),
+    };
+  }
+
+  // 必要に応じて手動でキャッシュをクリアできるように（任意）
+  function clearScriptPropsCache_() {
+    CacheService.getScriptCache().remove("SCRIPT_PROPS_CACHE_V1");
   }
 
   function get(key, defaultValue = "") {
@@ -44,10 +76,10 @@ const ScriptProps = (() => {
 
   function validate() {
     // コア動作の必須：まずは最小限に
-    const required = [KEYS.LINE_TOKEN];
+    const required = [KEYS.LINE_TOKEN, KEYS.WEBHOOK_KEY];
     const missing = required.filter(k => !get(k));
     return { ok: missing.length === 0, missing };
   }
 
-  return { KEYS, get, getInt, getBool, validate };
+  return { KEYS, get, getInt, getBool, validate, clearCache: clearScriptPropsCache_ };
 })();
