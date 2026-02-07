@@ -92,15 +92,21 @@ const OrderService = {
     rowData[CONFIG.COLUMN.DAILY_SUMMARY - 1] = "";
     rowData[CONFIG.COLUMN.REGULAR_FLG - 1] = formData.isRegular ? "常連" : "";
 
-    // ★B案：新規行は基本「有効＝空欄」
-    rowData[CONFIG.COLUMN.STATUS - 1] =
-      (meta.changeRequested && !meta.isChange) ? CONFIG.STATUS.NEEDS_CHECK : CONFIG.STATUS.ACTIVE;
+    const needsCheck =
+      (meta.changeRequested && !meta.isChange) ||
+      (!!meta.needsCheckReason && String(meta.needsCheckReason).trim());
 
-    // ★理由列：要確認のときだけ入れる（運用しやすい）
-    rowData[CONFIG.COLUMN.REASON - 1] =
-      (meta.changeRequested && !meta.isChange)
-        ? ("予約変更希望だが新規扱い：" + (meta.changeFailReason || "要確認"))
-        : "";
+    rowData[CONFIG.COLUMN.STATUS - 1] = needsCheck ? CONFIG.STATUS.NEEDS_CHECK : CONFIG.STATUS.ACTIVE;
+
+    rowData[CONFIG.COLUMN.REASON - 1] = needsCheck
+      ? [
+          (meta.changeRequested && !meta.isChange)
+            ? ("予約変更希望だが新規扱い：" + (meta.changeFailReason || "要確認"))
+            : "",
+          (meta.needsCheckReason || "")
+        ].filter(Boolean).join(" / ")
+      : "";
+
 
     // ★変更元予約No（oldNoは「入ってたら」保持しておく）
     rowData[CONFIG.COLUMN.SOURCE_NO - 1] = meta.oldNo ? "'" + meta.oldNo : "";

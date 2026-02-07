@@ -12,6 +12,7 @@ const FormService = {
     const formData = {
       userId: "", userName: "", rawName: "", simpleName: "",
       phoneNumber: "", pickupDate: "", note: "",
+      oldReservationNo: "",
       orderDetails: "", totalItems: 0, totalPrice: 0,
       groupSummary: {}, isRegular: false
     };
@@ -54,11 +55,11 @@ const FormService = {
       if (title.includes(CONFIG.FORM.NAME_SHORT)) formData.simpleName = answer || "";
       else if (title === CONFIG.FORM.NAME_FULL) formData.rawName = answer || "";
       else if (title.includes(CONFIG.FORM.PHONE)) formData.phoneNumber = answer ? "'" + answer : "";
+      else if (title.includes(CONFIG.FORM.OLD_RESERVATION_NO)) formData.oldReservationNo = answer || ""; // ★追加
       else if (title === CONFIG.FORM.PICKUP_DATE) rawDate = answer || "";
       else if (title === CONFIG.FORM.PICKUP_TIME) rawTime = answer || "";
       else if (title.includes(CONFIG.FORM.LINE_ID)) formData.userId = answer || "";
       else if (title.includes(CONFIG.FORM.NOTE)) { formData.note = normalizeMultiAnswer_(answer);}
-      else if (title.includes(CONFIG.FORM.NOTE)) formData.note = answer || "";
       else this.parseOrder(title, answer, formData);
     });
 

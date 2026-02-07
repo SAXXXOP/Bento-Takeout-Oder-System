@@ -38,6 +38,17 @@ function onOpen() {
         .addItem('手動スナップショット作成', 'createManualSnapshot')
     )
 
+    // ★追加：導入ツール（安全な本番初期化）
+    .addSeparator()
+    .addSubMenu(
+      SpreadsheetApp.getUi().createMenu('導入ツール')
+        .addItem('本番初期化（テストデータ削除）', 'initProductionCleanSheetOnly')
+        .addItem('本番初期化（＋フォーム回答も削除）', 'initProductionCleanWithFormResponses')
+        .addSeparator()
+        .addItem('フォーム送信トリガー設定', 'installFormSubmitTrigger')
+        .addItem('フォーム送信トリガー削除', 'deleteFormSubmitTrigger')
+    )
+
     .addSeparator()
     .addItem('初期設定チェック（Script Properties）', 'checkScriptProperties')
     .addToUi();
