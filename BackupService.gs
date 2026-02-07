@@ -300,7 +300,7 @@ function createManualSnapshot() {
     const folderId = String(props.getProperty(CONFIG.PROPS.BACKUP_FOLDER_ID) || "").trim();
     if (!folderId) throw new Error("BACKUP_FOLDER_ID が未設定です。");
 
-    const manualFolderName = String(props.getProperty("BACKUP_MANUAL_FOLDER_NAME") || "ManualSnapshots");
+    const manualFolderName = String(props.getProperty(CONFIG.PROPS.BACKUP_MANUAL_FOLDER_NAME) || "ManualSnapshots");
 
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     if (!ss) throw new Error("アクティブなスプレッドシートが取得できません（コンテナバインドで実行してください）。");

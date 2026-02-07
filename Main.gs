@@ -13,7 +13,7 @@ function onFormSubmit(e) {
     }
 
   function isDebugMain_() {
-    return PropertiesService.getScriptProperties().getProperty("DEBUG_MAIN") === "1";
+    return PropertiesService.getScriptProperties().getProperty(CONFIG.PROPS.DEBUG_MAIN) === "1";
   }
 
 
