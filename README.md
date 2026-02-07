@@ -28,7 +28,9 @@ Googleフォームの予約を **スプレッドシート台帳に集約**し、
 
 ## スクリプトプロパティ（Script Properties）
 Apps Script の「プロジェクトの設定」→「スクリプト プロパティ」に設定します。  
-コード側では `getProperty("KEY")` 直書きを避け、`Config.gs` の `CONFIG.PROPS` 経由で参照する運用を推奨します。
+コード側では `PropertiesService.getScriptProperties()` の直アクセスや `getProperty("KEY")` 直書きを避け、
+`ScriptProps.get(ScriptProps.KEYS.XXX)`（数値は `getInt` / 真偽は `getBool`）で参照します。
+キー名一覧は `Config.gs` の `CONFIG.PROPS` に集約しています。
 
 ### 必須
 - `LINE_TOKEN`：LINEチャネルアクセストークン
@@ -48,6 +50,11 @@ Apps Script の「プロジェクトの設定」→「スクリプト プロパ�
 - `LOG_LEVEL`：ログ出力レベル（例：WARN / INFO / DEBUG）
 - `LOG_MAX_ROWS`：ログ最大行数（例：2000）
 
+## コーディングルール（Script Properties）
+- Script Properties の読み取りは **直アクセス禁止**：
+  - ❌ `PropertiesService.getScriptProperties().getProperty(...)`
+  - ✅ `ScriptProps.get(...) / getInt(...) / getBool(...)`
+- キー名は `CONFIG.PROPS.*`（または `ScriptProps.KEYS.*`）を使う
 
 ### 設定場所
 Apps Script エディタ → **プロジェクトの設定** → **スクリプト プロパティ**
