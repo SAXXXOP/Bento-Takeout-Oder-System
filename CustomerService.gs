@@ -86,8 +86,24 @@ const CustomerService = {
 
       sheet.getRange(foundRow, CONFIG.CUSTOMER_COLUMN.NAME).setValue(nameToWrite);
       sheet.getRange(foundRow, CONFIG.CUSTOMER_COLUMN.LAST_VISIT).setValue(now);
+
+      // ★追加：現状値を行から取得（空・文字列でも0扱いにする）
+      const currentCount = (() => {
+        const n = parseInt(String(row[CONFIG.CUSTOMER_COLUMN.VISIT_COUNT - 1] || "0").replace(/,/g, ""), 10);
+        return Number.isFinite(n) ? n : 0;
+      })();
+      const currentTotal = (() => {
+        const n = Number(String(row[CONFIG.CUSTOMER_COLUMN.TOTAL_SPEND - 1] || "0").replace(/,/g, ""));
+        return Number.isFinite(n) ? n : 0;
+      })();
+      const addTotal = (() => {
+        const n = Number(String(formData.totalPrice || 0).replace(/,/g, ""));
+        return Number.isFinite(n) ? n : 0;
+      })();
+
       sheet.getRange(foundRow, CONFIG.CUSTOMER_COLUMN.VISIT_COUNT).setValue(currentCount + 1);
       sheet.getRange(foundRow, CONFIG.CUSTOMER_COLUMN.TOTAL_SPEND).setValue(currentTotal + (formData.totalPrice || 0));
+
 
       return true;
     }
