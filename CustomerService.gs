@@ -199,3 +199,71 @@ function appendNameConflictLog_(ss, data) {
     SECURITY_.sanitizeForSheet(String(data.newName || ""))
   ]);
 }
+
+// ===== 氏名不一致ログ：CustomerService側（書き込み担当） =====
+
+function normalizeCustomerName_(name) {
+  let s = String(name || "");
+  try { s = s.normalize("NFKC"); } catch (e) {}
+  // 空白・全角空白・改行などを除去して比較しやすく
+  return s.trim().replace(/[\s\u3000]+/g, "");
+}
+
+function getOrCreateNameConflictLogSheet_(ss) {
+  const sheetName = CONFIG.SHEET.NAME_CONFLICT_LOG;
+  let sh = ss.getSheetByName(sheetName);
+  if (!sh) sh = ss.insertSheet(sheetName);
+
+  // ヘッダ（増減に強く：無ければ末尾に追加）
+  const required = [
+    "状態", "発生日時", "予約No",
+    "LINE_ID", "電話",
+    "旧氏名", "新氏名",
+    "理由",
+    "処理者", "処理日時", "メモ"
+  ];
+
+  const lastCol = Math.max(1, sh.getLastColumn());
+  const header = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(x => String(x || "").trim());
+  const existing = new Set(header.filter(Boolean));
+
+  // シートが完全に空っぽ/ヘッダ未作成の場合
+  if (sh.getLastRow() === 0 || header.every(v => !v)) {
+    sh.getRange(1, 1, 1, required.length).setValues([required]);
+    return sh;
+  }
+
+  // 不足分を末尾に足す
+  const toAdd = required.filter(h => !existing.has(h));
+  if (toAdd.length) {
+    sh.getRange(1, header.length + 1, 1, toAdd.length).setValues([toAdd]);
+  }
+
+  return sh;
+}
+
+function appendNameConflictLog_(ss, payload) {
+  const sh = getOrCreateNameConflictLogSheet_(ss);
+
+  const lastCol = Math.max(1, sh.getLastColumn());
+  const header = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(x => String(x || "").trim());
+  const col = {};
+  header.forEach((h, i) => { if (h) col[h] = i + 1; });
+
+  const row = Array(lastCol).fill("");
+
+  // 必ず “未処理(PENDING)”
+  row[(col["状態"] || 1) - 1] = "PENDING";
+
+  const ts = payload.ts || new Date();
+  if (col["発生日時"]) row[col["発生日時"] - 1] = ts;
+
+  if (col["予約No"]) row[col["予約No"] - 1] = payload.orderNo ? "'" + String(payload.orderNo) : "";
+  if (col["LINE_ID"]) row[col["LINE_ID"] - 1] = SECURITY_.sanitizeForSheet(payload.lineId || "");
+  if (col["電話"]) row[col["電話"] - 1] = SECURITY_.sanitizeForSheet(payload.phone || "");
+  if (col["旧氏名"]) row[col["旧氏名"] - 1] = SECURITY_.sanitizeForSheet(payload.oldName || "");
+  if (col["新氏名"]) row[col["新氏名"] - 1] = SECURITY_.sanitizeForSheet(payload.newName || "");
+  if (col["理由"]) row[col["理由"] - 1] = SECURITY_.sanitizeForSheet(payload.reason || "");
+
+  sh.appendRow(row);
+}
