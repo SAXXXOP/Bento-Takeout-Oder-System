@@ -76,7 +76,7 @@ const OrderService = {
 
 
     // 2) 新規行データ
-    const maxCol = Math.max(...COLS_USED.map(k => Number(CONFIG.COLUMN[k])));
+    const maxCol = Math.max(1, ...COLS_USED.map(k => Number(CONFIG.COLUMN[k])));
     const rowData = Array(maxCol).fill(""); // ← sparse配列事故を防ぐ
     rowData[CONFIG.COLUMN.TIMESTAMP - 1] = new Date();
     rowData[CONFIG.COLUMN.ORDER_NO - 1] = "'" + reservationNo;

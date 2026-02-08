@@ -3,7 +3,7 @@
  * テンプレ配布用：Script Properties の「キーを作り直す」「値をダミー化する」
  */
 
-const TEMPLATE_PROPS_ = (() => {
+function getTemplatePropsDefaults_() {
   // 推奨値の例（READMEの推奨値をベース）
   const defaults = {
     // 必須（テンプレではダミーにして未設定扱いにする）
@@ -36,7 +36,7 @@ const TEMPLATE_PROPS_ = (() => {
   defaults["LOG_MAX"] = defaults[CONFIG.PROPS.LOG_MAX_ROWS];
 
   return { defaults };
-})();
+}
 
 /**
  * テンプレ用：未設定のキーだけ作成（既存値は触らない）
@@ -45,10 +45,15 @@ function ensureTemplateScriptProperties() {
   const cur = PropertiesService.getScriptProperties().getProperties();
   const toSet = {};
 
-  Object.keys(TEMPLATE_PROPS_.defaults).forEach(k => {
+  function ensureTemplateScriptProperties() {
+  const defaults = getTemplatePropsDefaults_();
+  const cur = PropertiesService.getScriptProperties().getProperties();
+  const toSet = {};
+
+  Object.keys(defaults).forEach(k => {
     const v = (k in cur) ? String(cur[k] ?? "") : "";
     if (!v.trim()) {
-      toSet[k] = TEMPLATE_PROPS_.defaults[k];
+      toSet[k] = defaults[k];
     }
   });
 
@@ -56,13 +61,12 @@ function ensureTemplateScriptProperties() {
   SpreadsheetApp.getUi().alert(
     "OK：テンプレ用 Script Properties を作成しました（未設定のみ）。\n\n作成/更新数: " + Object.keys(toSet).length
   );
+  }
 }
 
-/**
- * テンプレ用：全キーをダミー値で上書き（テンプレ化）
- */
 function overwriteTemplateScriptProperties() {
-  ScriptProps.setMany(TEMPLATE_PROPS_.defaults);
+  const defaults = getTemplatePropsDefaults_();
+  ScriptProps.setMany(defaults);
   SpreadsheetApp.getUi().alert(
     "OK：テンプレ用 Script Properties を上書きしました（全部ダミー）。"
   );
