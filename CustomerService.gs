@@ -16,6 +16,8 @@ const CustomerService = {
     const phone = formData.phoneNumber;
     const newName = formData.userName;
     const now = new Date();
+    const pickupDate = getPickupDateForHistory_(formData, now);
+
 
     let foundRow = -1;
 
@@ -88,7 +90,7 @@ const CustomerService = {
         .setValue(lineId || row[CONFIG.CUSTOMER_COLUMN.LINE_ID - 1]);
 
       sheet.getRange(foundRow, CONFIG.CUSTOMER_COLUMN.NAME).setValue(nameToWrite);
-      sheet.getRange(foundRow, CONFIG.CUSTOMER_COLUMN.LAST_VISIT).setValue(now);
+      sheet.getRange(foundRow, CONFIG.CUSTOMER_COLUMN.LAST_VISIT).setValue(pickupDate);
 
       // ★追加：現状値を行から取得（空・文字列でも0扱いにする）
       const currentCount = (() => {
@@ -107,6 +109,11 @@ const CustomerService = {
       sheet.getRange(foundRow, CONFIG.CUSTOMER_COLUMN.VISIT_COUNT).setValue(currentCount + 1);
       sheet.getRange(foundRow, CONFIG.CUSTOMER_COLUMN.TOTAL_SPEND).setValue(currentTotal + (formData.totalPrice || 0));
 
+      
+      // ★追加：履歴1-3を更新（最新→履歴1、既存履歴1→履歴2…）
+      const historyEntry = buildCustomerHistoryEntry_(formData, pickupDate);
+      shiftCustomerHistory_(sheet, foundRow, historyEntry);
+
 
       return true;
     }
@@ -117,13 +124,13 @@ const CustomerService = {
     newRow[CONFIG.CUSTOMER_COLUMN.LINE_ID - 1] = lineId;
     newRow[CONFIG.CUSTOMER_COLUMN.NAME - 1] = newName;
     newRow[CONFIG.CUSTOMER_COLUMN.TEL - 1] = phone ? "'" + phone : "";
-    newRow[CONFIG.CUSTOMER_COLUMN.FIRST_VISIT - 1] = now;
-    newRow[CONFIG.CUSTOMER_COLUMN.LAST_VISIT - 1] = now;
+    newRow[CONFIG.CUSTOMER_COLUMN.FIRST_VISIT - 1] = pickupDate;
+    newRow[CONFIG.CUSTOMER_COLUMN.LAST_VISIT - 1] = pickupDate;
     newRow[CONFIG.CUSTOMER_COLUMN.VISIT_COUNT - 1] = 1;
     newRow[CONFIG.CUSTOMER_COLUMN.TOTAL_SPEND - 1] = formData.totalPrice || 0;
     newRow[CONFIG.CUSTOMER_COLUMN.NOTE_COOK - 1] = "";
     newRow[CONFIG.CUSTOMER_COLUMN.NOTE_OFFICE - 1] = "";
-    newRow[CONFIG.CUSTOMER_COLUMN.HISTORY_1 - 1] = "";
+    newRow[CONFIG.CUSTOMER_COLUMN.HISTORY_1 - 1] = buildCustomerHistoryEntry_(formData, pickupDate);
     newRow[CONFIG.CUSTOMER_COLUMN.HISTORY_2 - 1] = "";
     newRow[CONFIG.CUSTOMER_COLUMN.HISTORY_3 - 1] = "";
 
@@ -325,4 +332,107 @@ function appendNameConflictLog_(ss, payload) {
   if (col["理由"]) row[col["理由"] - 1] = SECURITY_.sanitizeForSheet(payload.reason || "");
 
   sh.appendRow(row);
+}
+
+
+function getPickupDateForHistory_(formData, fallbackNow) {
+  const now = fallbackNow || new Date();
+
+  // ① 最優先：FormService.parse が入れる Date（pickupDateRaw）
+  const d0 = formData && formData.pickupDateRaw;
+  if (d0 instanceof Date && !isNaN(d0.getTime())) {
+    const d = new Date(d0);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+
+  // ② 保険：表示文字列 "M/D / ..." から月日だけ拾う
+  const s = formData && formData.pickupDate ? String(formData.pickupDate) : "";
+  const m = s.match(/(\d{1,2})\s*\/\s*(\d{1,2})/);
+  if (m) {
+    const month = Number(m[1]);
+    const day = Number(m[2]);
+
+    // 年跨ぎ（12月に1月を選ぶケース）だけ補正
+    let year = now.getFullYear();
+    if (now.getMonth() === 11 && month === 1) year++;
+
+    const d = new Date(year, month - 1, day);
+    d.setHours(0, 0, 0, 0);
+    if (!isNaN(d.getTime())) return d;
+  }
+
+  // ③ どうしても取れないときは送信日
+  const d = new Date(now);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+
+
+function buildCustomerHistoryEntry_(formData, now) {
+  const tz = Session.getScriptTimeZone();
+  const pickupDate = getPickupDateForHistory_(formData, now);
+  const dateStr = Utilities.formatDate(pickupDate, tz, "yyyy/MM/dd");
+
+
+  const orderNo = formData && formData._reservationNoForLog
+    ? String(formData._reservationNoForLog).replace(/'/g, "")
+    : "";
+
+  const price = Number(String((formData && formData.totalPrice) || 0).replace(/,/g, "")) || 0;
+
+  const memo = [
+    orderNo ? `予約No:${orderNo}` : "",
+    price ? `+${price}` : ""
+  ].filter(Boolean).join(" / ");
+
+  const raw = memo ? `${dateStr} ${memo}` : dateStr;
+  return SECURITY_.sanitizeForSheet(raw);
+}
+
+function shiftCustomerHistory_(sheet, row, entry) {
+  if (!entry) return;
+
+  const col1 = CONFIG.CUSTOMER_COLUMN.HISTORY_1;
+  const range = sheet.getRange(row, col1, 1, 3);
+  const [h1, h2] = range.getValues()[0].map(v => String(v || "").trim());
+
+  const entryDate = String(entry).split(" ")[0];
+  const h1Date = String(h1).split(" ")[0];
+
+  // 同日なら履歴1だけ差し替え（同日に複数回注文で履歴が埋まるのを軽減）
+  if (h1 && h1Date === entryDate) {
+    range.getCell(1, 1).setValue(entry);
+    return;
+  }
+
+  // entry -> 履歴1, 旧履歴1 -> 履歴2, 旧履歴2 -> 履歴3（旧履歴3は捨てる）
+  range.setValues([[entry, h1, h2]]);
+}
+
+function getPickupDateForHistory_(formData, fallbackNow) {
+  const now = fallbackNow || new Date();
+
+  // ① FormService.parse(e) が作る Date（最優先）
+  const d0 = formData && formData.pickupDateRaw;
+  if (d0 instanceof Date && !isNaN(d0.getTime())) return d0; // :contentReference[oaicite:5]{index=5}
+
+  // ② 表示用文字列 "M/D / ..." から月日だけ拾う（保険）
+  const s = formData && formData.pickupDate ? String(formData.pickupDate) : "";
+  const m = s.match(/(\d{1,2})\s*\/\s*(\d{1,2})/);
+  if (m) {
+    const month = Number(m[1]);
+    const day = Number(m[2]);
+
+    // 年跨ぎ（12月に1月を選ぶケース）だけ FormService と同じ補正
+    let year = now.getFullYear();
+    if (now.getMonth() === 11 && month === 1) year++;
+
+    const d = new Date(year, month - 1, day);
+    if (!isNaN(d.getTime())) return d;
+  }
+
+  // ③ どうしても取れないときは送信日
+  return now;
 }
