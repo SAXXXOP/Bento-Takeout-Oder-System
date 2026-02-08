@@ -61,17 +61,20 @@ const CustomerService = {
 
       // 旧名も新名もあるが一致しない → 上書きしない＋要確認＋ログ
       } else if (oldNorm && newNorm && oldNorm !== newNorm) {
-        formData._needsCheckNameReason =
-          `氏名不一致（顧客名簿:${oldNameRaw} / 入力:${newNameRaw}）`;
+      formData._needsCheckNameReason =
+        `氏名不一致（顧客名簿:${oldNameRaw} / 入力:${newNameRaw}）`;
 
-        appendNameConflictLog_(sheet.getParent(), {
-          ts: now,
-          orderNo: formData._reservationNoForLog || "",
-          lineId: lineId || row[CONFIG.CUSTOMER_COLUMN.LINE_ID - 1] || "",
-          phone: phone || "",
-          oldName: oldNameRaw,
-          newName: newNameRaw
-        });
+      // ★ログに「顧客行・予約No・合計金額」まで入れて、名簿更新は保留
+      appendNameConflictLogV2_(sheet.getParent(), {
+        at: now, // 記録日時
+        orderNo: formData._reservationNoForLog || "",
+        totalPrice: formData.totalPrice || 0,
+        lineId: lineId || row[CONFIG.CUSTOMER_COLUMN.LINE_ID - 1] || "",
+        phone: phone || "",
+        customerRow: foundRow,
+        oldName: oldNameRaw,
+        newName: newNameRaw
+      });
 
         // nameToWrite は oldNameRaw のまま（= 上書きしない）
       } else {
@@ -215,6 +218,46 @@ function appendNameConflictLog_(ss, data) {
     SECURITY_.sanitizeForSheet(String(data.newName || ""))
   ]);
 }
+
+function appendNameConflictLogV2_(ss, payload) {
+  const sheetName = (CONFIG.SHEET && CONFIG.SHEET.NAME_CONFLICT_LOG)
+    ? CONFIG.SHEET.NAME_CONFLICT_LOG
+    : "氏名不一致ログ";
+
+  const sh = ss.getSheetByName(sheetName) || ss.insertSheet(sheetName);
+
+  // ヘッダが無いなら AdminTools 仕様で作る
+  if (sh.getLastRow() === 0) {
+    sh.appendRow([
+      "記録日時", "状態", "LINE_ID", "電話番号", "顧客行", "旧氏名", "新氏名",
+      "処理", "処理日時", "処理者", "メモ",
+      "予約No", "合計金額"
+    ]);
+    sh.setFrozenRows(1);
+  }
+
+  // AdminTools 側の ensure を流用（足りない列があれば末尾に追加）
+  ensureNameConflictHeader_(sh);
+
+  const header = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
+  const col = {};
+  header.forEach((h, i) => { if (h) col[h] = i + 1; });
+
+  const row = Array(sh.getLastColumn()).fill("");
+
+  row[(col["記録日時"] || 1) - 1] = payload.at || new Date();
+  row[(col["状態"] || 2) - 1] = "PENDING";
+  if (col["LINE_ID"]) row[col["LINE_ID"] - 1] = SECURITY_.sanitizeForSheet(payload.lineId || "");
+  if (col["電話番号"]) row[col["電話番号"] - 1] = SECURITY_.sanitizeForSheet(payload.phone || "");
+  if (col["顧客行"]) row[col["顧客行"] - 1] = payload.customerRow || "";
+  if (col["旧氏名"]) row[col["旧氏名"] - 1] = SECURITY_.sanitizeForSheet(payload.oldName || "");
+  if (col["新氏名"]) row[col["新氏名"] - 1] = SECURITY_.sanitizeForSheet(payload.newName || "");
+  if (col["予約No"]) row[col["予約No"] - 1] = payload.orderNo ? "'" + String(payload.orderNo) : "";
+  if (col["合計金額"]) row[col["合計金額"] - 1] = Number(payload.totalPrice || 0) || 0;
+
+  sh.appendRow(row);
+}
+
 
 // ===== 氏名不一致ログ：CustomerService側（書き込み担当） =====
 
