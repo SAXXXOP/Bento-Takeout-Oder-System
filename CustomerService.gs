@@ -216,8 +216,8 @@ function getOrCreateNameConflictLogSheet_(ss) {
 
   // ヘッダ（増減に強く：無ければ末尾に追加）
   const required = [
-    "状態", "発生日時", "予約No",
-    "LINE_ID", "電話",
+    "状態", "記録日時", "予約No",
+    "LINE_ID", "電話番号",
     "旧氏名", "新氏名",
     "理由",
     "処理者", "処理日時", "メモ"
@@ -256,11 +256,11 @@ function appendNameConflictLog_(ss, payload) {
   row[(col["状態"] || 1) - 1] = "PENDING";
 
   const ts = payload.ts || new Date();
-  if (col["発生日時"]) row[col["発生日時"] - 1] = ts;
+  if (col["記録日時"]) row[col["記録日時"] - 1] = ts;
 
   if (col["予約No"]) row[col["予約No"] - 1] = payload.orderNo ? "'" + String(payload.orderNo) : "";
   if (col["LINE_ID"]) row[col["LINE_ID"] - 1] = SECURITY_.sanitizeForSheet(payload.lineId || "");
-  if (col["電話"]) row[col["電話"] - 1] = SECURITY_.sanitizeForSheet(payload.phone || "");
+  if (col["電話番号"]) row[col["電話番号"] - 1] = SECURITY_.sanitizeForSheet(payload.phone || "");
   if (col["旧氏名"]) row[col["旧氏名"] - 1] = SECURITY_.sanitizeForSheet(payload.oldName || "");
   if (col["新氏名"]) row[col["新氏名"] - 1] = SECURITY_.sanitizeForSheet(payload.newName || "");
   if (col["理由"]) row[col["理由"] - 1] = SECURITY_.sanitizeForSheet(payload.reason || "");
