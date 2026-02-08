@@ -9,46 +9,48 @@ function showCustomerEditor() {
 }
 
 function onOpen() {
-  SpreadsheetApp.getUi().createMenu('★予約管理')
-    .addItem('顧客備考を編集（サイドバー）', 'showCustomerEditor')
-    .addSeparator()
-    .addItem('指定日の予約札を作成', 'createDailyReservationCards')
+  const ui = SpreadsheetApp.getUi();
+
+  ui.createMenu('★予約管理')
+    // ===== 日々の運用（よく使う：朝→処理の順） =====
+    .addItem('★要確認一覧を更新', 'refreshNeedsCheckView')
     .addItem('当日まとめシートを更新', 'createProductionSheet')
-    .addSeparator()
-    .addItem('ステータス移行（B案）', 'migrateOrderStatusToBPlan')
-    .addItem('ステータス運用ガード適用', 'applyOrderStatusGuards')
-    .addItem('理由未記入チェック', 'checkMissingReasons')
-    .addItem('ステータス監査（値の件数）', 'auditStatusValues_')
+    .addItem('指定日の予約札を作成', 'createDailyReservationCards')
     .addSeparator()
     .addItem('★要確認一覧を開く', 'openNeedsCheckView')
-    .addItem('★要確認一覧を更新', 'refreshNeedsCheckView')
+    .addItem('顧客備考を編集（サイドバー）', 'showCustomerEditor')
 
-    // ★追加：氏名不一致（同一LINE_IDで氏名が食い違う時の手動確認）
-    .addSeparator()
-    .addSubMenu(
-      SpreadsheetApp.getUi().createMenu('氏名不一致')
-        .addItem('ログを開く', 'openNameConflictLog')
-        .addItem('次の1件を処理', 'resolveNextNameConflict')
-    )
-
-    // ★追加：ステータス処理（予約No指定）
+    // ===== 要確認の処理（予約No指定） =====
     .addSeparator()
     .addItem('No指定：有効に戻す（空欄）', 'markByOrderNoAsActive')
     .addItem('No指定：無効にする（理由必須）', 'markByOrderNoAsInvalid')
     .addItem('No指定：★要確認にする（理由必須）', 'markByOrderNoAsNeedsCheck')
     .addItem('No指定：理由だけ編集', 'editReasonByOrderNo')
-    
-    // ★追加：バックアップ（手動スナップショット）
+
+    // ===== 補助（氏名不一致） =====
     .addSeparator()
     .addSubMenu(
-      SpreadsheetApp.getUi().createMenu('バックアップ')
-        .addItem('手動スナップショット作成', 'createManualSnapshot')
+      ui.createMenu('氏名不一致')
+        .addItem('ログを開く', 'openNameConflictLog')
+        .addItem('次の1件を処理', 'resolveNextNameConflict')
     )
 
-    // ★追加：導入ツール（安全な本番初期化）
+    // ===== 補助（チェック/監査/移行） =====
+    .addSeparator()
+    .addItem('理由未記入チェック', 'checkMissingReasons')
+    .addItem('ステータス運用ガード適用', 'applyOrderStatusGuards')
+    .addItem('ステータス監査（値の件数）', 'auditStatusValues_')
+    .addItem('ステータス移行（B案）', 'migrateOrderStatusToBPlan')
+
+    // ===== 管理（バックアップ/導入/初期設定） =====
     .addSeparator()
     .addSubMenu(
-      SpreadsheetApp.getUi().createMenu('導入ツール')
+      ui.createMenu('バックアップ')
+        .addItem('手動スナップショット作成', 'createManualSnapshot')
+    )
+    .addSeparator()
+    .addSubMenu(
+      ui.createMenu('導入ツール')
         .addItem('本番初期化（テストデータ削除）', 'initProductionCleanSheetOnly')
         .addItem('本番初期化（＋フォーム回答も削除）', 'initProductionCleanWithFormResponses')
         .addSeparator()
@@ -58,11 +60,11 @@ function onOpen() {
         .addItem('テンプレ用プロパティ作成（未設定のみ）', 'ensureTemplateScriptProperties')
         .addItem('テンプレ用プロパティ上書き（全部ダミー）', 'overwriteTemplateScriptProperties')
     )
-
     .addSeparator()
     .addItem('初期設定チェック（Script Properties）', 'checkScriptProperties')
     .addToUi();
 }
+
 
 function checkScriptProperties() {
   const ui = SpreadsheetApp.getUi();
