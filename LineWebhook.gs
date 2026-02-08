@@ -29,8 +29,7 @@ function doPost(e) {
 
   try {
   // 1) 簡易認証：URLに ?key= を必須化
-  const props = PropertiesService.getScriptProperties();
-  const expectedKey = props.getProperty("WEBHOOK_KEY");
+  const expectedKey = ScriptProps.get(ScriptProps.KEYS.WEBHOOK_KEY, "");
   const providedKey = (e && e.parameter && e.parameter.key) ? String(e.parameter.key) : "";
   if (expectedKey && providedKey !== expectedKey) {
     logToSheet("WARN", "unauthorized webhook", { hasKey: !!providedKey });
@@ -504,7 +503,7 @@ function replyText(token, text) {
 
 function replyTexts(token, texts) {
   const url = "https://api.line.me/v2/bot/message/reply";
-  const accessToken = PropertiesService.getScriptProperties().getProperty("LINE_TOKEN");
+  const lineToken = ScriptProps.get(ScriptProps.KEYS.LINE_TOKEN);
 
   const payload = {
     replyToken: token,
@@ -515,7 +514,7 @@ function replyTexts(token, texts) {
     method: "post",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${accessToken}`
+      Authorization: `Bearer ${lineToken}`,
     },
     payload: JSON.stringify(payload),
     muteHttpExceptions: true
@@ -533,7 +532,7 @@ function replyTexts(token, texts) {
 
 function replyFlex(token, flexMsg) {
   const url = "https://api.line.me/v2/bot/message/reply";
-  const accessToken = PropertiesService.getScriptProperties().getProperty("LINE_TOKEN");
+  const lineToken = ScriptProps.get(ScriptProps.KEYS.LINE_TOKEN);
 
   const payload = {
     replyToken: token,
@@ -544,7 +543,7 @@ function replyFlex(token, flexMsg) {
     method: "post",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${accessToken}`
+      Authorization: `Bearer ${lineToken}`,
     },
     payload: JSON.stringify(payload),
     muteHttpExceptions: true
@@ -565,8 +564,8 @@ if (code < 200 || code >= 300) {
  * （replyTokenは1回しか使えないため必須）
  */
 function replyMulti(token, messages) {
+  const lineToken = ScriptProps.get(ScriptProps.KEYS.LINE_TOKEN);
   const url = "https://api.line.me/v2/bot/message/reply";
-  const accessToken = PropertiesService.getScriptProperties().getProperty("LINE_TOKEN");
 
   const payload = {
     replyToken: token,
@@ -577,7 +576,7 @@ function replyMulti(token, messages) {
     method: "post",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${accessToken}`
+      Authorization: `Bearer ${lineToken}`,
     },
     payload: JSON.stringify(payload),
     muteHttpExceptions: true
@@ -601,7 +600,7 @@ function replyMulti(token, messages) {
 function startLoadingAnimation(chatId, loadingSeconds) {
   if (!chatId) return;
 
-  const token = PropertiesService.getScriptProperties().getProperty("LINE_TOKEN");
+  const token = ScriptProps.get(ScriptProps.KEYS.LINE_TOKEN);
   if (!token) {
     logToSheet("WARN", "loading animation: missing LINE_TOKEN");
     return;
@@ -826,9 +825,8 @@ function parsePickupDate(value) {
 
 function logToSheet(level, message, extra) {
   try {
-    const props = PropertiesService.getScriptProperties();
-    const threshold = String(props.getProperty("LOG_LEVEL") || "WARN").toUpperCase();
-    const maxRows = Number(props.getProperty("LOG_MAX_ROWS") || 2000);
+    const threshold = String(ScriptProps.get(ScriptProps.KEYS.LOG_LEVEL, "WARN")).toUpperCase();
+    const maxRows = ScriptProps.getInt(ScriptProps.KEYS.LOG_MAX_ROWS, 2000);
 
     const order = { DEBUG: 10, INFO: 20, WARN: 30, ERROR: 40 };
     const lv = String(level || "INFO").toUpperCase();

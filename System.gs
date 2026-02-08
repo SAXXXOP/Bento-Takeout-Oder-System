@@ -23,7 +23,14 @@ function onOpen() {
     .addItem('★要確認一覧を開く', 'openNeedsCheckView')
     .addItem('★要確認一覧を更新', 'refreshNeedsCheckView')
 
-    
+    // ★追加：氏名不一致（同一LINE_IDで氏名が食い違う時の手動確認）
+    .addSeparator()
+    .addSubMenu(
+      SpreadsheetApp.getUi().createMenu('氏名不一致')
+        .addItem('ログを開く', 'openNameConflictLog')
+        .addItem('次の1件を処理', 'resolveNextNameConflict')
+    )
+
     // ★追加：ステータス処理（予約No指定）
     .addSeparator()
     .addItem('No指定：有効に戻す（空欄）', 'markByOrderNoAsActive')
@@ -38,5 +45,31 @@ function onOpen() {
         .addItem('手動スナップショット作成', 'createManualSnapshot')
     )
 
+    // ★追加：導入ツール（安全な本番初期化）
+    .addSeparator()
+    .addSubMenu(
+      SpreadsheetApp.getUi().createMenu('導入ツール')
+        .addItem('本番初期化（テストデータ削除）', 'initProductionCleanSheetOnly')
+        .addItem('本番初期化（＋フォーム回答も削除）', 'initProductionCleanWithFormResponses')
+        .addSeparator()
+        .addItem('フォーム送信トリガー設定', 'installFormSubmitTrigger')
+        .addItem('フォーム送信トリガー削除', 'deleteFormSubmitTrigger')
+        .addSeparator()
+        .addItem('テンプレ用プロパティ作成（未設定のみ）', 'ensureTemplateScriptProperties')
+        .addItem('テンプレ用プロパティ上書き（全部ダミー）', 'overwriteTemplateScriptProperties')
+    )
+
+    .addSeparator()
+    .addItem('初期設定チェック（Script Properties）', 'checkScriptProperties')
     .addToUi();
+}
+
+function checkScriptProperties() {
+  const ui = SpreadsheetApp.getUi();
+  const r = ScriptProps.validate();
+  if (r.ok) {
+    ui.alert("OK：必須の Script Properties は設定済みです。");
+  } else {
+    ui.alert("NG：未設定の Script Properties があります。\n\n- " + r.missing.join("\n- "));
+  }
 }

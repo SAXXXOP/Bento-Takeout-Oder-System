@@ -46,19 +46,52 @@ const CustomerService = {
     // === 既存顧客の更新 ===
     if (foundRow !== -1) {
       const row = values[foundRow - 1];
-      const oldName = row[CONFIG.CUSTOMER_COLUMN.NAME - 1];
-      const betterName = (newName && newName.length > (oldName || "").length) ? newName : oldName;
-      const currentCount = parseInt(row[CONFIG.CUSTOMER_COLUMN.VISIT_COUNT - 1]) || 0;
-      const currentTotal = parseInt(row[CONFIG.CUSTOMER_COLUMN.TOTAL_SPEND - 1]) || 0;
 
-      sheet.getRange(foundRow, CONFIG.CUSTOMER_COLUMN.LINE_ID).setValue(lineId || row[CONFIG.CUSTOMER_COLUMN.LINE_ID - 1]);
-      sheet.getRange(foundRow, CONFIG.CUSTOMER_COLUMN.NAME).setValue(betterName);
+      const oldNameRaw = String(row[CONFIG.CUSTOMER_COLUMN.NAME - 1] || "");
+      const newNameRaw = String(newName || "");
+
+      const oldNorm = normalizeCustomerName_(oldNameRaw);
+      const newNorm = normalizeCustomerName_(newNameRaw);
+
+      let nameToWrite = oldNameRaw;
+
+      // 旧名が空で、新名がある → そのまま採用（初回登録の補完）
+      if (!oldNorm && newNorm) {
+        nameToWrite = newNameRaw;
+
+      // 旧名も新名もあるが一致しない → 上書きしない＋要確認＋ログ
+      } else if (oldNorm && newNorm && oldNorm !== newNorm) {
+        formData._needsCheckNameReason =
+          `氏名不一致（顧客名簿:${oldNameRaw} / 入力:${newNameRaw}）`;
+
+        appendNameConflictLog_(sheet.getParent(), {
+          ts: now,
+          orderNo: formData._reservationNoForLog || "",
+          lineId: lineId || row[CONFIG.CUSTOMER_COLUMN.LINE_ID - 1] || "",
+          phone: phone || "",
+          oldName: oldNameRaw,
+          newName: newNameRaw
+        });
+
+        // nameToWrite は oldNameRaw のまま（= 上書きしない）
+      } else {
+        // 一致（空白差など）は従来通り「長い方」を採用
+        if (newNameRaw && newNameRaw.length > oldNameRaw.length) {
+          nameToWrite = newNameRaw;
+        }
+      }
+
+      sheet.getRange(foundRow, CONFIG.CUSTOMER_COLUMN.LINE_ID)
+        .setValue(lineId || row[CONFIG.CUSTOMER_COLUMN.LINE_ID - 1]);
+
+      sheet.getRange(foundRow, CONFIG.CUSTOMER_COLUMN.NAME).setValue(nameToWrite);
       sheet.getRange(foundRow, CONFIG.CUSTOMER_COLUMN.LAST_VISIT).setValue(now);
       sheet.getRange(foundRow, CONFIG.CUSTOMER_COLUMN.VISIT_COUNT).setValue(currentCount + 1);
       sheet.getRange(foundRow, CONFIG.CUSTOMER_COLUMN.TOTAL_SPEND).setValue(currentTotal + (formData.totalPrice || 0));
 
       return true;
     }
+
 
     // === 新規顧客の追加 ===
     const newRow = [];
@@ -137,4 +170,32 @@ const CustomerService = {
   return "保存しました";
   }
 
-}; // ← 最後にセミコロン付きの閉じカッコが必要
+};
+
+function normalizeCustomerName_(s) {
+  // 半角/全角スペース・改行等を除去して比較
+  return String(s || "").replace(/[ \t\r\n　]/g, "");
+}
+
+function appendNameConflictLog_(ss, data) {
+  const sheetName = (CONFIG.SHEET && CONFIG.SHEET.NAME_CONFLICT_LOG)
+    ? CONFIG.SHEET.NAME_CONFLICT_LOG
+    : "氏名不一致ログ";
+
+  const sh = ss.getSheetByName(sheetName) || ss.insertSheet(sheetName);
+
+  if (sh.getLastRow() === 0) {
+    sh.appendRow(["timestamp", "orderNo", "lineId", "phone", "oldName", "newName"]);
+  }
+
+  const ts = Utilities.formatDate(data.ts || new Date(), "Asia/Tokyo", "yyyy-MM-dd HH:mm:ss");
+
+  sh.appendRow([
+    ts,
+    SECURITY_.sanitizeForSheet(String(data.orderNo || "")),
+    SECURITY_.sanitizeForSheet(String(data.lineId || "")),
+    SECURITY_.sanitizeForSheet(String(data.phone || "")),
+    SECURITY_.sanitizeForSheet(String(data.oldName || "")),
+    SECURITY_.sanitizeForSheet(String(data.newName || ""))
+  ]);
+}

@@ -8,14 +8,27 @@ function onFormSubmit(e) {
     locked = lock.tryLock(20000);
     if (!locked) {
       console.warn("onFormSubmit: could not acquire lock");
+      logToSheet("WARN", "onFormSubmit: could not acquire lock");
       return;
     }
+
+  function isDebugMain_() {
+    return PropertiesService.getScriptProperties().getProperty(CONFIG.PROPS.DEBUG_MAIN) === "1";
+  }
+
 
     /* =========================
        1. フォーム解析
        ========================= */
     formData = FormService.parse(e);
     if (!formData) return;
+
+    if (isDebugMain_()) logToSheet("INFO", "onFormSubmit parsed", {
+     userId: formData.userId,
+     pickupDate: formData.pickupDate,
+     totalItems: formData.totalItems,
+     totalPrice: formData.totalPrice
+   });
 
     /* =========================
       2. 予約変更チェック（propsレス）
@@ -74,30 +87,35 @@ function onFormSubmit(e) {
       needsCheckReasons.push("電話番号が未入力です");
     }
 
+    // 3. 予約番号生成
+    const reservationInfo = ReservationService.create(formData);
+
+    // （ログ用：予約Noを顧客更新に渡す）
+    formData._reservationNoForLog = reservationInfo.no;
+
+    // 4. 顧客情報更新
+    formData.isRegular = CustomerService.checkAndUpdateCustomer(formData);
+
+    // ★追加：氏名不一致など、顧客更新で判明した要確認理由を合流
+    if (formData._needsCheckNameReason) {
+      needsCheckReasons.push(formData._needsCheckNameReason);
+    }
+
     // ★ここで meta を確定（この1個だけを後段に渡す）
     const changeMeta = {
       isChange,
       changeRequested,
       oldNo,
       changeFailReason,
-      // 追加：データ不整合系の要確認理由
       needsCheckReason: needsCheckReasons.join(" / ")
     };
 
-    /* =========================
-       3. 予約番号生成
-       ========================= */
-    const reservationInfo = ReservationService.create(formData);
-
-    /* =========================
-       4. 顧客情報更新
-       ========================= */
-    formData.isRegular = CustomerService.checkAndUpdateCustomer(formData);
-
-    /* =========================
-       5. 注文保存
-       ========================= */
+    // 5. 注文保存
     OrderService.saveOrder(reservationInfo.no, formData, changeMeta);
+
+
+      if (isDebugMain_()) logToSheet("INFO", "after saveOrder", { reservationNo: reservationInfo.no });
+
 
     /* =========================
        6. 変更候補キャッシュ無効化（存在すれば）
@@ -130,8 +148,15 @@ function onFormSubmit(e) {
       console.warn("LINE push threw:", String(err));
     }
 
-  } catch (err) {
-    console.warn("onFormSubmit error:", String(err));
+    } catch (err) {
+      console.warn("onFormSubmit error:", String(err));
+      logToSheet("ERROR", "onFormSubmit error", {
+        message: String(err),
+        stack: err && err.stack,
+        userId: formData && formData.userId,
+        oldReservationNo: formData && formData.oldReservationNo
+      });
+      throw err; // 実行履歴を失敗にして原因を追える（不要なら後で外してOK）
   } finally {
     if (locked) {
       try {
@@ -146,7 +171,8 @@ function onFormSubmit(e) {
 function getPickupDateOnlyByOrderNo(orderNo) {
   if (!orderNo) return null;
 
-  const sheet = SpreadsheetApp.getActive().getSheetByName(CONFIG.SHEET.ORDER_LIST);
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss && ss.getSheetByName(CONFIG.SHEET.ORDER_LIST);
   if (!sheet) return null;
 
   const lastRow = sheet.getLastRow();

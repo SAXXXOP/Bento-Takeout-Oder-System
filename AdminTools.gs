@@ -516,6 +516,7 @@ const REASON_TEMPLATES_ = {
     "受取日が不正／判定できない",
     "注文内容が空／不正",
     "LINE通知不可（LINE_ID不明）",
+    "氏名不一致（顧客名簿と入力が違う）",
     "その他（自由入力）"
   ]
 };
@@ -574,4 +575,237 @@ function promptReasonFromTemplates_(type) {
 
   const extra = String(add.getResponseText() || "").trim();
   return extra ? `${selected} / ${extra}` : selected;
+}
+
+
+
+/* =========================
+   氏名不一致ログ：手動レビュー（追加）
+   ========================= */
+
+function openNameConflictLog() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sh = getOrCreateNameConflictLogSheet_();
+  ss.setActiveSheet(sh);
+}
+
+function resolveNextNameConflict() {
+  const ui = SpreadsheetApp.getUi();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  const logSh = getOrCreateNameConflictLogSheet_();
+  const ctx = findNextPendingNameConflict_(logSh);
+  if (!ctx) {
+    ui.alert("未処理の「氏名不一致ログ」はありません。");
+    return;
+  }
+
+  const { rowNum, rec, col } = ctx;
+
+  const customerSh = ss.getSheetByName(CONFIG.SHEET.CUSTOMER_LIST);
+  if (!customerSh) throw new Error("顧客名簿シートが見つかりません: " + CONFIG.SHEET.CUSTOMER_LIST);
+
+  const lineId = String(rec.lineId || "").trim();
+  const newName = String(rec.newName || "").trim();
+  const oldNameLogged = String(rec.oldName || "").trim();
+
+  // 顧客行：ログの customerRow が信用できない場合に備えて LINE_ID で再検索
+  let customerRow = parseInt(String(rec.customerRow || "").trim(), 10);
+  if (!Number.isFinite(customerRow) || customerRow < 2) customerRow = 0;
+
+  if (!customerRow || !isCustomerRowMatchingLineId_(customerSh, customerRow, lineId)) {
+    customerRow = findCustomerRowByLineId_(customerSh, lineId);
+  }
+  if (!customerRow) {
+    ui.alert(
+      "顧客名簿で該当LINE_IDが見つかりません。\n\n" +
+      `ログ行: ${rowNum}\nLINE_ID: ${lineId}\n新氏名候補: ${newName}`
+    );
+    return;
+  }
+
+  const currentName = String(customerSh.getRange(customerRow, CONFIG.CUSTOMER_COLUMN.NAME).getValue() || "");
+
+  const message =
+    "次の「氏名不一致」を処理します。\n\n" +
+    `ログ行: ${rowNum}\n` +
+    `LINE_ID: ${lineId}\n` +
+    `顧客名簿 行: ${customerRow}\n\n` +
+    `顧客名簿 現在: ${currentName}\n` +
+    `ログ 旧氏名: ${oldNameLogged}\n` +
+    `新氏名候補: ${newName}\n\n` +
+    "番号を入力してください：\n" +
+    "1. 名前を更新（上書き）\n" +
+    "2. 別名として備考(事務)に追記（名前は維持）\n" +
+    "3. 却下（何もしない）";
+
+  const res = ui.prompt("氏名不一致の処理", message, ui.ButtonSet.OK_CANCEL);
+  if (res.getSelectedButton() !== ui.Button.OK) return;
+
+  const n = parseInt(String(res.getResponseText() || "").trim(), 10);
+  if (![1, 2, 3].includes(n)) {
+    ui.alert("番号が不正です（1〜3）。");
+    return;
+  }
+
+  const now = new Date();
+  const who = safeActor_();
+
+  if (n === 1) {
+    // 上書き
+    customerSh.getRange(customerRow, CONFIG.CUSTOMER_COLUMN.NAME).setValue(newName);
+    markNameConflictResolved_(logSh, rowNum, col, "APPROVED", "NAME_UPDATED", now, who, "");
+    ui.alert(`OK：顧客名簿の氏名を更新しました。\n行${customerRow}: ${currentName} → ${newName}`);
+  } else if (n === 2) {
+    // 別名として備考(事務)に追記
+    const noteCell = customerSh.getRange(customerRow, CONFIG.CUSTOMER_COLUMN.NOTE_OFFICE);
+    const note0 = String(noteCell.getValue() || "");
+    const note1 = appendAliasNote_(note0, newName, now);
+    noteCell.setValue(note1);
+
+    markNameConflictResolved_(logSh, rowNum, col, "APPROVED", "ALIAS_TO_NOTE_OFFICE", now, who, "");
+    ui.alert(`OK：備考(事務)に別名を追記しました。\n行${customerRow}: ${newName}`);
+  } else {
+    // 却下
+    markNameConflictResolved_(logSh, rowNum, col, "REJECTED", "NO_ACTION", now, who, "");
+    ui.alert("OK：却下として記録しました（顧客名簿は変更なし）。");
+  }
+
+  // ログシートへ移動して見えるように
+  ss.setActiveSheet(logSh);
+  logSh.setActiveRange(logSh.getRange(rowNum, 1));
+}
+
+/** ログシート（なければ作る） */
+function getOrCreateNameConflictLogSheet_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const name =
+    (CONFIG.SHEET && CONFIG.SHEET.NAME_CONFLICT_LOG) ? CONFIG.SHEET.NAME_CONFLICT_LOG : "氏名不一致ログ";
+
+  let sh = ss.getSheetByName(name);
+  if (!sh) {
+    sh = ss.insertSheet(name);
+  }
+
+  // ヘッダが無ければ作る
+  if (sh.getLastRow() === 0) {
+    sh.appendRow([
+      "記録日時", "状態", "LINE_ID", "電話番号", "顧客行", "旧氏名", "新氏名",
+      "処理", "処理日時", "処理者", "メモ"
+    ]);
+    sh.setFrozenRows(1);
+  }
+
+  // 既存ヘッダから列マップを作る（順番が違っても動く）
+  ensureNameConflictHeader_(sh);
+  return sh;
+}
+
+function ensureNameConflictHeader_(sh) {
+  const header = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
+  const required = ["記録日時","状態","LINE_ID","電話番号","顧客行","旧氏名","新氏名","処理","処理日時","処理者","メモ"];
+  const missing = required.filter(h => !header.includes(h));
+
+  // 既に運用中のログを壊さないため、足りない列は末尾に追加する
+  if (missing.length) {
+    const startCol = sh.getLastColumn() + 1;
+    sh.getRange(1, startCol, 1, missing.length).setValues([missing]);
+  }
+}
+
+function findNextPendingNameConflict_(logSh) {
+  const lastRow = logSh.getLastRow();
+  if (lastRow < 2) return null;
+
+  const header = logSh.getRange(1, 1, 1, logSh.getLastColumn()).getValues()[0].map(String);
+  const col = {
+    at: header.indexOf("記録日時") + 1,
+    status: header.indexOf("状態") + 1,
+    lineId: header.indexOf("LINE_ID") + 1,
+    tel: header.indexOf("電話番号") + 1,
+    customerRow: header.indexOf("顧客行") + 1,
+    oldName: header.indexOf("旧氏名") + 1,
+    newName: header.indexOf("新氏名") + 1,
+    action: header.indexOf("処理") + 1,
+    resolvedAt: header.indexOf("処理日時") + 1,
+    resolvedBy: header.indexOf("処理者") + 1,
+    memo: header.indexOf("メモ") + 1,
+  };
+
+  // 必須列が無いときは止める
+  if (!col.status || !col.lineId || !col.newName) {
+    SpreadsheetApp.getUi().alert("氏名不一致ログの列構成が想定外です（ヘッダを確認してください）。");
+    return null;
+  }
+
+  const data = logSh.getRange(2, 1, lastRow - 1, logSh.getLastColumn()).getValues();
+  for (let i = 0; i < data.length; i++) {
+    const status = String(data[i][col.status - 1] || "").trim();
+    if (!status || status.toUpperCase() === "PENDING" || status === "未処理") {
+      const rowNum = i + 2;
+      const rec = {
+        at: data[i][col.at - 1],
+        status: data[i][col.status - 1],
+        lineId: data[i][col.lineId - 1],
+        tel: col.tel ? data[i][col.tel - 1] : "",
+        customerRow: col.customerRow ? data[i][col.customerRow - 1] : "",
+        oldName: col.oldName ? data[i][col.oldName - 1] : "",
+        newName: data[i][col.newName - 1],
+      };
+      return { rowNum, rec, col };
+    }
+  }
+  return null;
+}
+
+function markNameConflictResolved_(logSh, rowNum, col, status, action, resolvedAt, resolvedBy, memo) {
+  if (col.status) logSh.getRange(rowNum, col.status).setValue(status);
+  if (col.action) logSh.getRange(rowNum, col.action).setValue(action);
+  if (col.resolvedAt) logSh.getRange(rowNum, col.resolvedAt).setValue(resolvedAt);
+  if (col.resolvedBy) logSh.getRange(rowNum, col.resolvedBy).setValue(resolvedBy);
+  if (col.memo) logSh.getRange(rowNum, col.memo).setValue(memo || "");
+}
+
+function findCustomerRowByLineId_(customerSh, lineId) {
+  if (!lineId) return 0;
+  const lastRow = customerSh.getLastRow();
+  if (lastRow < 2) return 0;
+
+  const vals = customerSh.getRange(2, CONFIG.CUSTOMER_COLUMN.LINE_ID, lastRow - 1, 1).getValues();
+  for (let i = 0; i < vals.length; i++) {
+    const v = String(vals[i][0] || "").trim();
+    if (v && v === lineId) return i + 2;
+  }
+  return 0;
+}
+
+function isCustomerRowMatchingLineId_(customerSh, rowNum, lineId) {
+  if (!rowNum || rowNum < 2) return false;
+  const v = String(customerSh.getRange(rowNum, CONFIG.CUSTOMER_COLUMN.LINE_ID).getValue() || "").trim();
+  return v && lineId && v === lineId;
+}
+
+function appendAliasNote_(note0, aliasName, now) {
+  const a = String(aliasName || "").trim();
+  if (!a) return String(note0 || "");
+
+  const ts = Utilities.formatDate(now, Session.getScriptTimeZone(), "yyyy/MM/dd");
+  const line = `[別名 ${ts}] ${a}`;
+
+  const base = String(note0 || "").trim();
+  if (!base) return line;
+
+  // 既に同じ別名が入っていれば二重登録しない
+  if (base.includes(a)) return base;
+
+  return base + "\n" + line;
+}
+
+function safeActor_() {
+  try {
+    const email = Session.getEffectiveUser().getEmail();
+    return email || "manual";
+  } catch (e) {
+    return "manual";
+  }
 }

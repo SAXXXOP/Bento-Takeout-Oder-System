@@ -16,12 +16,43 @@ const CONFIG = {
 
   // 2. スプレッドシート名
   SHEET: {
-    ORDER_LIST: "注文一覧",
-    CUSTOMER_LIST: "顧客名簿",
-    MENU_MASTER: "メニューマスタ",
-    DAILY_SUMMARY: "当日まとめ",
-    RESERVATION_CARD: "予約札",
-    NEEDS_CHECK_VIEW: "★要確認一覧"
+  ORDER_LIST: "注文一覧",
+  CUSTOMER_LIST: "顧客名簿",
+  MENU_MASTER: "メニューマスタ",
+  DAILY_SUMMARY: "当日まとめ",
+  RESERVATION_CARD: "予約札",
+  NEEDS_CHECK_VIEW: "★要確認一覧",
+  NAME_CONFLICT_LOG: "氏名不一致ログ"
+},
+
+
+  // 2.5 Script Properties（キー名一覧：値は Script Properties 側に保存）
+  // 文字列直書きを減らし、タイポ事故を防ぐ目的
+  PROPS: {
+    // LINE / Webhook
+    LINE_TOKEN: "LINE_TOKEN",
+    WEBHOOK_KEY: "WEBHOOK_KEY",
+
+    // Logging
+    LOG_LEVEL: "LOG_LEVEL",
+    LOG_MAX_ROWS: "LOG_MAX_ROWS",
+
+    // Backup（運用）
+    BACKUP_FOLDER_ID: "BACKUP_FOLDER_ID",
+    BACKUP_AT_HOUR: "BACKUP_AT_HOUR",
+    BACKUP_DAILY_RETENTION_DAYS: "BACKUP_DAILY_RETENTION_DAYS",
+    BACKUP_DAILY_FOLDER_KEEP_MONTHS: "BACKUP_DAILY_FOLDER_KEEP_MONTHS",
+    BACKUP_MONTHLY_FOLDER_NAME: "BACKUP_MONTHLY_FOLDER_NAME",
+    BACKUP_MONTHLY_RETENTION_MONTHS: "BACKUP_MONTHLY_RETENTION_MONTHS",
+    BACKUP_USE_MONTHLY_FOLDER: "BACKUP_USE_MONTHLY_FOLDER",
+
+    // Backup（互換/任意）
+    BACKUP_RETENTION_DAYS: "BACKUP_RETENTION_DAYS",
+    BACKUP_MANUAL_FOLDER_NAME: "BACKUP_MANUAL_FOLDER_NAME",
+
+    // Debug（任意）
+    DEBUG_MAIN: "DEBUG_MAIN",
+    DEBUG_ORDER_SAVE: "DEBUG_ORDER_SAVE"
   },
 
   // 3. 「注文一覧」シートの列配置
@@ -98,7 +129,16 @@ STATUS: {
  
     // 実際のトークンは「プロジェクトの設定 > スクリプトプロパティ」に 
     // LINE_TOKEN という名前で保存してください
-    LINE_TOKEN: PropertiesService.getScriptProperties().getProperty('LINE_TOKEN'),
+    // Script Properties のキー名だけを記録（値はコミットしない）
+  SCRIPT_PROP_KEYS: {
+    LINE_TOKEN: "LINE_TOKEN",
+    WEBHOOK_KEY: "WEBHOOK_KEY",
+    LOG_LEVEL: "LOG_LEVEL",
+    LOG_MAX_ROWS: "LOG_MAX_ROWS",
+    DEBUG_ORDER_SAVE: "DEBUG_ORDER_SAVE",
+    BACKUP_FOLDER_ID: "BACKUP_FOLDER_ID",
+    BACKUP_AT_HOUR: "BACKUP_AT_HOUR",
+  },
   },
 
   
