@@ -82,12 +82,8 @@ function configureDailyPrepSettingsPrompt() {
   const curWds  = ScriptProps.get(ScriptProps.KEYS.DAILY_PREP_WEEKDAYS, "1-7"); // 未設定なら全曜日扱い
 
   const guide =
-    "以下を貼り付けて編集してください（key=value形式 / 改行OK）。\n" +
-    "weekdays: 1(月)〜7(日) 例) 1-5 / 6,7 / 空=全曜日\n\n" +
-    `hour=${curHour}\n` +
-    `minute=${curMin}\n` +
-    `offset=${curOff}\n` +
-    `weekdays=${curWds}`;
+    "1行で入力（スペース区切りOK）例: hour=21 minute=0 offset=1 weekdays=4-7\n" +
+    "weekdays: 1(月)〜7(日) / 空=全曜日";
 
   const res = ui.prompt("日次準備設定（時刻/オフセット/曜日）", guide, ui.ButtonSet.OK_CANCEL);
   if (res.getSelectedButton() !== ui.Button.OK) return;
@@ -95,15 +91,15 @@ function configureDailyPrepSettingsPrompt() {
   const raw = String(res.getResponseText() || "").trim();
   if (!raw) return;
 
-  // parse（key=value）
+  // parse（key=value）: 1行の "hour=21 minute=0 offset=1 weekdays=4-7" もOK
   const map = {};
-  raw.split(/\r?\n/).forEach(line => {
-    const s = String(line || "").trim();
-    if (!s) return;
-    const m = s.match(/^([a-zA-Z_]+)\s*=\s*(.*)$/);
-    if (!m) return;
+  const text = String(raw || "").replace(/　/g, " ").trim(); // 全角スペース対策
+  const re = /([a-zA-Z_]+)\s*=\s*([^\s]*)/g; // valueは空でもOK（weekdays=）
+  let m;
+  while ((m = re.exec(text)) !== null) {
     map[m[1].toLowerCase()] = String(m[2] ?? "").trim();
-  });
+  }
+
 
   // 入力が無ければ現状維持
   const hour = ("hour" in map) ? dp_clampInt_(map.hour, 0, 23) : curHour;
