@@ -411,6 +411,9 @@ function shiftCustomerHistory_(sheet, row, entry) {
   range.setValues([[entry, h1, h2]]);
 }
 
+/**  
+ * 受取日を安全に取るヘルパー
+ **/
 function getPickupDateForHistory_(formData, fallbackNow) {
   const now = fallbackNow || new Date();
 

@@ -23,6 +23,17 @@ function onFormSubmit(e) {
     formData = FormService.parse(e);
     if (!formData) return;
 
+    // ★追加：フォーム送信→LINE通知までの待ち時間に「読み込み中」を表示
+  // 1:1 の userId を chatId として利用（LineService側と同じ前提）
+  if (formData.userId && String(formData.userId).trim()) {
+    try {
+      startLoadingAnimation(formData.userId, 20); // 5,10,15,20,...60 のいずれか（未対応値は20に丸め）:contentReference[oaicite:3]{index=3}
+    } catch (e) {
+      // ローディング失敗は致命ではないので握りつぶす
+    }
+  }
+
+
     if (isDebugMain_()) logToSheet("INFO", "onFormSubmit parsed", {
      userId: formData.userId,
      pickupDate: formData.pickupDate,

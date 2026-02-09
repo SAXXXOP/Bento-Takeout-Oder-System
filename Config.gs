@@ -8,7 +8,7 @@ const CONFIG = {
     NAME_SHORT: "氏名（簡易）",
     PHONE: "電話番号",
     PICKUP_DATE: "受け取り希望日",//プルダウン、日付は営業日のみ(前日20時締切適用)GASで自動作成、
-    PICKUP_TIME: "受取り希望時刻",//※現在は未使用
+    PICKUP_TIME: "受取り希望時刻",
     OLD_RESERVATION_NO: "元予約No",
     LINE_ID: "LINE_ID(自動入力)",
     NOTE: "抜き物などご要望" //質問形式チェックボックス
@@ -129,17 +129,10 @@ STATUS: {
  
     // 実際のトークンは「プロジェクトの設定 > スクリプトプロパティ」に 
     // LINE_TOKEN という名前で保存してください
-    // Script Properties のキー名だけを記録（値はコミットしない）
-  SCRIPT_PROP_KEYS: {
-    LINE_TOKEN: "LINE_TOKEN",
-    WEBHOOK_KEY: "WEBHOOK_KEY",
-    LOG_LEVEL: "LOG_LEVEL",
-    LOG_MAX_ROWS: "LOG_MAX_ROWS",
-    DEBUG_ORDER_SAVE: "DEBUG_ORDER_SAVE",
-    BACKUP_FOLDER_ID: "BACKUP_FOLDER_ID",
-    BACKUP_AT_HOUR: "BACKUP_AT_HOUR",
-  },
-  },
+    // Script Properties のキー名一覧は CONFIG.PROPS に集約（重複定義しない）
 
-  
+  },
 };
+
+// 互換：過去参照があればここで吸収（中身は CONFIG.PROPS を参照）
+CONFIG.LINE.SCRIPT_PROP_KEYS = CONFIG.PROPS;
