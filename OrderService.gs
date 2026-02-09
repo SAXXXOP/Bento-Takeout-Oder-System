@@ -5,14 +5,17 @@ function normalizeChangeMeta_(metaOrBool, oldNo) {
       changeRequested: !!metaOrBool.changeRequested || !!oldNo,
       oldNo: String(metaOrBool.oldNo || oldNo || "").replace(/'/g, "").trim(),
       changeFailReason: String(metaOrBool.changeFailReason || ""),
-      needsCheckReason: String(metaOrBool.needsCheckReason || "")
+      needsCheckReason: String(metaOrBool.needsCheckReason || ""),
+      lateSubmission: !!metaOrBool.lateSubmission
     };
   }
   return {
     isChange: !!metaOrBool,
     changeRequested: !!oldNo,
     oldNo: String(oldNo || "").replace(/'/g, "").trim(),
-    changeFailReason: ""
+    changeFailReason: "",
+    needsCheckReason: "",
+    lateSubmission: false
   };
 }
 
@@ -96,16 +99,21 @@ const OrderService = {
       (meta.changeRequested && !meta.isChange) ||
       (!!meta.needsCheckReason && String(meta.needsCheckReason).trim());
 
-    rowData[CONFIG.COLUMN.STATUS - 1] = needsCheck ? CONFIG.STATUS.NEEDS_CHECK : CONFIG.STATUS.ACTIVE;
+    // ★締切後送信は INVALID（厳密締切の“最終防波堤”）
+    const isLate = !!meta.lateSubmission;
+    const status = isLate
+      ? CONFIG.STATUS.INVALID
+      : (needsCheck ? CONFIG.STATUS.NEEDS_CHECK : CONFIG.STATUS.ACTIVE);
 
-    rowData[CONFIG.COLUMN.REASON - 1] = needsCheck
-      ? [
-          (meta.changeRequested && !meta.isChange)
-            ? ("予約変更希望だが新規扱い：" + (meta.changeFailReason || "要確認"))
-            : "",
-          (meta.needsCheckReason || "")
-        ].filter(Boolean).join(" / ")
-      : "";
+    rowData[CONFIG.COLUMN.STATUS - 1] = status;
+
+    const reasons = [];
+    if (isLate) reasons.push("締切後の送信：予約期限（前日20時）を過ぎています");
+    if (meta.changeRequested && !meta.isChange) {
+      reasons.push("予約変更希望だが新規扱い：" + (meta.changeFailReason || "要確認"));
+    }
+    if (meta.needsCheckReason) reasons.push(meta.needsCheckReason);
+    rowData[CONFIG.COLUMN.REASON - 1] = reasons.filter(Boolean).join(" / ");
 
 
     // ★変更元予約No（oldNoは「入ってたら」保持しておく）

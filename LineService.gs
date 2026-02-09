@@ -53,9 +53,9 @@ const LineService = (() => {
 
     const normalized = normalizeMeta(meta);
 
-    const title = normalized.isChange
-      ? "【予約変更を承りました】"
-      : "【ご予約ありがとうございます】";
+    const title = normalized.lateSubmission
+      ? "【受付できませんでした（締切後）】"
+      : (normalized.isChange ? "【予約変更を承りました】" : "【ご予約ありがとうございます】");
 
     let text = "";
     try {
@@ -75,11 +75,12 @@ const LineService = (() => {
         // oldNo があれば「変更希望あり」とみなす（フラグ漏れ対策）
         changeRequested: !!meta.changeRequested || !!oldNo,
         oldNo,
-        changeFailReason: String(meta.changeFailReason || "")
+        changeFailReason: String(meta.changeFailReason || ""),
+        lateSubmission: !!meta.lateSubmission
       };
     }
     // 互換：boolean の場合
-    return { isChange: !!meta, changeRequested: false, oldNo: "", changeFailReason: "" };
+    return { isChange: !!meta, changeRequested: false, oldNo: "", changeFailReason: "", lateSubmission: false };
   }
 
   function buildMessage(title, reservationNo, d, meta) {

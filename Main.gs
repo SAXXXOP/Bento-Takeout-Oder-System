@@ -77,6 +77,26 @@ function onFormSubmit(e) {
       needsCheckReasons.push("受け取り日が取得できません");
     }
 
+    // ★追加：予約締切チェック（前日20時を過ぎた「受取日」は受付不可）
+    // ※フォーム側の選択肢更新がズレても、ここで“送信時刻”基準で厳密に弾く
+    if (formData.pickupDateRaw instanceof Date && !isNaN(formData.pickupDateRaw.getTime())) {
+      const pickupDateOnlyNew = new Date(formData.pickupDateRaw);
+      pickupDateOnlyNew.setHours(0, 0, 0, 0);
+
+      if (!isWithinChangeDeadline(pickupDateOnlyNew, new Date())) {
+        formData._lateSubmission = true;
+        const dl = getChangeDeadline(pickupDateOnlyNew);
+        const dlStr = Utilities.formatDate(dl, "Asia/Tokyo", "M/d HH:mm");
+        needsCheckReasons.push(`予約期限（前日20時）を過ぎています（締切:${dlStr}）`);
+
+        // 「変更」だった場合：新予約が締切後なら元予約を消すのは危険なので変更成立を止める
+        if (isChange) {
+          isChange = false;
+          changeFailReason = "変更先が締切後のため変更できません（元予約は維持されます）";
+        }
+      }
+    }
+
     // 注文内容が空
     if (!formData.orderDetails || !String(formData.orderDetails).trim()) {
       needsCheckReasons.push("注文内容が空です");
@@ -118,7 +138,8 @@ function onFormSubmit(e) {
       changeRequested,
       oldNo,
       changeFailReason,
-      needsCheckReason: needsCheckReasons.join(" / ")
+      needsCheckReason: needsCheckReasons.join(" / "),
+      lateSubmission: !!formData._lateSubmission
     };
 
     // 5. 注文保存
