@@ -18,12 +18,12 @@ function getTemplatePropsDefaults_() {
     [CONFIG.PROPS.BACKUP_MONTHLY_FOLDER_NAME]: "MonthlySnapshots",
     [CONFIG.PROPS.BACKUP_MANUAL_FOLDER_NAME]: "ManualSnapshots",
     [CONFIG.PROPS.BACKUP_RETENTION_DAYS]: "60",
-
-    // 日次準備（予約札＋当日まとめ）
+    // Daily prep（運用：予約札 + 当日まとめ 自動作成）
     [CONFIG.PROPS.DAILY_PREP_AT_HOUR]: "7",
     [CONFIG.PROPS.DAILY_PREP_AT_MINUTE]: "0",
     [CONFIG.PROPS.DAILY_PREP_OFFSET_DAYS]: "0",
-
+    // 曜日指定：空=毎日、0=日…6=土（例：月-金 → "1-5" / "月-金" / "Mon-Fri" でもOK）
+    [CONFIG.PROPS.DAILY_PREP_WEEKDAYS]: "0,1,2,3,4,5,6",
     [CONFIG.PROPS.DEBUG_MAIN]: "0",
     [CONFIG.PROPS.DEBUG_ORDER_SAVE]: "0",
   };

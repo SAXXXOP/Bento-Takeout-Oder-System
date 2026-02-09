@@ -58,6 +58,7 @@ function onOpen() {
         .addItem('フォーム送信トリガー設定', 'installFormSubmitTrigger')
         .addItem('フォーム送信トリガー削除', 'deleteFormSubmitTrigger')
         .addSeparator()
+        .addItem('日次準備設定（時刻/オフセット/曜日）', 'configureDailyPrepSettingsPrompt')  // ★追加
         .addItem('日次準備トリガー設定（当日まとめ+予約札）', 'installDailyPrepTrigger')
         .addItem('日次準備トリガー削除（当日まとめ+予約札）', 'deleteDailyPrepTrigger')
         .addSeparator()

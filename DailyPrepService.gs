@@ -11,10 +11,27 @@ function dailyPrepTrigger() {
   const targetDate = dp_getTargetDate_();
   const label = dp_formatMD_(targetDate);
 
+  // ★曜日指定がある場合は、対象日（today+offset）が対象曜日でなければスキップ
+  if (!dp_isAllowedTargetWeekday_(targetDate)) {
+    return;
+  }
+
   const runId = (typeof logStart_ === "function") ? logStart_("dailyPrepTrigger", { target: label }) : "";
+
 
   try {
     if (runId) logInfo_(runId, "dailyPrepTrigger", "開始", { target: label });
+
+    // 曜日フィルタ（対象日 = 今日 + offset の曜日で判定）
+    const weekdaysRaw = ScriptProps.get(ScriptProps.KEYS.DAILY_PREP_WEEKDAYS, "");
+    if (!dp_isAllowedWeekday_(targetDate, weekdaysRaw)) {
+      const weekdaysLabel = dp_formatWeekdaysForUI_(weekdaysRaw);
+      if (runId) {
+        if (typeof logWarn_ === "function") logWarn_(runId, "dailyPrepTrigger", "スキップ：曜日対象外", { target: label, weekdays: weekdaysLabel });
+        if (typeof logEnd_ === "function") logEnd_(runId, "dailyPrepTrigger", "スキップ", { target: label, weekdays: weekdaysLabel });
+      }
+      return; // finally で lock.releaseLock は走る
+    }
 
     // ※順序はどちらでもOK。朝運用の並びに合わせて当日まとめ→予約札
     createProductionSheet(targetDate);
@@ -54,8 +71,78 @@ function runDailyPrepToday() {
   if (ui) ui.alert("OK：日次準備を実行しました（" + dp_formatMD_(d) + "）。");
 }
 
+/** UI：日次準備の設定（時刻/オフセット/曜日）をプロンプト1回で保存 */
+function configureDailyPrepSettingsPrompt() {
+  const ui = SpreadsheetApp.getUi();
+
+  // 現在値
+  const curHour = dp_clampInt_(ScriptProps.getInt(ScriptProps.KEYS.DAILY_PREP_AT_HOUR, 7), 0, 23);
+  const curMin  = dp_clampInt_(ScriptProps.getInt(ScriptProps.KEYS.DAILY_PREP_AT_MINUTE, 0), 0, 59);
+  const curOff  = ScriptProps.getInt(ScriptProps.KEYS.DAILY_PREP_OFFSET_DAYS, 0);
+  const curWds  = ScriptProps.get(ScriptProps.KEYS.DAILY_PREP_WEEKDAYS, "1-7"); // 未設定なら全曜日扱い
+
+  const guide =
+    "以下を貼り付けて編集してください（key=value形式 / 改行OK）。\n" +
+    "weekdays: 1(月)〜7(日) 例) 1-5 / 6,7 / 空=全曜日\n\n" +
+    `hour=${curHour}\n` +
+    `minute=${curMin}\n` +
+    `offset=${curOff}\n` +
+    `weekdays=${curWds}`;
+
+  const res = ui.prompt("日次準備設定（時刻/オフセット/曜日）", guide, ui.ButtonSet.OK_CANCEL);
+  if (res.getSelectedButton() !== ui.Button.OK) return;
+
+  const raw = String(res.getResponseText() || "").trim();
+  if (!raw) return;
+
+  // parse（key=value）
+  const map = {};
+  raw.split(/\r?\n/).forEach(line => {
+    const s = String(line || "").trim();
+    if (!s) return;
+    const m = s.match(/^([a-zA-Z_]+)\s*=\s*(.*)$/);
+    if (!m) return;
+    map[m[1].toLowerCase()] = String(m[2] ?? "").trim();
+  });
+
+  // 入力が無ければ現状維持
+  const hour = ("hour" in map) ? dp_clampInt_(map.hour, 0, 23) : curHour;
+  const minute = ("minute" in map) ? dp_clampInt_(map.minute, 0, 59) : curMin;
+
+  let offset = curOff;
+  if ("offset" in map) {
+    const n = parseInt(map.offset, 10);
+    if (!Number.isFinite(n)) throw new Error("offset が不正です（整数）。");
+    offset = Math.min(365, Math.max(-365, n));
+  }
+
+  const weekdaysText = ("weekdays" in map) ? map.weekdays : curWds;
+
+  // weekdays の妥当性チェック（ここで例外にして入力ミスを検知）
+  dp_parseWeekdays_(weekdaysText);
+
+  // 保存（まとめて）
+  ScriptProps.setMany({
+    [ScriptProps.KEYS.DAILY_PREP_AT_HOUR]: String(hour),
+    [ScriptProps.KEYS.DAILY_PREP_AT_MINUTE]: String(minute),
+    [ScriptProps.KEYS.DAILY_PREP_OFFSET_DAYS]: String(offset),
+    [ScriptProps.KEYS.DAILY_PREP_WEEKDAYS]: String(weekdaysText || ""),
+  });
+
+  // トリガー再作成（ここはsilentにして、最後にまとめて表示）
+  const summary = installDailyPrepTrigger(true);
+
+  ui.alert(
+    "OK：日次準備設定を保存しました。\n" +
+    `実行時刻：${summary.hour}:${String(summary.minute).padStart(2, "0")}\n` +
+    `対象日：今日 + ${summary.offset}日\n` +
+    `曜日：${summary.weekdaysLabel}\n` +
+    `（既存トリガー削除：${summary.deleted}件）`
+  );
+}
+
 /** トリガー設定（既存は同ハンドラを消してから作る） */
-function installDailyPrepTrigger() {
+function installDailyPrepTrigger(silent = false) {
   let ui = null;
   try { ui = SpreadsheetApp.getUi(); } catch (e) {}
 
@@ -65,6 +152,7 @@ function installDailyPrepTrigger() {
   const hour = dp_clampInt_(ScriptProps.getInt(ScriptProps.KEYS.DAILY_PREP_AT_HOUR, 7), 0, 23);
   const minute = dp_clampInt_(ScriptProps.getInt(ScriptProps.KEYS.DAILY_PREP_AT_MINUTE, 0), 0, 59);
   const offset = ScriptProps.getInt(ScriptProps.KEYS.DAILY_PREP_OFFSET_DAYS, 0);
+  const weekdaysText = ScriptProps.get(ScriptProps.KEYS.DAILY_PREP_WEEKDAYS, "");
 
   ScriptApp.newTrigger(handler)
     .timeBased()
@@ -73,14 +161,23 @@ function installDailyPrepTrigger() {
     .nearMinute(minute)
     .create();
 
-  if (ui) {
+  const summary = {
+    deleted, hour, minute, offset,
+    weekdaysText: weekdaysText,
+    weekdaysLabel: dp_weekdaysLabel_(weekdaysText),
+  };
+
+  if (ui && !silent) {
     ui.alert(
       `OK：日次準備トリガーを設定しました（既存 ${deleted} 件を削除）。\n` +
       `実行時刻：${hour}:${String(minute).padStart(2, "0")}\n` +
-      `対象日：今日 + ${offset}日`
+      `対象日：今日 + ${offset}日\n` +
+      `曜日：${summary.weekdaysLabel}`
     );
   }
+  return summary;
 }
+
 
 /** トリガー削除 */
 function deleteDailyPrepTrigger() {
@@ -129,4 +226,82 @@ function dp_clampInt_(n, min, max) {
   const x = parseInt(n, 10);
   if (!Number.isFinite(x)) return min;
   return Math.min(max, Math.max(min, x));
+}
+
+function dp_isAllowedTargetWeekday_(dateObj) {
+  const text = ScriptProps.get(ScriptProps.KEYS.DAILY_PREP_WEEKDAYS, "");
+  const set = dp_parseWeekdays_(text); // null = 全曜日
+  if (!set) return true;
+  return set.has(dateObj.getDay()); // 0(日)〜6(土)
+}
+
+/**
+ * weekdays文字列を Set(0-6) に変換
+ * - "" / 未設定: null（全曜日）
+ * - "1-5"（月〜金）/ "6,7"（土日）/ "月-金" / "月火水" などを許容
+ * - 入力不正は throw
+ */
+function dp_parseWeekdays_(text) {
+  let s = String(text ?? "").trim();
+  if (!s) return null;
+
+  // 全角数字→半角
+  s = s.replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+
+  // 日本語曜日→数字（1=月 ... 7=日）
+  const wmap = { "月": "1", "火": "2", "水": "3", "木": "4", "金": "5", "土": "6", "日": "7" };
+  s = s.replace(/[月火水木金土日]/g, ch => wmap[ch]);
+
+  // 区切りを統一
+  s = s.replace(/[、\s]+/g, ",").replace(/,+/g, ",").replace(/^,|,$/g, "");
+
+  const set = new Set();
+
+  const addNum = (n1to7) => {
+    let n = parseInt(n1to7, 10);
+    if (!Number.isFinite(n)) throw new Error("weekdays が不正です。");
+    if (n === 0) n = 7;          // 0 を日(7)として許容
+    if (n < 1 || n > 7) throw new Error("weekdays は 1〜7（または0）で指定してください。");
+    const dayIdx = (n === 7) ? 0 : n; // JS: 0=日,1=月...6=土
+    set.add(dayIdx);
+  };
+
+  const parts = s.split(",").filter(Boolean);
+  parts.forEach(p => {
+    const m = p.match(/^(\d)\s*-\s*(\d)$/);
+    if (m) {
+      let a = parseInt(m[1], 10);
+      let b = parseInt(m[2], 10);
+      if (a === 0) a = 7;
+      if (b === 0) b = 7;
+      if (a < 1 || a > 7 || b < 1 || b > 7) throw new Error("weekdays の範囲指定が不正です。");
+      // 1-5 だけでなく 6-2 のような跨ぎも許容
+      const seq = [];
+      let x = a;
+      while (true) {
+        seq.push(x);
+        if (x === b) break;
+        x = (x === 7) ? 1 : (x + 1);
+        if (seq.length > 7) break;
+      }
+      seq.forEach(addNum);
+    } else {
+      addNum(p);
+    }
+  });
+
+  // 7日全部なら null（全曜日）扱いに寄せる
+  return (set.size >= 7) ? null : set;
+}
+
+function dp_weekdaysLabel_(text) {
+  const set = dp_parseWeekdays_(text);
+  if (!set) return "全曜日";
+
+  const labels = ["日","月","火","水","木","金","土"];
+  // 表示は 月→…→日 の順にしたいので並び替え
+  const order = [1,2,3,4,5,6,0];
+  const out = [];
+  order.forEach(i => { if (set.has(i)) out.push(labels[i]); });
+  return out.join("");
 }
