@@ -11,63 +11,98 @@ function showCustomerEditor() {
 function onOpen() {
   const ui = SpreadsheetApp.getUi();
 
-  ui.createMenu('★予約管理')
-    // ===== 日々の運用（よく使う：朝→処理の順） =====
+  // MenuVisibility が無い環境でも壊れないようにフォールバック
+  const vis = (typeof MenuVisibility !== "undefined" && MenuVisibility)
+    ? MenuVisibility
+    : {
+        showOrderNoTools: () => true,
+        showNameConflict: () => true,
+        showStatusTools: () => true,
+        showBackup: () => true,
+        showSetupTools: () => true,
+        showPropCheck: () => true,
+      };
+
+  const menu = ui.createMenu('★予約管理');
+
+  // ===== 日々の運用（よく使う：朝→処理の順） =====
+  menu
     .addItem('★要確認一覧を更新', 'refreshNeedsCheckView')
     .addItem('当日まとめシートを更新', 'createProductionSheet')
     .addItem('指定日の予約札を作成', 'createDailyReservationCards')
-    .addItem('日次準備（当日まとめ+予約札：指定日まとめて）', 'runDailyPrepPrompt')
+    .addItem('日次準備（当日まとめ予約札：指定日まとめて）', 'runDailyPrepPrompt')
     .addSeparator()
     .addItem('★要確認一覧を開く', 'openNeedsCheckView')
-    .addItem('顧客備考を編集（サイドバー）', 'showCustomerEditor')
+    .addItem('顧客備考を編集（サイドバー）', 'showCustomerEditor');
 
-    // ===== 要確認の処理（予約No指定） =====
-    .addSeparator()
-    .addItem('No指定：有効に戻す（空欄）', 'markByOrderNoAsActive')
-    .addItem('No指定：無効にする（理由必須）', 'markByOrderNoAsInvalid')
-    .addItem('No指定：★要確認にする（理由必須）', 'markByOrderNoAsNeedsCheck')
-    .addItem('No指定：理由だけ編集', 'editReasonByOrderNo')
+  // ===== 要確認の処理（予約No指定） =====
+  if (vis.showOrderNoTools()) {
+    menu
+      .addSeparator()
+      .addItem('No指定：有効に戻す（空欄）', 'markByOrderNoAsActive')
+      .addItem('No指定：無効にする（理由必須）', 'markByOrderNoAsInvalid')
+      .addItem('No指定：★要確認にする（理由必須）', 'markByOrderNoAsNeedsCheck')
+      .addItem('No指定：理由だけ編集', 'editReasonByOrderNo');
+  }
 
-    // ===== 補助（氏名不一致） =====
-    .addSeparator()
-    .addSubMenu(
-      ui.createMenu('氏名不一致')
-        .addItem('ログを開く', 'openNameConflictLog')
-        .addItem('次の1件を処理', 'resolveNextNameConflict')
-    )
+  // ===== 補助（氏名不一致） =====
+  if (vis.showNameConflict()) {
+    menu
+      .addSeparator()
+      .addSubMenu(
+        ui.createMenu('氏名不一致')
+          .addItem('ログを開く', 'openNameConflictLog')
+          .addItem('次の1件を処理', 'resolveNextNameConflict')
+      );
+  }
 
-    // ===== 補助（チェック/監査/移行） =====
-    .addSeparator()
-    .addItem('理由未記入チェック', 'checkMissingReasons')
-    .addItem('ステータス運用ガード適用', 'applyOrderStatusGuards')
-    .addItem('ステータス監査（値の件数）', 'auditStatusValues_')
-    .addItem('ステータス移行（B案）', 'migrateOrderStatusToBPlan')
+  // ===== 補助（チェック/監査/移行） =====
+  if (vis.showStatusTools()) {
+    menu
+      .addSeparator()
+      .addItem('理由未記入チェック', 'checkMissingReasons')
+      .addItem('ステータス運用ガード適用', 'applyOrderStatusGuards')
+      .addItem('ステータス監査（値の件数）', 'auditStatusValues_')
+      .addItem('ステータス移行（B案）', 'migrateOrderStatusToBPlan');
+  }
 
-    // ===== 管理（バックアップ/導入/初期設定） =====
-    .addSeparator()
-    .addSubMenu(
-      ui.createMenu('バックアップ')
-        .addItem('手動スナップショット作成', 'createManualSnapshot')
-    )
-    .addSeparator()
-    .addSubMenu(
-      ui.createMenu('導入ツール')
-        .addItem('本番初期化（テストデータ削除）', 'initProductionCleanSheetOnly')
-        .addItem('本番初期化（＋フォーム回答も削除）', 'initProductionCleanWithFormResponses')
-        .addSeparator()
-        .addItem('フォーム送信トリガー設定', 'installFormSubmitTrigger')
-        .addItem('フォーム送信トリガー削除', 'deleteFormSubmitTrigger')
-        .addSeparator()
-        .addItem('日次準備設定（時刻/オフセット/曜日）', 'configureDailyPrepSettingsPrompt')  // ★追加
-        .addItem('日次準備トリガー設定（当日まとめ+予約札）', 'installDailyPrepTrigger')
-        .addItem('日次準備トリガー削除（当日まとめ+予約札）', 'deleteDailyPrepTrigger')
-        .addSeparator()
-        .addItem('テンプレ用プロパティ作成（未設定のみ）', 'ensureTemplateScriptProperties')
-        .addItem('テンプレ用プロパティ上書き（全部ダミー）', 'overwriteTemplateScriptProperties')
-    )
-    .addSeparator()
-    .addItem('初期設定チェック（Script Properties）', 'checkScriptProperties')
-    .addToUi();
+  // ===== 管理（バックアップ/導入/初期設定） =====
+  if (vis.showBackup()) {
+    menu
+      .addSeparator()
+      .addSubMenu(
+        ui.createMenu('バックアップ')
+          .addItem('手動スナップショット作成', 'createManualSnapshot')
+      );
+  }
+
+  if (vis.showSetupTools()) {
+    menu
+      .addSeparator()
+      .addSubMenu(
+        ui.createMenu('導入ツール')
+          .addItem('本番初期化（テストデータ削除）', 'initProductionCleanSheetOnly')
+          .addItem('本番初期化（＋フォーム回答も削除）', 'initProductionCleanWithFormResponses')
+          .addSeparator()
+          .addItem('フォーム送信トリガー設定', 'installFormSubmitTrigger')
+          .addItem('フォーム送信トリガー削除', 'deleteFormSubmitTrigger')
+          .addSeparator()
+          .addItem('日次準備設定（時刻/オフセット/曜日）', 'configureDailyPrepSettingsPrompt')
+          .addItem('日次準備トリガー設定（当日まとめ予約札）', 'installDailyPrepTrigger')
+          .addItem('日次準備トリガー削除（当日まとめ予約札）', 'deleteDailyPrepTrigger')
+          .addSeparator()
+          .addItem('テンプレ用プロパティ作成（未設定のみ）', 'ensureTemplateScriptProperties')
+          .addItem('テンプレ用プロパティ上書き（全部ダミー）', 'overwriteTemplateScriptProperties')
+      );
+  }
+
+  if (vis.showPropCheck()) {
+    menu
+      .addSeparator()
+      .addItem('初期設定チェック（Script Properties）', 'checkScriptProperties');
+  }
+
+  menu.addToUi();
 }
 
 

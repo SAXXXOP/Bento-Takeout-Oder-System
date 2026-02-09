@@ -26,6 +26,15 @@ function getTemplatePropsDefaults_() {
     [CONFIG.PROPS.DAILY_PREP_WEEKDAYS]: "0,1,2,3,4,5,6",
     [CONFIG.PROPS.DEBUG_MAIN]: "0",
     [CONFIG.PROPS.DEBUG_ORDER_SAVE]: "0",
+
+    // Menu visibility（任意）: 1=表示 / 0=非表示
+    [CONFIG.PROPS.MENU_SHOW_ADVANCED]: "1",
+    [CONFIG.PROPS.MENU_SHOW_ORDERNO]: "1",
+    [CONFIG.PROPS.MENU_SHOW_NAME_CONFLICT]: "1",
+    [CONFIG.PROPS.MENU_SHOW_STATUS]: "1",
+    [CONFIG.PROPS.MENU_SHOW_BACKUP]: "1",
+    [CONFIG.PROPS.MENU_SHOW_SETUP]: "1",
+    [CONFIG.PROPS.MENU_SHOW_PROP_CHECK]: "1",
   };
 
   // 互換：LOG_MAX が残ってる環境向け

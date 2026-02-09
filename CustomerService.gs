@@ -63,28 +63,37 @@ const CustomerService = {
 
       // 旧名も新名もあるが一致しない → 上書きしない＋要確認＋ログ
       } else if (oldNorm && newNorm && oldNorm !== newNorm) {
-      formData._needsCheckNameReason =
-        `氏名不一致（顧客名簿:${oldNameRaw} / 入力:${newNameRaw}）`;
 
-      // ★ログに「顧客行・予約No・合計金額」まで入れて、名簿更新は保留
-      appendNameConflictLogV2_(sheet.getParent(), {
-        at: now, // 記録日時
-        orderNo: formData._reservationNoForLog || "",
-        totalPrice: formData.totalPrice || 0,
-        lineId: lineId || row[CONFIG.CUSTOMER_COLUMN.LINE_ID - 1] || "",
-        phone: phone || "",
-        customerRow: foundRow,
-        oldName: oldNameRaw,
-        newName: newNameRaw
-      });
+      // ★追加：部分一致なら「同一人物候補」扱い（上書きせず、要確認にも振らない）
+      if (isPartialNameMatch_(oldNorm, newNorm)) {
+        // nameToWrite は oldNameRaw のまま（上書きなし）
+        // _needsCheckNameReason もログも出さない
+      } else {
+        // 従来どおり：不一致 → 要確認＋ログ
+        formData._needsCheckNameReason =
+          `氏名不一致（顧客名簿:${oldNameRaw} / 入力:${newNameRaw}）`;
+
+        appendNameConflictLogV2_(sheet.getParent(), {
+          at: now,
+          orderNo: formData._reservationNoForLog || "",
+          totalPrice: formData.totalPrice || 0,
+          lineId: lineId || row[CONFIG.CUSTOMER_COLUMN.LINE_ID - 1] || "",
+          phone: phone || "",
+          customerRow: foundRow,
+          oldName: oldNameRaw,
+          newName: newNameRaw
+        });
 
         // nameToWrite は oldNameRaw のまま（= 上書きしない）
-      } else {
-        // 一致（空白差など）は従来通り「長い方」を採用
-        if (newNameRaw && newNameRaw.length > oldNameRaw.length) {
-          nameToWrite = newNameRaw;
-        }
       }
+
+    } else {
+      // 一致（空白差など）は従来通り「長い方」を採用
+      if (newNameRaw && newNameRaw.length > oldNameRaw.length) {
+        nameToWrite = newNameRaw;
+      }
+    }
+
 
       sheet.getRange(foundRow, CONFIG.CUSTOMER_COLUMN.LINE_ID)
         .setValue(lineId || row[CONFIG.CUSTOMER_COLUMN.LINE_ID - 1]);
@@ -202,6 +211,26 @@ function normalizeCustomerName_(s) {
   // 半角/全角スペース・改行等を除去して比較
   return String(s || "").replace(/[ \t\r\n　]/g, "");
 }
+
+// 追加：部分一致（サブストリング）を「同一人物候補」とみなす
+// - 短すぎる一致で誤爆しないためのガード付き
+function isPartialNameMatch_(aNorm, bNorm) {
+  const a = String(aNorm || "");
+  const b = String(bNorm || "");
+  if (!a || !b) return false;
+
+  const shorter = (a.length <= b.length) ? a : b;
+  const longer  = (a.length <= b.length) ? b : a;
+
+  // ガード：短すぎる一致は信用しない
+  if (shorter.length < 3) return false;
+
+  // ガード：短い方が長い方の半分未満なら誤爆しやすいので除外（必要なら調整可）
+  if (shorter.length / longer.length < 0.5) return false;
+
+  return longer.includes(shorter);
+}
+
 
 function appendNameConflictLog_(ss, data) {
   const sheetName = (CONFIG.SHEET && CONFIG.SHEET.NAME_CONFLICT_LOG)
@@ -439,3 +468,4 @@ function getPickupDateForHistory_(formData, fallbackNow) {
   // ③ どうしても取れないときは送信日
   return now;
 }
+
