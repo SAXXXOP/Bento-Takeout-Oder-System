@@ -2,7 +2,7 @@
  * 当日まとめシート作成
  * 修正点：見出し用ID(10,15,21,46等)の重複排除 / ID順 / ビンパッキング
  */
-function createProductionSheet() {
+function createProductionSheet(targetDateOrInput) {
   const DEBUG_UNMATCHED_LOG = false; // ★その他が出るときなど必要なときだけ true にして原因CHECK
 
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -13,11 +13,21 @@ function createProductionSheet() {
   
   if (!src || !sheet || !master) return;
 
-  const ui = SpreadsheetApp.getUi();
-  const res = ui.prompt("当日まとめ作成", "日付（例: 2/14）", ui.ButtonSet.OK_CANCEL);
-  if (res.getSelectedButton() !== ui.Button.OK) return;
+  // トリガー実行ではUIが使えないので安全に扱う
+  let ui = null;
+  try { ui = SpreadsheetApp.getUi(); } catch (e) {}
 
-  const targetInput = String(res.getResponseText() || "").trim();
+  let targetInput = "";
+  if (targetDateOrInput instanceof Date) {
+    targetInput = formatMDFromDate_(targetDateOrInput); // "M/d"
+  } else if (targetDateOrInput !== undefined && targetDateOrInput !== null && String(targetDateOrInput).trim() !== "") {
+    targetInput = String(targetDateOrInput).trim();
+  } else {
+    if (!ui) throw new Error("createProductionSheet: targetDateOrInput is required when running without UI.");
+    const res = ui.prompt("当日まとめ作成", "日付（例: 2/14）", ui.ButtonSet.OK_CANCEL);
+    if (res.getSelectedButton() !== ui.Button.OK) return;
+    targetInput = String(res.getResponseText() || "").trim();
+  }
   const targetMD = parseMonthDay_(targetInput);            // {m,d} or null
   const targetDigits = targetInput.replace(/[^0-9]/g, ""); // フォールバック用
   let matchedDateRaw = null;                               // ★A1表示用に保持
@@ -435,7 +445,7 @@ sortedGroups.forEach(item => {
 
   [1, 4, 7].forEach(c => sheet.setColumnWidth(c, 210));
   [2, 5, 8].forEach(c => sheet.setColumnWidth(c, 45));
-  sheet.activate();
+  if (ui) sheet.activate();
 }
 
 /**

@@ -18,6 +18,12 @@ function getTemplatePropsDefaults_() {
     [CONFIG.PROPS.BACKUP_MONTHLY_FOLDER_NAME]: "MonthlySnapshots",
     [CONFIG.PROPS.BACKUP_MANUAL_FOLDER_NAME]: "ManualSnapshots",
     [CONFIG.PROPS.BACKUP_RETENTION_DAYS]: "60",
+
+    // 日次準備（予約札＋当日まとめ）
+    [CONFIG.PROPS.DAILY_PREP_AT_HOUR]: "7",
+    [CONFIG.PROPS.DAILY_PREP_AT_MINUTE]: "0",
+    [CONFIG.PROPS.DAILY_PREP_OFFSET_DAYS]: "0",
+
     [CONFIG.PROPS.DEBUG_MAIN]: "0",
     [CONFIG.PROPS.DEBUG_ORDER_SAVE]: "0",
   };

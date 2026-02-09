@@ -2,7 +2,7 @@
  * 予約札作成（最短列優先 + 背の高い順ソート + 46行ページ境界管理版）
  * 備考欄の20文字折り返し（【要】込み・スペース無し）対応版
  */
-function createDailyReservationCards() {
+function createDailyReservationCards(targetDateOrInput) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const reportSheet = ss.getSheetByName(CONFIG.SHEET.ORDER_LIST);
   const cardSheet = ss.getSheetByName(CONFIG.SHEET.RESERVATION_CARD);
@@ -14,14 +14,38 @@ function createDailyReservationCards() {
   const customerMap = getCustomerMap(customerSheet);
   const menuMap = getMenuMap(menuSheet);
 
-  const ui = SpreadsheetApp.getUi();
-  const response = ui.prompt('予約札作成', '日付を入力(例: 1/30)', ui.ButtonSet.OK_CANCEL);
-  if (response.getSelectedButton() !== ui.Button.OK) return;
-  const targetDateRaw = response.getResponseText().replace(/[^0-9]/g, "");
+  // トリガー実行ではUIが使えないので安全に扱う
+  let ui = null;
+  try { ui = SpreadsheetApp.getUi(); } catch (e) {}
+
+  let targetInput = "";
+  let targetMD = null;        // {m,d}
+  let targetDigits = "";      // フォールバック用
+
+  if (targetDateOrInput instanceof Date) {
+    targetMD = { m: targetDateOrInput.getMonth() + 1, d: targetDateOrInput.getDate() };
+    targetInput = `${targetMD.m}/${targetMD.d}`;
+    targetDigits = `${targetMD.m}${targetMD.d}`;
+  } else if (targetDateOrInput !== undefined && targetDateOrInput !== null && String(targetDateOrInput).trim() !== "") {
+    targetInput = String(targetDateOrInput).trim();
+    targetMD = (typeof parseMonthDay_ === "function") ? parseMonthDay_(targetInput) : null;
+    targetDigits = targetInput.replace(/[^0-9]/g, "");
+    if (!targetDigits && targetMD) targetDigits = `${targetMD.m}${targetMD.d}`;
+  } else {
+    if (!ui) throw new Error("createDailyReservationCards: targetDateOrInput is required when running without UI.");
+    const response = ui.prompt('予約札作成', '日付を入力(例: 1/30)', ui.ButtonSet.OK_CANCEL);
+    if (response.getSelectedButton() !== ui.Button.OK) return;
+    targetInput = String(response.getResponseText() || "").trim();
+    targetMD = (typeof parseMonthDay_ === "function") ? parseMonthDay_(targetInput) : null;
+    targetDigits = targetInput.replace(/[^0-9]/g, "");
+    if (!targetDigits && targetMD) targetDigits = `${targetMD.m}${targetMD.d}`;
+  }
 
   const lastRow = reportSheet.getLastRow();
   if (lastRow < 2) return;
-  const allData = reportSheet.getRange(1, 1, lastRow, CONFIG.COLUMN.SOURCE_NO).getValues();
+  // RAW日付列(PICKUP_DATE_RAW)まで取る（自動判定の精度アップ）
+  const lastCol = CONFIG.COLUMN.PICKUP_DATE_RAW || CONFIG.COLUMN.SOURCE_NO;
+  const allData = reportSheet.getRange(1, 1, lastRow, lastCol).getValues();
   
   let cardsToPrint = [];
   allData.slice(1).forEach(row => {
@@ -29,7 +53,17 @@ function createDailyReservationCards() {
   const isActive = (status === CONFIG.STATUS.ACTIVE); // ACTIVEは空文字
   if (!isActive) return;
     const dateVal = row[CONFIG.COLUMN.PICKUP_DATE - 1];
-    if (isActive && dateVal && dateVal.toString().replace(/[^0-9]/g, "").includes(targetDateRaw)) {
+    const pickupDateRaw = CONFIG.COLUMN.PICKUP_DATE_RAW ? row[CONFIG.COLUMN.PICKUP_DATE_RAW - 1] : null;
+
+    let isTarget = false;
+    if (targetMD && pickupDateRaw instanceof Date) {
+      isTarget = (pickupDateRaw.getMonth() + 1 === targetMD.m && pickupDateRaw.getDate() === targetMD.d);
+    } else if (dateVal && targetDigits) {
+      isTarget = String(dateVal).replace(/[^0-9]/g, "").includes(targetDigits);
+    }
+
+    if (isActive && isTarget) {
+
       
       const rawDetails = row[CONFIG.COLUMN.DETAILS - 1] || "";
       let lines = rawDetails.toString().split('\n').filter(l => l.trim() !== "");
@@ -62,7 +96,8 @@ function createDailyReservationCards() {
   });
 
   if (cardsToPrint.length === 0) {
-    ui.alert("該当データがありませんでした。");
+    if (ui) ui.alert("該当データがありませんでした。");
+    else console.log("createDailyReservationCards: 該当データなし");
     return;
   }
 
@@ -102,7 +137,7 @@ function createDailyReservationCards() {
   
   for(let c=1; c<=3; c++) cardSheet.setColumnWidth(c, 230);
   cardSheet.setRowHeights(1, cardSheet.getMaxRows(), 21);
-  cardSheet.activate();
+  if (ui) cardSheet.activate();
 }
 
 /**
