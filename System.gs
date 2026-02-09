@@ -97,6 +97,9 @@ function onOpen() {
           .addItem('日次準備トリガー設定（当日まとめ予約札）', 'installDailyPrepTrigger')
           .addItem('日次準備トリガー削除（当日まとめ予約札）', 'deleteDailyPrepTrigger')
           .addSeparator()
+          .addItem('締切後送信メール通知 テスト（疎通）', 'sendLateSubmissionNotifyPing')
+          .addItem('締切後送信メール通知 テスト（抽出）', 'testLateSubmissionNotifyEmail')
+          .addSeparator()
           .addItem('テンプレ用プロパティ作成（未設定のみ）', 'ensureTemplateScriptProperties')
           .addItem('テンプレ用プロパティ上書き（全部ダミー）', 'overwriteTemplateScriptProperties')
       );

@@ -138,6 +138,11 @@ function getTemplatePropsDefaults_() {
     [CONFIG.PROPS.DAILY_PREP_OFFSET_DAYS]: "0",
     // 曜日指定：空=毎日、0=日…6=土（例：月-金 → "1-5" / "月-金" / "Mon-Fri" でもOK）
     [CONFIG.PROPS.DAILY_PREP_WEEKDAYS]: "0,1,2,3,4,5,6",
+
+    // 締切後送信メール（任意）
+    // 例）有効化: LATE_SUBMISSION_NOTIFY_ENABLED=1 / 宛先: LATE_SUBMISSION_NOTIFY_TO=aaa@example.com,bbb@example.com
+    [CONFIG.PROPS.LATE_SUBMISSION_NOTIFY_ENABLED]: "0",
+    [CONFIG.PROPS.LATE_SUBMISSION_NOTIFY_TO]: "__SET_ME__",
     [CONFIG.PROPS.DEBUG_MAIN]: "0",
     [CONFIG.PROPS.DEBUG_ORDER_SAVE]: "0",
 
