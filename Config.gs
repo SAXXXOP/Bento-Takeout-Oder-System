@@ -113,7 +113,8 @@ STATUS: {
     MENU_NAME: 3,    // C (フォームの質問文)
     SUB_MENU: 4,     // D (グリッドの選択肢など)
     PRICE: 5,        // E
-    SHORT_NAME: 6    // F (内部キー・略称)
+    SHORT_NAME: 6,    // F (内部キー・略称)
+    AUTO_REPLY_NAME: 7 // G (任意：自動返信表示名)
   },
 
   // 7. LINE/LIFF 関連設定（メモとして記録）

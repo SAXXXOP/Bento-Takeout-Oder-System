@@ -1,5 +1,53 @@
 // LineService.gs
 const LineService = (() => {
+
+    function getAutoReplyMap_() {
+      const cache = CacheService.getScriptCache();
+      const key = "AUTO_REPLY_MAP_V1";
+      const cached = cache.get(key);
+      if (cached) {
+        try { return JSON.parse(cached) || {}; } catch (e) {}
+      }
+
+      const map = {};
+      const menus = MenuRepository.getMenu();
+      menus.forEach(menu => {
+        const parent = String(menu.parentName || "").trim();
+        if (!parent) return;
+        const child = String(menu.childName || "").trim();
+        const fullKey = child ? `${parent}(${child})` : parent;
+
+        const auto = String(menu.autoReplyName || "").trim();
+        const display = auto || fullKey; // 空欄なら従来のフル表記にフォールバック
+
+        map[fullKey] = display;
+        const short = String(menu.shortName || "").trim();
+        if (short) map[short] = display;
+      });
+
+      cache.put(key, JSON.stringify(map), 300); // 5分キャッシュ
+      return map;
+    }
+
+    function formatOrderDetailsForCustomer(orderDetails) {
+      const s = String(orderDetails || "").replace(/\r\n/g, "\n");
+      if (!s.trim()) return "";
+      const map = getAutoReplyMap_();
+
+      return s
+        .split("\n")
+        .filter(l => l.trim() !== "")
+        .map(line => {
+          // 例）・KARA_S x 2 / ・唐揚げ弁当(小) x 2
+          const m = line.match(/^(\s*・\s*)(.+?)(\s*(?:x|×)\s*\d+.*)$/i);
+          if (!m) return line;
+          const name = m[2].trim();
+          const display = map[name] || name;
+          return m[1] + display + m[3];
+        })
+        .join("\n");
+    }
+
   function sendReservationMessage(reservationNo, formData, meta) {
     if (!formData || !formData.userId) return { ok: false, reason: "missing_userId" };
 
@@ -64,7 +112,7 @@ const LineService = (() => {
       "【ご要望】",
       d.note || "なし",
       "【ご注文内容】",
-      d.orderDetails || "",
+      formatOrderDetailsForCustomer(d.orderDetails),
       " 合計：" + (d.totalItems || 0) + "点 / " + totalPriceStr + "円",
       "━━━━━━━━━━━━━"
     ].join("\n");
@@ -101,5 +149,8 @@ const LineService = (() => {
     }
   }
 
-  return { sendReservationMessage: sendReservationMessage };
+  return {
+    sendReservationMessage: sendReservationMessage,
+    formatOrderDetailsForCustomer: formatOrderDetailsForCustomer
+  };
 })();

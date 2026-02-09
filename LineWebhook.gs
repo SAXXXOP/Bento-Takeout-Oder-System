@@ -413,6 +413,11 @@ function buildPagerBubble(page, totalPages) {
    ========================= */
 
 function buildConfirmFlex(orderNo, itemsText, formUrl) {
+  const customerItemsText =
+    (LineService && typeof LineService.formatOrderDetailsForCustomer === "function")
+      ? LineService.formatOrderDetailsForCustomer(itemsText)
+      : (itemsText || "");
+      
   return {
     type: "flex",
     altText: "変更フォームを開く",
@@ -433,7 +438,7 @@ function buildConfirmFlex(orderNo, itemsText, formUrl) {
             cornerRadius: "md",
             contents: [
               { type: "text", text: `対象No: ${orderNo}`, size: "sm", weight: "bold" },
-              { type: "text", text: `内容:\n${itemsText || ""}`, size: "xs", color: "#666666", wrap: true }
+              { type: "text", text: `内容:\n${customerItemsText}`, size: "xs", color: "#666666", wrap: true }
             ]
           },
           {

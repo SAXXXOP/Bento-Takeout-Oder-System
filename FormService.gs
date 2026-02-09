@@ -13,7 +13,9 @@ const FormService = {
       userId: "", userName: "", rawName: "", simpleName: "",
       phoneNumber: "", pickupDate: "", note: "",
       oldReservationNo: "",
-      orderDetails: "", totalItems: 0, totalPrice: 0,
+      orderDetails: "",              // 保存用（内部キー）
+      orderDetailsForCustomer: "",   // 返信用（お客様向け）
+      totalItems: 0, totalPrice: 0,
       groupSummary: {}, isRegular: false
     };
 
@@ -125,9 +127,22 @@ const FormService = {
 
       if (!menu) return;
 
-      const displayName = menu.shortName || (menu.childName ? `${menu.parentName}(${menu.childName})` : menu.parentName);
-      
-      formData.orderDetails += `・${displayName} x ${count}\n`;
+      const parent = String(menu.parentName || "").trim();
+      const child  = String(menu.childName  || "").trim();
+      const hasChild = !!child && child !== parent;
+
+      // 保存用（これまで通り：略称優先）
+      const internalName =
+        menu.shortName || (hasChild ? `${parent}(${child})` : parent);
+
+      // 返信用（小メニュー有無に関係なく、自動返信表示名を優先）
+      const auto = String(menu.autoReplyName || "").trim();
+      const customerName =
+        auto ||
+        (hasChild ? `${parent}(${child})` : parent);
+
+      formData.orderDetails += `・${internalName} x ${count}\n`;
+      formData.orderDetailsForCustomer += `・${customerName} x ${count}\n`;
       formData.totalItems += count;
       formData.totalPrice += (menu.price || 0) * count;
       
