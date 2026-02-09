@@ -9,6 +9,12 @@ function showCustomerEditor() {
 }
 
 function onOpen() {
+  // プロパティ変更（特にメニュー表示フラグ）を即反映させるため、メニュー生成前にキャッシュをクリア
+  try {
+    if (typeof ScriptProps !== "undefined" && ScriptProps.clearCache) ScriptProps.clearCache();
+  } catch (e) {
+    // noop
+  }
   const ui = SpreadsheetApp.getUi();
 
   // MenuVisibility が無い環境でも壊れないようにフォールバック
@@ -102,16 +108,22 @@ function onOpen() {
       .addItem('初期設定チェック（Script Properties）', 'checkScriptProperties');
   }
 
+  // ===== 表示更新（復旧用） =====
+  menu
+    .addSeparator()
+    .addItem('🔄 メニューを再表示（設定再読込）', 'reloadReservationMenu_');
+
   menu.addToUi();
 }
 
-
-function checkScriptProperties() {
-  const ui = SpreadsheetApp.getUi();
-  const r = ScriptProps.validate();
-  if (r.ok) {
-    ui.alert("OK：必須の Script Properties は設定済みです。");
-  } else {
-    ui.alert("NG：未設定の Script Properties があります。\n\n- " + r.missing.join("\n- "));
+/**
+ * メニューを再表示（Script Properties の変更を反映）
+ */
+function reloadReservationMenu_() {
+  try {
+    if (typeof ScriptProps !== "undefined" && ScriptProps.clearCache) ScriptProps.clearCache();
+  } catch (e) {
+    // noop
   }
+  onOpen();
 }

@@ -1,248 +1,275 @@
-/**
- * DeploymentTools.gs
- * 店舗導入用：本番初期化（テストデータ削除）ツール
- *
- * - 実行前に BACKUP フォルダへスナップショット作成（Driveコピー）
- * - 削除対象の一覧を表示し、シート名入力で二重確認
- * - （任意）フォーム本体の回答も削除
- */
+// ===== 導入ツール（統合）：日次準備設定 / トリガー =====
 
-// ===== 公開関数（メニューから呼ぶ想定） =====
-
-/** 本番初期化（シート側のみ） */
-function initProductionCleanSheetOnly() {
-  initProductionClean_({ deleteFormResponses: false });
-}
-
-/** 本番初期化（シート＋フォーム本体の回答も削除） */
-function initProductionCleanWithFormResponses() {
-  initProductionClean_({ deleteFormResponses: true });
-}
-
-/**
- * フォーム送信トリガーを設定（重複は削除）
- * ※コピー直後はトリガーが無い/壊れることがあるので、導入時に押せるようにする
- */
-function installFormSubmitTrigger() {
+function configureDailyPrepSettingsPrompt() {
   const ui = SpreadsheetApp.getUi();
 
-  // 既存の onFormSubmit トリガーを削除（関数名一致）
-  const triggers = ScriptApp.getProjectTriggers();
-  let deleted = 0;
-  triggers.forEach(t => {
-    try {
-      if (t.getHandlerFunction && t.getHandlerFunction() === "onFormSubmit") {
-        ScriptApp.deleteTrigger(t);
-        deleted++;
-      }
-    } catch (e) {}
+  // 現在値
+  const curHour = st_clampInt_(ScriptProps.getInt(ScriptProps.KEYS.DAILY_PREP_AT_HOUR, 7), 0, 23);
+  const curMin  = st_clampInt_(ScriptProps.getInt(ScriptProps.KEYS.DAILY_PREP_AT_MINUTE, 0), 0, 59);
+  const curOff  = ScriptProps.getInt(ScriptProps.KEYS.DAILY_PREP_OFFSET_DAYS, 0);
+  const curWds  = ScriptProps.get(ScriptProps.KEYS.DAILY_PREP_WEEKDAYS, "1-7"); // 未設定なら全曜日扱い
+
+  const guide =
+    "1行で入力（スペース区切りOK）例: hour=21 minute=0 offset=1 weekdays=4-7\n" +
+    "weekdays: 1(月)〜7(日) / 空=全曜日";
+
+  const res = ui.prompt("日次準備設定（時刻/オフセット/曜日）", guide, ui.ButtonSet.OK_CANCEL);
+  if (res.getSelectedButton() !== ui.Button.OK) return;
+
+  const raw = String(res.getResponseText() || "").trim();
+  if (!raw) return;
+
+  // parse（key=value）: 1行の "hour=21 minute=0 offset=1 weekdays=4-7" もOK
+  const map = {};
+  const text = String(raw || "").replace(/\u3000/g, " ").trim(); // 全角スペース対策
+  const re = /([a-zA-Z_]+)\s*=\s*([^\s]*)/g; // valueは空でもOK（weekdays=）
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    map[m[1].toLowerCase()] = String(m[2] ?? "").trim();
+  }
+
+  // 入力が無ければ現状維持
+  const hour = ("hour" in map) ? st_clampInt_(map.hour, 0, 23) : curHour;
+  const minute = ("minute" in map) ? st_clampInt_(map.minute, 0, 59) : curMin;
+
+  let offset = curOff;
+  if ("offset" in map) {
+    const n = parseInt(map.offset, 10);
+    if (!Number.isFinite(n)) throw new Error("offset が不正です（整数）。");
+    offset = Math.min(365, Math.max(-365, n));
+  }
+
+  const weekdaysText = ("weekdays" in map) ? map.weekdays : curWds;
+
+  // weekdays の妥当性チェック（ここで例外にして入力ミスを検知）
+  st_parseWeekdays_(weekdaysText);
+
+  // 保存（まとめて）
+  ScriptProps.setMany({
+    [ScriptProps.KEYS.DAILY_PREP_AT_HOUR]: String(hour),
+    [ScriptProps.KEYS.DAILY_PREP_AT_MINUTE]: String(minute),
+    [ScriptProps.KEYS.DAILY_PREP_OFFSET_DAYS]: String(offset),
+    [ScriptProps.KEYS.DAILY_PREP_WEEKDAYS]: String(weekdaysText || ""),
   });
 
-  // スプレッドシートからのフォーム送信トリガー
-  ScriptApp.newTrigger("onFormSubmit")
-    .forSpreadsheet(SpreadsheetApp.getActive())
-    .onFormSubmit()
+  // トリガー再作成（ここはsilentにして、最後にまとめて表示）
+  const summary = installDailyPrepTrigger(true);
+
+  ui.alert(
+    "OK：日次準備設定を保存しました。\n" +
+    `実行時刻：${summary.hour}:${String(summary.minute).padStart(2, "0")}\n` +
+    `対象日：今日 + ${summary.offset}日\n` +
+    `曜日：${summary.weekdaysLabel}\n` +
+    `（既存トリガー削除：${summary.deleted}件）`
+  );
+}
+
+/** トリガー設定（既存は同ハンドラを消してから作る） */
+function installDailyPrepTrigger(silent = false) {
+  let ui = null;
+  try { ui = SpreadsheetApp.getUi(); } catch (e) {}
+
+  const handler = "dailyPrepTrigger";
+  const deleted = st_deleteTriggersByHandler_(handler);
+
+  const hour = st_clampInt_(ScriptProps.getInt(ScriptProps.KEYS.DAILY_PREP_AT_HOUR, 7), 0, 23);
+  const minute = st_clampInt_(ScriptProps.getInt(ScriptProps.KEYS.DAILY_PREP_AT_MINUTE, 0), 0, 59);
+  const offset = ScriptProps.getInt(ScriptProps.KEYS.DAILY_PREP_OFFSET_DAYS, 0);
+  const weekdaysText = ScriptProps.get(ScriptProps.KEYS.DAILY_PREP_WEEKDAYS, "");
+
+  ScriptApp.newTrigger(handler)
+    .timeBased()
+    .everyDays(1)
+    .atHour(hour)
+    .nearMinute(minute)
     .create();
 
-  ui.alert(`OK：フォーム送信トリガーを設定しました（既存 ${deleted} 件を削除）。`);
+  const summary = {
+    deleted, hour, minute, offset,
+    weekdaysText: weekdaysText,
+    weekdaysLabel: st_weekdaysLabel_(weekdaysText),
+  };
+
+  if (ui && !silent) {
+    ui.alert(
+      `OK：日次準備トリガーを設定しました（既存 ${deleted} 件を削除）。\n` +
+      `実行時刻：${hour}:${String(minute).padStart(2, "0")}\n` +
+      `対象日：今日 + ${offset}日\n` +
+      `曜日：${summary.weekdaysLabel}`
+    );
+  }
+  return summary;
 }
 
-/** フォーム送信トリガーを削除 */
-function deleteFormSubmitTrigger() {
-  const ui = SpreadsheetApp.getUi();
-  const triggers = ScriptApp.getProjectTriggers();
-  let deleted = 0;
+/** トリガー削除 */
+function deleteDailyPrepTrigger() {
+  let ui = null;
+  try { ui = SpreadsheetApp.getUi(); } catch (e) {}
 
-  triggers.forEach(t => {
-    try {
-      if (t.getHandlerFunction && t.getHandlerFunction() === "onFormSubmit") {
-        ScriptApp.deleteTrigger(t);
-        deleted++;
-      }
-    } catch (e) {}
+  const deleted = st_deleteTriggersByHandler_("dailyPrepTrigger");
+  if (ui) ui.alert(`OK：日次準備トリガーを削除しました（${deleted}件）。`);
+}
+
+// ===== 導入ツール（統合）：テンプレ配布用 Script Properties =====
+
+/**
+ * TemplatePropsTools.gs
+ * テンプレ配布用：Script Properties の「キーを作り直す」「値をダミー化する」
+ */
+
+function getTemplatePropsDefaults_() {
+  const defaults = {
+    [CONFIG.PROPS.LINE_TOKEN]: "__SET_ME__",
+    [CONFIG.PROPS.WEBHOOK_KEY]: "__SET_ME__",
+    [CONFIG.PROPS.LOG_LEVEL]: "WARN",
+    [CONFIG.PROPS.LOG_MAX_ROWS]: "2000",
+    [CONFIG.PROPS.BACKUP_FOLDER_ID]: "__SET_ME__",
+    [CONFIG.PROPS.BACKUP_AT_HOUR]: "3",
+    [CONFIG.PROPS.BACKUP_DAILY_RETENTION_DAYS]: "60",
+    [CONFIG.PROPS.BACKUP_DAILY_FOLDER_KEEP_MONTHS]: "12",
+    [CONFIG.PROPS.BACKUP_USE_MONTHLY_FOLDER]: "1",
+    [CONFIG.PROPS.BACKUP_MONTHLY_RETENTION_MONTHS]: "12",
+    [CONFIG.PROPS.BACKUP_MONTHLY_FOLDER_NAME]: "MonthlySnapshots",
+    [CONFIG.PROPS.BACKUP_MANUAL_FOLDER_NAME]: "ManualSnapshots",
+    [CONFIG.PROPS.BACKUP_RETENTION_DAYS]: "60",
+    // Daily prep（運用：予約札 + 当日まとめ 自動作成）
+    [CONFIG.PROPS.DAILY_PREP_AT_HOUR]: "7",
+    [CONFIG.PROPS.DAILY_PREP_AT_MINUTE]: "0",
+    [CONFIG.PROPS.DAILY_PREP_OFFSET_DAYS]: "0",
+    // 曜日指定：空=毎日、0=日…6=土（例：月-金 → "1-5" / "月-金" / "Mon-Fri" でもOK）
+    [CONFIG.PROPS.DAILY_PREP_WEEKDAYS]: "0,1,2,3,4,5,6",
+    [CONFIG.PROPS.DEBUG_MAIN]: "0",
+    [CONFIG.PROPS.DEBUG_ORDER_SAVE]: "0",
+
+    // Menu visibility（任意）: 1=表示 / 0=非表示
+    [CONFIG.PROPS.MENU_SHOW_ADVANCED]: "1",
+    [CONFIG.PROPS.MENU_SHOW_ORDERNO]: "1",
+    [CONFIG.PROPS.MENU_SHOW_NAME_CONFLICT]: "1",
+    [CONFIG.PROPS.MENU_SHOW_STATUS]: "1",
+    [CONFIG.PROPS.MENU_SHOW_BACKUP]: "1",
+    [CONFIG.PROPS.MENU_SHOW_SETUP]: "1",
+    [CONFIG.PROPS.MENU_SHOW_PROP_CHECK]: "1",
+  };
+
+  // 互換：LOG_MAX が残ってる環境向け
+  defaults["LOG_MAX"] = defaults[CONFIG.PROPS.LOG_MAX_ROWS];
+  return defaults;
+}
+
+function ensureTemplateScriptProperties() {
+  const defaults = getTemplatePropsDefaults_();
+  const cur = PropertiesService.getScriptProperties().getProperties();
+  const toSet = {};
+
+  Object.keys(defaults).forEach((k) => {
+    const v = (k in cur) ? String(cur[k] ?? "").trim() : "";
+    if (!v) toSet[k] = defaults[k];
   });
 
-  ui.alert(`OK：フォーム送信トリガーを削除しました（${deleted}件）。`);
+  if (Object.keys(toSet).length > 0) ScriptProps.setMany(toSet);
+
+  SpreadsheetApp.getUi().alert(
+    "OK：テンプレ用 Script Properties を作成しました（未設定のみ）。\n\n作成/更新数: " + Object.keys(toSet).length
+  );
 }
 
-// ===== 内部実装 =====
+function overwriteTemplateScriptProperties() {
+  const defaults = getTemplatePropsDefaults_();
+  ScriptProps.setMany(defaults);
+  SpreadsheetApp.getUi().alert("OK：テンプレ用 Script Properties を上書きしました（全部ダミー）。");
+}
 
-function initProductionClean_(opt) {
-  const options = opt || {};
+// ===== 初期設定チェック（Script Properties） =====
+
+function checkScriptProperties() {
   const ui = SpreadsheetApp.getUi();
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const lock = LockService.getScriptLock();
-
-  if (!ss) return;
-
-  let locked = false;
-  try {
-    locked = lock.tryLock(20000);
-    if (!locked) {
-      ui.alert("NG：ロック取得に失敗しました（他の処理が実行中の可能性）。少し待って再実行してください。");
-      return;
-    }
-
-    // 対象シート収集
-    const targets = [];
-
-    // 主要：注文一覧（ヘッダーを残して中身を消す）
-    dt_addTargetIfExists_(targets, ss, CONFIG.SHEET.ORDER_LIST, { keepHeaderRows: 1, clearType: "CLEAR_CONTENTS_BELOW" });
-
-    // 出力系（再生成できるので中身を消す）
-    dt_addTargetIfExists_(targets, ss, CONFIG.SHEET.NEEDS_CHECK_VIEW, { clearType: "CLEAR_ALL_CONTENTS" });
-    dt_addTargetIfExists_(targets, ss, CONFIG.SHEET.DAILY_SUMMARY, { clearType: "CLEAR_ALL_CONTENTS" });
-    dt_addTargetIfExists_(targets, ss, CONFIG.SHEET.RESERVATION_CARD, { clearType: "CLEAR_ALL_CONTENTS" });
-    dt_addTargetIfExists_(targets, ss, CONFIG.SHEET.CUSTOMER_LIST, { keepHeaderRows: 1, clearType: "CLEAR_CONTENTS_BELOW" });
-    dt_addTargetIfExists_(targets, ss, "ログ", { keepHeaderRows: 1, clearType: "CLEAR_CONTENTS_BELOW" });
-
-
-
-    // フォーム回答シート（言語差を吸収）
-    ss.getSheets().forEach(sh => {
-      const n = sh.getName();
-      if (/^フォームの回答/.test(n) || /^Form Responses/.test(n) || /^Responses/.test(n)) {
-        targets.push({ sheet: sh, label: n, keepHeaderRows: 1, clearType: "CLEAR_CONTENTS_BELOW" });
-      }
-    });
-
-    // 削除予定の表示用
-    const plan = targets.map(t => {
-      const sh = t.sheet;
-      const lastRow = sh.getLastRow();
-      const lastCol = sh.getLastColumn();
-      let willClearRows = 0;
-
-      if (t.clearType === "CLEAR_CONTENTS_BELOW") {
-        const keep = Math.max(0, t.keepHeaderRows || 0);
-        willClearRows = Math.max(0, lastRow - keep);
-      } else {
-        willClearRows = lastRow; // 目安
-      }
-
-      return { name: t.label, willClearRows, lastRow, lastCol, clearType: t.clearType };
-    });
-
-    const sheetName = ss.getName();
-    const msg =
-      "【本番初期化（テストデータ削除）】\n" +
-      "対象のスプレッドシート：\n  " + sheetName + "\n\n" +
-      "削除予定（見つかったものだけ実行します）：\n" +
-      plan.map(p => `- ${p.name}：${p.willClearRows} 行目安`).join("\n") +
-      "\n\nこの操作は元に戻せません。\n" +
-      "実行前に BACKUP へスナップショットを作成します。\n\n" +
-      "続行する場合は、下に「" + sheetName + "」と正確に入力してください。";
-
-    const r = ui.prompt("本番初期化（確認）", msg, ui.ButtonSet.OK_CANCEL);
-    if (r.getSelectedButton() !== ui.Button.OK) return;
-
-    if (String(r.getResponseText() || "").trim() !== sheetName) {
-      ui.alert("中止：入力が一致しませんでした。");
-      return;
-    }
-
-    // BACKUP_FOLDER_ID 未設定は安全のため中断
-    const backupFolderId = String(ScriptProps.get(ScriptProps.KEYS.BACKUP_FOLDER_ID, "")).trim();
-    if (!backupFolderId) {
-      ui.alert("NG：BACKUP_FOLDER_ID が未設定です。\n先に Script Properties を設定してから実行してください。");
-      return;
-    }
-
-    // スナップショット作成
-    const snapInfo = dt_createPreInitSnapshot_(ss, backupFolderId);
-    ui.alert("OK：スナップショット作成完了\n\n" + snapInfo + "\n\n続いてテストデータ削除を実行します。");
-
-    // 削除実行
-    targets.forEach(t => {
-      const sh = t.sheet;
-      if (!sh) return;
-
-      // フィルタ解除（念のため）
-      try {
-        const f = sh.getFilter();
-        if (f) f.remove();
-      } catch (e) {}
-
-      if (t.clearType === "CLEAR_CONTENTS_BELOW") {
-        dt_clearContentsBelowHeader_(sh, Math.max(0, t.keepHeaderRows || 0));
-      } else {
-        // 値だけ消す（書式は維持）
-        sh.clearContents();
-      }
-    });
-
-    // フォーム本体の回答も削除（オプション）
-    if (options.deleteFormResponses) {
-      const formUrl = ss.getFormUrl();
-      if (!formUrl) {
-        ui.alert("注意：フォームが紐付いていないようです（getFormUrl が空）。フォーム回答削除はスキップしました。");
-      } else {
-        const rr = ui.alert(
-          "フォーム回答の削除（最終確認）",
-          "フォーム本体の回答も全削除します（フォームの集計も消えます）。\n本当に削除しますか？",
-          ui.ButtonSet.YES_NO
-        );
-        if (rr === ui.Button.YES) {
-          FormApp.openByUrl(formUrl).deleteAllResponses();
-        }
-      }
-    }
-
-    ui.alert("OK：本番初期化が完了しました。");
-
-  } catch (e) {
-    try {
-      SpreadsheetApp.getUi().alert("NG：本番初期化でエラー\n" + String(e));
-    } catch (ee) {}
-  } finally {
-    if (locked) {
-      try { lock.releaseLock(); } catch (e) {}
-    }
+  const r = ScriptProps.validate();
+  if (r.ok) {
+    ui.alert("OK：必須の Script Properties は設定済みです。");
+  } else {
+    ui.alert("NG：未設定の Script Properties があります。\n\n- " + r.missing.join("\n- "));
   }
 }
 
-function dt_addTargetIfExists_(arr, ss, sheetName, opt) {
-  const sh = ss.getSheetByName(sheetName);
-  if (!sh) return;
-  arr.push({
-    sheet: sh,
-    label: sheetName,
-    keepHeaderRows: opt && opt.keepHeaderRows,
-    clearType: (opt && opt.clearType) || "CLEAR_ALL_CONTENTS"
+// ===== 内部（上記の導入ツール用） =====
+
+function st_clampInt_(n, min, max) {
+  const x = parseInt(n, 10);
+  if (!Number.isFinite(x)) return min;
+  return Math.min(max, Math.max(min, x));
+}
+
+function st_deleteTriggersByHandler_(handlerName) {
+  const triggers = ScriptApp.getProjectTriggers();
+  let deleted = 0;
+  triggers.forEach(t => {
+    try {
+      if (t.getHandlerFunction && t.getHandlerFunction() === handlerName) {
+        ScriptApp.deleteTrigger(t);
+        deleted++;
+      }
+    } catch (e) {}
   });
+  return deleted;
 }
 
-function dt_clearContentsBelowHeader_(sheet, headerRows) {
-  const keep = Math.max(0, headerRows || 0);
-  const lastRow = sheet.getLastRow();
-  const lastCol = sheet.getLastColumn();
-  if (lastRow <= keep || lastCol <= 0) return;
+function st_parseWeekdays_(text) {
+  let s = String(text ?? "").trim();
+  if (!s) return null;
 
-  const numRows = lastRow - keep;
-  sheet.getRange(keep + 1, 1, numRows, lastCol).clearContent();
+  // 全角数字→半角
+  s = s.replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+
+  // 日本語曜日→数字（例: 月-金 / 月金 / 月,火）
+  const map = {
+    "日": "0", "sun": "0", "sunday": "0",
+    "月": "1", "mon": "1", "monday": "1",
+    "火": "2", "tue": "2", "tuesday": "2",
+    "水": "3", "wed": "3", "wednesday": "3",
+    "木": "4", "thu": "4", "thursday": "4",
+    "金": "5", "fri": "5", "friday": "5",
+    "土": "6", "sat": "6", "saturday": "6",
+  };
+  const lower = s.toLowerCase();
+  let normalized = lower;
+  Object.keys(map).forEach(k => {
+    normalized = normalized.replaceAll(k, map[k]);
+  });
+
+  // 区切りを統一
+  normalized = normalized
+    .replace(/[，、]/g, ",")
+    .replace(/[~〜]/g, "-")
+    .replace(/\s+/g, "");
+
+  // "1-5" のような範囲を展開、"," で複数可
+  const set = new Set();
+  const parts = normalized.split(",").filter(Boolean);
+  parts.forEach(p => {
+    const m = p.match(/^(\d)(?:-(\d))?$/);
+    if (!m) throw new Error("weekdays が不正です（例: 1-5, 0,2,4,6）。");
+    const a = parseInt(m[1], 10);
+    const b = m[2] ? parseInt(m[2], 10) : a;
+    if (a < 0 || a > 6 || b < 0 || b > 6) throw new Error("weekdays は 0(日)〜6(土) です。");
+    if (a <= b) {
+      for (let i = a; i <= b; i++) set.add(i);
+    } else {
+      // 5-1 のような逆は週跨ぎ扱いで展開（5,6,0,1）
+      for (let i = a; i <= 6; i++) set.add(i);
+      for (let i = 0; i <= b; i++) set.add(i);
+    }
+  });
+  return set;
 }
 
-function dt_createPreInitSnapshot_(ss, backupFolderId) {
-  const tz = Session.getScriptTimeZone();
-  const ts = Utilities.formatDate(new Date(), tz, "yyyyMMdd_HHmmss");
+function st_weekdaysLabel_(text) {
+  const set = st_parseWeekdays_(text);
+  if (!set) return "全曜日";
 
-  const manualFolderName = String(
-    ScriptProps.get(ScriptProps.KEYS.BACKUP_MANUAL_FOLDER_NAME, "ManualSnapshots")
-  ).trim();
-
-  const name = `${ss.getName()}_before_production_init_${ts}`;
-
-  const rootFolder = DriveApp.getFolderById(backupFolderId);
-  const manualFolder = dt_getOrCreateNamedSubfolder_(rootFolder, manualFolderName);
-
-  const srcFile = DriveApp.getFileById(ss.getId());
-  srcFile.makeCopy(name, manualFolder);
-
-  return `保存先：${manualFolderName}\nファイル名：${name}`;
+  const labels = ["日","月","火","水","木","金","土"];
+  // 表示は 月→…→日 の順にしたいので並び替え
+  const order = [1,2,3,4,5,6,0];
+  const out = order.filter(d => set.has(d)).map(d => labels[d]);
+  return out.length ? out.join("") : "全曜日";
 }
 
-function dt_getOrCreateNamedSubfolder_(rootFolder, name) {
-  const it = rootFolder.getFoldersByName(name);
-  if (it.hasNext()) return it.next();
-  return rootFolder.createFolder(name);
-}
