@@ -98,8 +98,7 @@ function doPost(e) {
       }
 
       if (postData.startsWith("change_confirm_no:")) {
-      // ★追加：押した直後に“読み込み中”を出す（予約確認→準備完了表示までの不安対策）
-      startLoadingAnimation(userId, 10);
+      // ※ローディング開始は上で実施済み（change_confirm_no / change_page）
 
       const orderNo = postData.split(":")[1] || "";
 
@@ -690,7 +689,7 @@ function getChangeableReservations(userId, options) {
 
   const COL_NO = idx(CONFIG.COLUMN.ORDER_NO);
   const COL_PICKUP_DATE = idx(CONFIG.COLUMN.PICKUP_DATE);          // E
-  const COL_PICKUP_DATE_RAW = idx(CONFIG.COLUMN.PICKUP_DATE_RAW);  // O
+  const COL_PICKUP_DATE_RAW = idx(CONFIG.COLUMN.PICKUP_DATE_RAW);  // P
   const COL_DETAILS = idx(CONFIG.COLUMN.DETAILS);
   const COL_TOTAL_COUNT = idx(CONFIG.COLUMN.TOTAL_COUNT);
   const COL_LINE_ID = idx(CONFIG.COLUMN.LINE_ID);
@@ -719,7 +718,7 @@ function getChangeableReservations(userId, options) {
     if (NG.includes(status)) continue;
 
     const pickupDateStrRaw = row[COL_PICKUP_DATE];      // E
-    const pickupDateRawCell = row[COL_PICKUP_DATE_RAW]; // O
+    const pickupDateRawCell = row[COL_PICKUP_DATE_RAW]; // P
 
     let dateOnly = parsePickupDate(pickupDateRawCell);
     if (!dateOnly) dateOnly = parsePickupDate(pickupDateStrRaw);
