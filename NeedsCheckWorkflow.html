@@ -87,11 +87,12 @@
   function refresh(){
     setStatus('更新中...');
     google.script.run
-      .withSuccessHandler(async (list) => {
+      .withSuccessHandler(async (res) => {
+        const raw = JSON.stringify(res);
         // サーバー返り値が配列/ {items:[...]} のどちらでも動くように吸収
-        const arr = Array.isArray(list)
-          ? list
-          : (list && Array.isArray(list.items) ? list.items : []);
+        const arr = Array.isArray(res)
+          ? res
+          : (res && Array.isArray(res.items) ? res.items : []);
         items = arr;
         document.getElementById('count').textContent = `(${items.length}件)`;
         // 選択中の行が消えた／0件になった場合に、表示が詰まらないように調整
@@ -102,10 +103,11 @@
         }
         renderList();
         renderDetail();
-        setStatus(items.length ? `読み込み: ${items.length}件` : '0件（★要確認なし）');
+        const msg = items.length ? `読み込み: ${items.length}件` : '0件（★要確認なし）';
+        setStatus(msg);
       })
       .withFailureHandler(e => setStatus('Error: ' + (e && e.message ? e.message : e)))
-      .ncw_refreshAndList();
+      .ncw_refreshAndList_v3_20260210();
 
     // 理由テンプレもロード（存在すれば）
     google.script.run.withSuccessHandler(t => { templatesNeeds = t || []; fillReasonPresets(); }).ncw_getReasonTemplates('NEEDS_CHECK');
@@ -116,7 +118,9 @@
     const q = (document.getElementById('filter').value || '').trim();
     const div = document.getElementById('list');
     div.innerHTML = '';
-    const filtered = items.filter(it => {
+    // items が壊れていても落ちないように（念のため）
+    const base = Array.isArray(items) ? items : [];
+    const filtered = base.filter(it => {
       if (!q) return true;
       const s = `${it.orderNo || ''} ${it.name || ''} ${it.reason || ''}`;
       return s.includes(q);
@@ -124,15 +128,15 @@
 
     // ★件数/ステータス表示はここで必ず最新化（refresh()側の失敗や古い表示の残留を潰す）
     const countEl = document.getElementById('count');
-    if (countEl) countEl.textContent = `${filtered.length}/${items.length}件`;
+    if (countEl) countEl.textContent = `${filtered.length}/${base.length}件`;
     const st = document.getElementById('status');
-    if (st) st.textContent = items.length ? `読み込み: ${items.length}件` : '0件（★要確認なし）';
+    if (st) st.textContent = base.length ? `読み込み: ${base.length}件` : '0件（★要確認なし）';
 
     if (!filtered.length) {
       const el = document.createElement('div');
       el.className = 'muted';
       el.style.padding = '8px';
-      el.textContent = items.length
+      el.textContent = base.length
         ? '該当なし（絞り込みに一致しません）'
         : '0件（★要確認なし）';
       div.appendChild(el);

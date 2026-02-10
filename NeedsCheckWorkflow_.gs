@@ -5,11 +5,6 @@
 
 // ===== NCW debug helpers（NeedsCheckWorkflow_.gs 冒頭に追加推奨）=====
 
-function ncw_dbg_(...args) {
-  // Apps Script 実行ログに出ます
-  console.log("[NCW]", ...args);
-}
-
 function ncw_codes_(v) {
   const s = String(v ?? "");
   return Array.from(s).map(ch => ch.codePointAt(0));
@@ -87,15 +82,28 @@ function ncw_debugRun() {
   ncw_debugSnapshot_("manual");
 }
 
-function ncw_dbg_(msg, obj) {
-  try { console.debug(`[NCW] ${msg}`, obj || ""); } catch (e) {}
+function ncw_dbg_(...args) {
+  // 1) 実行ログ（Executions）に出す
+  try { console.log("[NCW]", ...args); } catch (e) {}
+
+  // 2) 任意で「ログ」シートにも出す（ONにしたい時だけ Script Properties を設定）
+  //    NCW_LOG_TO_SHEET=1 かつ LOG_LEVEL=DEBUG のときに出る
+  try {
+    const p = PropertiesService.getScriptProperties().getProperty("NCW_LOG_TO_SHEET");
+    const on = ["1","true","yes","y","on"].includes(String(p || "").trim().toLowerCase());
+    if (!on) return;
+    if (typeof logToSheet !== "function") return;
+
+    const msg = args.length ? String(args[0]) : "";
+    const extra = args.length >= 2 ? args[1] : null;
+    logToSheet("DEBUG", `[NCW] ${msg}`, extra);
+  } catch (e) {}
 }
 
 // 一覧を最新化して返す（ガード→ビュー更新→注文一覧から抽出）
 function ncw_refreshAndList() {
   ncw_dbg_("refreshAndList start");
   ncw_debugSnapshot_("before");
-  ncw_dbg_("refreshAndList start");
   // ★要確認一覧（別シート）を同期する前に、運用ガードも走らせたい要望あり。
   // ただし毎回実行でルール増殖リスクがあるので、5分だけ抑制して実行。
   try {
@@ -112,17 +120,103 @@ function ncw_refreshAndList() {
   } catch (e) {
     console.warn("refreshNeedsCheckView failed:", e);
   }
-  const list = ncw_list();
-  ncw_dbg_("refreshAndList return", { isArray: Array.isArray(list), count: (list && list.length) });
-  return list;
+  const items = ncw_list();
+  ncw_dbg_("refreshAndList return", { isArray: Array.isArray(items), count: (items && items.length) });
+  ncw_debugSnapshot_("after");
+  // ★必ず {items:[...]} を返す（クライアント側の型ゆらぎ対策）
+  return { items };
 }
+
+/**
+ * ★要確認ワークフロー：API入口 v2（戻り値を必ず返す）
+ * - 関数名を変えて、重複定義/上書きの影響を避ける
+ */
+function ncw_refreshAndList_v2() {
+  return ncw_refreshAndList_v3_20260210();
+}
+
+
+/**
+ * ★要確認ワークフロー：API入口 v3（2026-02-10）
+ * - 「必ずreturnする」「呼ばれたことが分かる(toast/ログ)」を保証
+ * - v2 が何らかの理由で undefined を返している疑いの切り分け用
+ */
+function ncw_refreshAndList_v3_20260210() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  // NCW_TOAST=1 のときだけtoast（普段は邪魔なのでOFF）
+  try {
+    const p = PropertiesService.getScriptProperties().getProperty("NCW_TOAST");
+    const on = ["1","true","yes","y","on"].includes(String(p || "").trim().toLowerCase());
+    if (on) ss.toast("NCW v3 called", "NCW", 3);
+  } catch (e) {}
+  try { console.log("[NCW] v3 called"); } catch (e) {}
+
+  // ①ガード（5分抑制）
+  try {
+    const cache = CacheService.getScriptCache();
+    if (!cache.get("ncw_guard_recent") && typeof applyOrderStatusGuards === "function") {
+      applyOrderStatusGuards({ silent: true });
+      cache.put("ncw_guard_recent", "1", 300);
+    }
+  } catch (e) {
+    try { console.warn("[NCW] v3 guard failed:", e); } catch (_) {}
+  }
+
+  // ②ビュー更新（失敗しても続行）
+  try {
+    if (typeof refreshNeedsCheckView === "function") refreshNeedsCheckView();
+  } catch (e) {
+    try { console.warn("[NCW] v3 refreshNeedsCheckView failed:", e); } catch (_) {}
+  }
+
+  // ③一覧取得
+  let items = [];
+  try {
+    items = (typeof ncw_list === "function") ? (ncw_list() || []) : [];
+  } catch (e) {
+    try { console.warn("[NCW] v3 ncw_list failed:", e); } catch (_) {}
+    items = [];
+  }
+
+  const safe = Array.isArray(items) ? items : [];
+
+  // 念のため：Date が混ざっても死なないように文字列化
+  safe.forEach(it => {
+    if (!it || typeof it !== "object") return;
+    Object.keys(it).forEach(k => {
+      const v = it[k];
+      if (v instanceof Date) it[k] = Utilities.formatDate(v, Session.getScriptTimeZone(), "yyyy/MM/dd HH:mm:ss");
+    });
+  });
+
+  return {
+    items: safe,
+    meta: {
+      probe: "v3_20260210",
+      count: safe.length,
+      at: new Date().toISOString(),
+      scriptId: ScriptApp.getScriptId(),
+      ssId: ss.getId()
+    }
+  };
+}
+
+
+/** 疎通確認用：これが null なら “呼び先が違う” が確定 */
+function ncw_ping_v2() {
+  return { ok: true, at: new Date().toISOString() };
+}
+
 
 // 互換：サイドバー/旧版が refreshAndList / updateNeedsReviewList を呼んでも動くようにする
 function refreshAndList() {
-  return ncw_refreshAndList();
+  return ncw_refreshAndList_v3_20260210();
 }
 function updateNeedsReviewList() {
-  return ncw_refreshAndList();
+  return ncw_refreshAndList_v3_20260210();
+}
+function ncw_refreshAndList() {
+  return ncw_refreshAndList_v3_20260210();
 }
 
 // 注文一覧から STATUS=★要確認 を抽出して返す
