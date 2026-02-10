@@ -43,15 +43,15 @@ const MenuVisibility = (() => {
 
   // マスター：これが false なら “日々の運用（基本）” だけ表示
   function showAdvanced() {
-    return showAdvanced() && on_("MENU_SHOW_NAME_CONFLICT", true);
+    return on_("MENU_SHOW_ADVANCED", true);
   }
 
   function showOrderNoTools() {
-    return showAdvanced() && on_(KEYS.MENU_SHOW_ORDERNO, true);
+    return showAdvanced() && on_("MENU_SHOW_ORDERNO", true);
   }
 
   function showNameConflict() {
-    return showAdvanced() && on_(KEYS.MENU_SHOW_NAME_CONFLICT, true);
+    return showAdvanced() && on_("MENU_SHOW_NAME_CONFLICT", true);
   }
 
   function showStatusTools() {
