@@ -24,6 +24,10 @@ function backupSpreadsheetDaily() {
   if (!lock.tryLock(30 * 1000)) return;
 
   try {
+    // UIが使える（手動実行）なら通知。トリガー実行では取得できないのでnullのまま
+    let ui = null;
+    try { ui = SpreadsheetApp.getUi(); } catch (e) {}
+
     const folderId = String(ScriptProps.get(ScriptProps.KEYS.BACKUP_FOLDER_ID, "")).trim();
     if (!folderId) {
       throw new Error("BACKUP_FOLDER_ID が未設定です（Script Properties に親フォルダIDを入れてください）。");
@@ -73,8 +77,16 @@ function backupSpreadsheetDaily() {
       purgeOldMonthFolders_(rootFolder, keepDailyFolderMonths);
     }
 
+     // 手動実行時だけ結果が見えるように
+    if (ui) {
+      ui.alert(
+        `OK：日次バックアップを作成しました。\n保存先：${targetFolder.getName()}\nファイル名：${dailyBackupName}`
+      );
+    }
+
   } catch (e) {
     console.error("backupSpreadsheetDaily error:", String(e), e && e.stack);
+    try { SpreadsheetApp.getUi().alert(`NG：日次バックアップに失敗しました。\n${String(e)}`); } catch (ee) {}
   } finally {
     lock.releaseLock();
   }
@@ -342,12 +354,4 @@ function sanitizeFileToken_(s) {
     .replace(/\s+/g, "_")
     .replace(/_+/g, "_")
     .replace(/^_+|_+$/g, "");
-}
-
-
-function addBackupMenu_() {
-  SpreadsheetApp.getUi()
-    .createMenu("バックアップ")
-    .addItem("手動スナップショット作成", "createManualSnapshot")
-    .addToUi();
 }

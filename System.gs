@@ -21,6 +21,7 @@ function onOpen() {
   const vis = (typeof MenuVisibility !== "undefined" && MenuVisibility)
     ? MenuVisibility
     : {
+        showAdvanced: () => true,
         showOrderNoTools: () => true,
         showNameConflict: () => true,
         showStatusTools: () => true,
@@ -33,23 +34,37 @@ function onOpen() {
 
   // ===== 日々の運用（よく使う：朝→処理の順） =====
   menu
-    .addItem('★要確認ワークフロー（サイドバー）', 'showNeedsCheckWorkflowSidebar')
-    .addItem('★要確認一覧を更新', 'updateNeedsReviewListWithGuards')
-    .addItem('当日まとめシートを更新', 'createProductionSheet')
-    .addItem('指定日の予約札を作成', 'createDailyReservationCards')
     .addItem('日次準備（当日まとめ予約札：指定日まとめて）', 'runDailyPrepPrompt')
+    .addSubMenu(
+      ui.createMenu('★要確認')
+        .addItem('ワークフロー（サイドバー）', 'showNeedsCheckWorkflowSidebar')
+        .addItem('一覧を開く（更新して開く）', 'openNeedsCheckView')
+    );
+
+  // ★詳細：単体の再実行（Advanced のときだけ表示）
+  if (vis.showAdvanced && vis.showAdvanced()) {
+    menu.addSubMenu(
+      ui.createMenu('再実行（単体）')
+        .addItem('当日まとめシートを更新', 'createProductionSheet')
+        .addItem('指定日の予約札を作成', 'createDailyReservationCards')
+    );
+  }
+
+  menu
     .addSeparator()
-    .addItem('★要確認一覧を開く', 'openNeedsCheckView')
     .addItem('顧客備考を編集（サイドバー）', 'showCustomerEditor');
 
   // ===== 要確認の処理（予約No指定） =====
   if (vis.showOrderNoTools()) {
     menu
       .addSeparator()
-      .addItem('No指定：有効に戻す（空欄）', 'markByOrderNoAsActive')
-      .addItem('No指定：無効にする（理由必須）', 'markByOrderNoAsInvalid')
-      .addItem('No指定：★要確認にする（理由必須）', 'markByOrderNoAsNeedsCheck')
-      .addItem('No指定：理由だけ編集', 'editReasonByOrderNo');
+      .addSubMenu(
+        ui.createMenu('予約No指定（直接処理）')
+          .addItem('有効に戻す（空欄）', 'markByOrderNoAsActive')
+          .addItem('無効にする（理由必須）', 'markByOrderNoAsInvalid')
+          .addItem('★要確認にする（理由必須）', 'markByOrderNoAsNeedsCheck')
+          .addItem('理由だけ編集', 'editReasonByOrderNo')
+      );
   }
 
   // ===== 補助（氏名不一致） =====
@@ -67,19 +82,27 @@ function onOpen() {
   if (vis.showStatusTools()) {
     menu
       .addSeparator()
-      .addItem('理由未記入チェック', 'checkMissingReasons')
-      .addItem('ステータス運用ガード適用', 'applyOrderStatusGuards')
-      .addItem('ステータス監査（値の件数）', 'auditStatusValues_')
-      .addItem('ステータス移行（B案）', 'migrateOrderStatusToBPlan');
+      .addSubMenu(
+        ui.createMenu('ステータス（監査/復旧）')
+          .addItem('理由未記入チェック', 'checkMissingReasons')
+          .addItem('ステータス監査（値の件数）', 'auditStatusValues_')
+          .addItem('ステータス移行（B案）', 'migrateOrderStatusToBPlan')
+          .addSeparator()
+          .addItem('運用ガード再適用（入力制限/色）', 'applyOrderStatusGuards')
+      );
   }
 
   // ===== 管理（バックアップ/導入/初期設定） =====
-  if (vis.showBackup()) {
+  if (vis.showBackup && vis.showBackup()) {
     menu
       .addSeparator()
       .addSubMenu(
         ui.createMenu('バックアップ')
           .addItem('手動スナップショット作成', 'createManualSnapshot')
+           .addItem('今すぐ日次バックアップ実行', 'backupSpreadsheetDaily')
+          .addSeparator()
+          .addItem('日次バックアップ設定（トリガー作成）', 'installDailyBackupTrigger')
+          .addItem('日次バックアップ停止（トリガー削除）', 'deleteDailyBackupTrigger')
       );
   }
 
@@ -88,47 +111,55 @@ function onOpen() {
       .addSeparator()
       .addSubMenu(
         ui.createMenu('導入ツール')
-          .addItem('本番初期化（テストデータ削除）', 'initProductionCleanSheetOnly')
-          .addItem('本番初期化（＋フォーム回答も削除）', 'initProductionCleanWithFormResponses')
+          .addSubMenu(
+            ui.createMenu('本番初期化（危険）')
+              .addItem('テストデータ削除', 'initProductionCleanSheetOnly')
+              .addItem('＋フォーム回答も削除', 'initProductionCleanWithFormResponses')
+          )
           .addSeparator()
-          .addItem('フォーム送信トリガー設定', 'installFormSubmitTrigger')
-          .addItem('フォーム送信トリガー削除', 'deleteFormSubmitTrigger')
+          .addSubMenu(
+            ui.createMenu('トリガー（フォーム送信）')
+              .addItem('設定', 'installFormSubmitTrigger')
+              .addItem('削除', 'deleteFormSubmitTrigger')
+          )
           .addSeparator()
-          .addItem('日次準備設定（時刻/オフセット/曜日）', 'configureDailyPrepSettingsPrompt')
-          .addItem('日次準備トリガー設定（当日まとめ予約札）', 'installDailyPrepTrigger')
-          .addItem('日次準備トリガー削除（当日まとめ予約札）', 'deleteDailyPrepTrigger')
+          .addSubMenu(
+            ui.createMenu('日次準備（自動化）')
+              .addItem('設定（時刻/オフセット/曜日）', 'configureDailyPrepSettingsPrompt')
+              .addSeparator()
+              .addItem('トリガー再作成（復旧）', 'installDailyPrepTrigger')
+              .addItem('トリガー削除（停止）', 'deleteDailyPrepTrigger')
+          )
           .addSeparator()
-          .addItem('締切後送信メール通知 テスト（疎通）', 'sendLateSubmissionNotifyPing')
-          .addItem('締切後送信メール通知 テスト（抽出）', 'testLateSubmissionNotifyEmail')
+          .addSubMenu(
+            ui.createMenu('締切後送信通知（テスト）')
+              .addItem('疎通（Ping）', 'sendLateSubmissionNotifyPing')
+              .addItem('抽出（本文確認）', 'testLateSubmissionNotifyEmail')
+          )
           .addSeparator()
-          .addItem('テンプレ用プロパティ作成（未設定のみ）', 'ensureTemplateScriptProperties')
-          .addItem('テンプレ用プロパティ上書き（全部ダミー）', 'overwriteTemplateScriptProperties')
+          .addSubMenu(
+            ui.createMenu('テンプレ配布（プロパティ）')
+              .addItem('キー作成（未設定のみ）', 'ensureTemplateScriptProperties')
+              .addItem('全てダミーで上書き', 'overwriteTemplateScriptProperties')
+          )
       );
   }
 
-  if (vis.showPropCheck()) {
-    menu
-      .addSeparator()
-      .addItem('初期設定チェック（Script Properties）', 'checkScriptProperties');
+  // ===== 初期設定/復旧（管理者向け） =====
+  const setupRecovery = ui.createMenu('初期設定/復旧');
+  let hasSetupItem = false;
+  if (vis.showPropCheck && vis.showPropCheck()) {
+    setupRecovery.addItem('初期設定チェック（Script Properties）', 'checkScriptProperties');
+    hasSetupItem = true;
   }
+  if (hasSetupItem) setupRecovery.addSeparator();
+  setupRecovery.addItem('🔄 メニューを再表示（設定再読込）', 'reloadReservationMenu_');
 
-  // ===== 表示更新（復旧用） =====
   menu
     .addSeparator()
-    .addItem('🔄 メニューを再表示（設定再読込）', 'reloadReservationMenu_');
+    .addSubMenu(setupRecovery);
 
   menu.addToUi();
-}
-
-/**
- * ★要確認一覧を更新（ステータス運用ガード適用→一覧更新の順）
- */
-function updateNeedsReviewListWithGuards() {
-  // 1) 先にガード適用（★要確認/無効にすべきものを最新化）
-  applyOrderStatusGuards();
-
-  // 2) その結果を踏まえて、★要確認一覧を作り直す
-  refreshNeedsCheckView();
 }
 
 /**
@@ -160,4 +191,17 @@ function reloadReservationMenu_() {
     // noop
   }
   onOpen();
+}
+
+/**
+ * メニューに紐づくハンドラ関数が「存在するか」を判定
+ * （未実装/未導入のメニューを自動的に非表示にするため）
+ */
+function menuHasHandler_(fnName) {
+  try {
+    const g = (typeof globalThis !== "undefined") ? globalThis : this;
+    return !!(g && typeof g[fnName] === "function");
+  } catch (e) {
+    return false;
+  }
 }
