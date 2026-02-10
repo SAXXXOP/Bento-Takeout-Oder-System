@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    body { font-family: sans-serif; padding: 10px; font-size: 13px; }
+    .row { display: flex; gap: 6px; align-items: center; }
+    button { cursor: pointer; border: none; border-radius: 6px; padding: 8px 10px; }
+    .btn { background: #e9eefc; }
+    .btn-primary { background: #2b6cb0; color: #fff; }
+    .btn-danger { background: #c53030; color: #fff; }
+    input, textarea, select { width: 100%; box-sizing: border-box; padding: 8px; margin: 6px 0; }
+    .list { border: 1px solid #eee; border-radius: 8px; max-height: 220px; overflow: auto; }
+    .item { padding: 8px; border-bottom: 1px solid #f1f1f1; cursor: pointer; }
+    .item:hover { background: #f7fafc; }
+    .item.active { background: #ebf8ff; }
+    .card { border: 1px solid #eee; border-radius: 10px; padding: 10px; margin-top: 10px; }
+    .muted { color: #666; font-size: 12px; }
+    .tag { display:inline-block; padding:2px 6px; border-radius: 999px; background:#f1f5f9; margin-right:6px; font-size: 12px; }
+    #status { margin-top: 8px; color: #333; }
+  </style>
+</head>
+<body>
+  <div class="row">
+    <button class="btn-primary" onclick="refresh()">🔄 更新</button>
+    <button class="btn" onclick="openRow()">開く</button>
+    <div class="muted" id="count"></div>
+  </div>
+
+  <input id="filter" placeholder="絞り込み（No/名前/理由）" oninput="renderList()">
+
+  <div class="list" id="list"></div>
+
+  <div class="card" id="detail" style="display:none;">
+    <div><span class="tag" id="t_date"></span><b id="t_no"></b></div>
+    <div class="muted" id="t_meta"></div>
+
+    <hr>
+
+    <div id="suggest"></div>
+
+    <div id="sec_tel" style="display:none;">
+      <h4>電話番号が未入力</h4>
+      <input id="inp_tel" placeholder="電話番号を入力して保存">
+      <button class="btn-primary" onclick="saveTel()">電話を保存</button>
+    </div>
+
+    <div id="sec_change" style="display:none;">
+      <h4>変更（元予約Noあり）</h4>
+      <div class="muted">元予約No: <b id="t_source"></b></div>
+      <button class="btn-primary" onclick="applyChange()">元予約を無効化→この注文を有効化</button>
+    </div>
+
+    <hr>
+
+    <h4>ステータス着地</h4>
+    <select id="reasonPreset"></select>
+    <textarea id="reasonFree" rows="2" placeholder="理由（自由入力。テンプレ+追記でもOK）"></textarea>
+
+    <div class="row">
+      <button class="btn-primary" onclick="markActive()">有効に戻す（空欄）</button>
+      <button class="btn" onclick="markNeeds()">★要確認維持</button>
+      <button class="btn-danger" onclick="markInvalid()">無効にする</button>
+    </div>
+
+    <hr>
+
+    <details>
+      <summary>注文内容・要望</summary>
+      <div class="muted">注文内容</div>
+      <pre id="t_details" style="white-space:pre-wrap;"></pre>
+      <div class="muted">要望</div>
+      <pre id="t_note" style="white-space:pre-wrap;"></pre>
+    </details>
+  </div>
+
+  <div id="status" class="muted"></div>
+
+<script>
+  let items = [];
+  let selected = null;
+  let templatesNeeds = [];
+  let templatesInvalid = [];
+
+  function setStatus(msg){ document.getElementById('status').textContent = msg || ''; }
+
+  function refresh(){
+    setStatus('更新中...');
+    google.script.run
+      .withSuccessHandler(async (list) => {
+        items = list || [];
+        document.getElementById('count').textContent = `(${items.length}件)`;
+        if (!selected && items.length) selected = items[0];
+        renderList();
+        renderDetail();
+        setStatus('OK');
+      })
+      .withFailureHandler(e => setStatus('Error: ' + (e && e.message ? e.message : e)))
+      .ncw_refreshAndList();
+
+    // 理由テンプレもロード（存在すれば）
+    google.script.run.withSuccessHandler(t => { templatesNeeds = t || []; fillReasonPresets(); }).ncw_getReasonTemplates('NEEDS_CHECK');
+    google.script.run.withSuccessHandler(t => { templatesInvalid = t || []; }).ncw_getReasonTemplates('INVALID');
+  }
+
+  function renderList(){
+    const q = (document.getElementById('filter').value || '').trim();
+    const div = document.getElementById('list');
+    div.innerHTML = '';
+    items
+      .filter(it => !q || (`${it.orderNo} ${it.name} ${it.reason}`.includes(q)))
+      .forEach(it => {
+        const el = document.createElement('div');
+        el.className = 'item' + (selected && selected.row === it.row ? ' active' : '');
+        const reason = it.reason ? ` - ${it.reason}` : '';
+        el.textContent = `${it.pickupDate} / ${it.orderNo} / ${it.name}${reason}`;
+        el.onclick = () => { selected = it; renderList(); renderDetail(); };
+        div.appendChild(el);
+      });
+  }
+
+  function renderDetail(){
+    const box = document.getElementById('detail');
+    if (!selected){ box.style.display = 'none'; return; }
+    box.style.display = 'block';
+
+    document.getElementById('t_date').textContent = selected.pickupDate || '';
+    document.getElementById('t_no').textContent = selected.orderNo || '';
+    document.getElementById('t_meta').textContent =
+      `行:${selected.row} / 名前:${selected.name || '不明'} / 電話:${selected.tel || 'なし'} / タイムスタンプ:${selected.timestamp || ''}`;
+
+    document.getElementById('t_details').textContent = selected.details || '';
+    document.getElementById('t_note').textContent = selected.note || '';
+
+    // 分岐表示
+    const sug = [];
+    if (selected.flags && selected.flags.hasSourceNo) sug.push('変更（元予約Noあり）');
+    if (selected.flags && selected.flags.needsTel) sug.push('電話未入力');
+    if (selected.flags && selected.flags.missingReason) sug.push('理由未記入');
+    document.getElementById('suggest').innerHTML =
+      sug.length ? `<div class="muted">おすすめ: ${sug.map(s=>`<span class="tag">${s}</span>`).join('')}</div>` : '';
+
+    // 電話セクション
+    document.getElementById('sec_tel').style.display = (selected.flags && selected.flags.needsTel) ? 'block' : 'none';
+    document.getElementById('inp_tel').value = selected.tel || '';
+
+    // 変更セクション
+    const hasSource = (selected.flags && selected.flags.hasSourceNo);
+    document.getElementById('sec_change').style.display = hasSource ? 'block' : 'none';
+    document.getElementById('t_source').textContent = selected.sourceNo || '';
+
+    // 理由
+    fillReasonPresets();
+    document.getElementById('reasonFree').value = selected.reason || '';
+  }
+
+  function fillReasonPresets(){
+    const sel = document.getElementById('reasonPreset');
+    const cur = sel.value;
+    sel.innerHTML = '';
+    const opt0 = document.createElement('option');
+    opt0.value = '';
+    opt0.textContent = '（テンプレ選択）';
+    sel.appendChild(opt0);
+
+    (templatesNeeds || []).forEach(t => {
+      const o = document.createElement('option');
+      o.value = t;
+      o.textContent = t;
+      sel.appendChild(o);
+    });
+
+    sel.value = cur || '';
+    sel.onchange = () => {
+      const v = sel.value;
+      if (v) {
+        const ta = document.getElementById('reasonFree');
+        ta.value = ta.value ? (v + ' / ' + ta.value) : v;
+        sel.value = '';
+      }
+    };
+  }
+
+  function openRow(){
+    if (!selected) return;
+    google.script.run.ncw_openOrderRow(selected.row);
+  }
+
+  function saveTel(){
+    if (!selected) return;
+    const tel = document.getElementById('inp_tel').value || '';
+    google.script.run.withSuccessHandler(() => afterAction('電話を保存しました'))
+      .withFailureHandler(e => setStatus('Error: ' + (e.message || e)))
+      .ncw_updateOrder(selected.row, { tel });
+  }
+
+  function reasonValue(required){
+    const v = (document.getElementById('reasonFree').value || '').trim();
+    if (required && !v) { alert('理由を入力してください'); throw new Error('reason required'); }
+    return v;
+  }
+
+  function markActive(){
+    if (!selected) return;
+    google.script.run.withSuccessHandler(() => afterAction('有効に戻しました'))
+      .withFailureHandler(e => setStatus('Error: ' + (e.message || e)))
+      .ncw_markActive(selected.row);
+  }
+
+  function markNeeds(){
+    if (!selected) return;
+    const r = reasonValue(false);
+    google.script.run.withSuccessHandler(() => afterAction('★要確認のまま更新しました'))
+      .withFailureHandler(e => setStatus('Error: ' + (e.message || e)))
+      .ncw_markNeedsCheck(selected.row, r);
+  }
+
+  function markInvalid(){
+    if (!selected) return;
+    const r = reasonValue(true);
+    google.script.run.withSuccessHandler(() => afterAction('無効にしました'))
+      .withFailureHandler(e => setStatus('Error: ' + (e.message || e)))
+      .ncw_markInvalid(selected.row, r);
+  }
+
+  function applyChange(){
+    if (!selected) return;
+    const sourceNo = (selected.sourceNo || '').trim();
+    if (!sourceNo) { alert('元予約Noが空です'); return; }
+    google.script.run.withSuccessHandler((res) => afterAction(res && res.ok ? '変更処理完了' : (res.message || '変更処理失敗')))
+      .withFailureHandler(e => setStatus('Error: ' + (e.message || e)))
+      .ncw_applyChangeFlow(selected.row, sourceNo);
+  }
+
+  function afterAction(msg){
+    setStatus(msg);
+    // 再取得して次へ
+    selected = null;
+    refresh();
+  }
+
+  // 初期表示
+  refresh();
+</script>
+</body>
+</html>

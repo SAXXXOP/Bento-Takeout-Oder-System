@@ -33,6 +33,7 @@ function onOpen() {
 
   // ===== 日々の運用（よく使う：朝→処理の順） =====
   menu
+    .addItem('★要確認ワークフロー（サイドバー）', 'showNeedsCheckWorkflowSidebar')
     .addItem('★要確認一覧を更新', 'updateNeedsReviewListWithGuards')
     .addItem('当日まとめシートを更新', 'createProductionSheet')
     .addItem('指定日の予約札を作成', 'createDailyReservationCards')
@@ -127,9 +128,25 @@ function updateNeedsReviewListWithGuards() {
   applyOrderStatusGuards();
 
   // 2) その結果を踏まえて、★要確認一覧を作り直す
-  updateNeedsReviewList();
+  refreshNeedsCheckView();
 }
 
+/**
+ * ★要確認ワークフロー（サイドバー）
+ */
+function showNeedsCheckWorkflowSidebar() {
+  const html = HtmlService.createHtmlOutputFromFile('NeedsCheckWorkflow')
+    .setTitle('★要確認ワークフロー')
+    .setWidth(380);
+  SpreadsheetApp.getUi().showSidebar(html);
+}
+
+/**
+ * 互換：旧名 updateNeedsReviewList() → 現行 refreshNeedsCheckView()
+ */
+function updateNeedsReviewList() {
+  return refreshNeedsCheckView();
+}
 
 /**
  * メニューを再表示（Script Properties の変更を反映）
