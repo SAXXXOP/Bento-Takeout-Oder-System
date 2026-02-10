@@ -88,7 +88,11 @@
     setStatus('更新中...');
     google.script.run
       .withSuccessHandler(async (list) => {
-        items = list || [];
+        // サーバー返り値が配列/ {items:[...]} のどちらでも動くように吸収
+        const arr = Array.isArray(list)
+          ? list
+          : (list && Array.isArray(list.items) ? list.items : []);
+        items = arr;
         document.getElementById('count').textContent = `(${items.length}件)`;
         // 選択中の行が消えた／0件になった場合に、表示が詰まらないように調整
         if (!items.length) {
@@ -98,7 +102,7 @@
         }
         renderList();
         renderDetail();
-        setStatus(items.length ? 'OK' : '0件（★要確認なし）');
+        setStatus(items.length ? `読み込み: ${items.length}件` : '0件（★要確認なし）');
       })
       .withFailureHandler(e => setStatus('Error: ' + (e && e.message ? e.message : e)))
       .ncw_refreshAndList();

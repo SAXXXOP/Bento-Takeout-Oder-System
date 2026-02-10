@@ -46,8 +46,10 @@ function refreshNeedsCheckView() {
   const rows = [];
   for (let i = 0; i < values.length; i++) {
     const r = values[i];
-    const status = String(r[CONFIG.COLUMN.STATUS - 1] || "");
-    if (status !== CONFIG.STATUS.NEEDS_CHECK) continue;
+    const status = String(r[CONFIG.COLUMN.STATUS - 1] || "").trim();
+    // "★要確認" と "要確認" の揺れを許容（ついでに空白も吸収）
+    const needsKey = String(CONFIG.STATUS.NEEDS_CHECK || "").replace(/^★/, "").trim();
+    if (status.replace(/^★/, "").trim() !== needsKey) continue;
 
     const sheetRowNo = i + 2;
     const pickupRaw = r[CONFIG.COLUMN.PICKUP_DATE_RAW - 1]; // Date型のはず
