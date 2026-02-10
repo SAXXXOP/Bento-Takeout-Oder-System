@@ -112,12 +112,17 @@
     const q = (document.getElementById('filter').value || '').trim();
     const div = document.getElementById('list');
     div.innerHTML = '';
-    items
-      const filtered = items.filter(it => {
+    const filtered = items.filter(it => {
       if (!q) return true;
       const s = `${it.orderNo || ''} ${it.name || ''} ${it.reason || ''}`;
       return s.includes(q);
     });
+
+    // ★件数/ステータス表示はここで必ず最新化（refresh()側の失敗や古い表示の残留を潰す）
+    const countEl = document.getElementById('count');
+    if (countEl) countEl.textContent = `${filtered.length}/${items.length}件`;
+    const st = document.getElementById('status');
+    if (st) st.textContent = items.length ? `読み込み: ${items.length}件` : '0件（★要確認なし）';
 
     if (!filtered.length) {
       const el = document.createElement('div');
@@ -125,7 +130,7 @@
       el.style.padding = '8px';
       el.textContent = items.length
         ? '該当なし（絞り込みに一致しません）'
-        : '0件（注文一覧のステータスが「★要確認」の行がありません）';
+        : '0件（★要確認なし）';
       div.appendChild(el);
       return;
     }
@@ -250,7 +255,7 @@
     if (!sourceNo) { alert('元予約Noが空です'); return; }
     google.script.run.withSuccessHandler((res) => afterAction(res && res.ok ? '変更処理完了' : (res.message || '変更処理失敗')))
       .withFailureHandler(e => setStatus('Error: ' + (e.message || e)))
-      .ncw_applyChangeFlow(selected.row, selected.sourceNo);
+      .ncw_applyChangeFlow(selected.row, sourceNo);
   }
 
   function afterAction(msg){

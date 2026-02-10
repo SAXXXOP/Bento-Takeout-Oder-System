@@ -18,6 +18,46 @@ function ncw_refreshAndList() {
 // 注文一覧から STATUS=★要確認 を抽出して返す
 function ncw_list() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
+  // ① まず「★要確認一覧」から取得（表示シートとサイドバーを一致させる）
+  const viewName = (CONFIG.SHEET && CONFIG.SHEET.NEEDS_CHECK_VIEW) ? CONFIG.SHEET.NEEDS_CHECK_VIEW : "★要確認一覧";
+  const view = ss.getSheetByName(viewName);
+  if (view && view.getLastRow() >= 2) {
+    const vLastRow = view.getLastRow();
+    // A:リンク B:元シート行 C:予約No D:受取日 E:名前 F:電話 G:ステータス H:理由 I:元予約No J:注文内容 K:要望 L:タイムスタンプ
+    const v = view.getRange(2, 1, vLastRow - 1, 12).getValues();
+    const outFromView = [];
+    for (let i = 0; i < v.length; i++) {
+      const r = v[i];
+      const rowNo = Number(r[1]); // 元シート行
+      if (!rowNo || rowNo < 2) continue;
+
+      const telRaw = r[5];
+      const reasonRaw = r[7];
+      const sourceNoRaw = r[8];
+
+      outFromView.push({
+        row: rowNo,                 // 注文一覧の行番号
+        orderNo: r[2] || "",
+        pickupDate: r[3] || "",
+        name: r[4] || "",
+        tel: r[5] || "",
+        status: r[6] || "",
+        reason: r[7] || "",
+        sourceNo: r[8] || "",
+        details: r[9] || "",
+        note: r[10] || "",
+        timestamp: r[11] || "",
+        flags: {
+          needsTel: !String(telRaw || "").trim(),
+          hasSourceNo: !!String(sourceNoRaw || "").trim(),
+          missingReason: !String(reasonRaw || "").trim(),
+        }
+      });
+    }
+    if (outFromView.length) return outFromView;
+  }
+
+  // ② フォールバック：従来どおり「注文一覧」から抽出
   const sheet = ss.getSheetByName(CONFIG.SHEET.ORDER_LIST);
   if (!sheet) throw new Error("注文一覧が見つかりません: " + CONFIG.SHEET.ORDER_LIST);
 
