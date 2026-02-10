@@ -5,8 +5,13 @@
 
 // 一覧を最新化して返す（ガード→ビュー更新→注文一覧から抽出）
 function ncw_refreshAndList() {
-  if (typeof applyOrderStatusGuards === "function") applyOrderStatusGuards();
-  if (typeof refreshNeedsCheckView === "function") refreshNeedsCheckView(); // ★要確認一覧も同期
+  // ★要確認一覧（別シート）を同期するのはOK。ただし運用ガードは“毎回”走らせると
+  // 条件付き書式ルールが増殖しやすいので、ここでは実行しない（メニュー側で実行）。
+  try {
+    if (typeof refreshNeedsCheckView === "function") refreshNeedsCheckView();
+  } catch (e) {
+    console.warn("refreshNeedsCheckView failed:", e);
+  }
   return ncw_list();
 }
 
@@ -38,8 +43,9 @@ function ncw_list() {
 
   for (let i = 0; i < values.length; i++) {
     const r = values[i];
-    const status = String(r[CONFIG.COLUMN.STATUS - 1] || "");
-    if (status !== CONFIG.STATUS.NEEDS_CHECK) continue;
+    const status = String(r[CONFIG.COLUMN.STATUS - 1] || "").trim();
+    const needsKey = String(CONFIG.STATUS.NEEDS_CHECK || "").replace(/^★/, "");
+    if (status.replace(/^★/, "") !== needsKey) continue; // "★要確認" と "要確認" を許容
 
     const pickupRaw = (CONFIG.COLUMN.PICKUP_DATE_RAW ? r[CONFIG.COLUMN.PICKUP_DATE_RAW - 1] : null);
     const telRaw = r[CONFIG.COLUMN.TEL - 1];

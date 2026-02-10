@@ -90,10 +90,15 @@
       .withSuccessHandler(async (list) => {
         items = list || [];
         document.getElementById('count').textContent = `(${items.length}件)`;
-        if (!selected && items.length) selected = items[0];
+        // 選択中の行が消えた／0件になった場合に、表示が詰まらないように調整
+        if (!items.length) {
+          selected = null;
+        } else if (!selected || !items.some(it => it.row === selected.row)) {
+          selected = items[0];
+        }
         renderList();
         renderDetail();
-        setStatus('OK');
+        setStatus(items.length ? 'OK' : '0件（★要確認なし）');
       })
       .withFailureHandler(e => setStatus('Error: ' + (e && e.message ? e.message : e)))
       .ncw_refreshAndList();
@@ -108,15 +113,31 @@
     const div = document.getElementById('list');
     div.innerHTML = '';
     items
-      .filter(it => !q || (`${it.orderNo} ${it.name} ${it.reason}`.includes(q)))
-      .forEach(it => {
+      const filtered = items.filter(it => {
+      if (!q) return true;
+      const s = `${it.orderNo || ''} ${it.name || ''} ${it.reason || ''}`;
+      return s.includes(q);
+    });
+
+    if (!filtered.length) {
+      const el = document.createElement('div');
+      el.className = 'muted';
+      el.style.padding = '8px';
+      el.textContent = items.length
+        ? '該当なし（絞り込みに一致しません）'
+        : '0件（注文一覧のステータスが「★要確認」の行がありません）';
+      div.appendChild(el);
+      return;
+    }
+
+    filtered.forEach(it => {
         const el = document.createElement('div');
         el.className = 'item' + (selected && selected.row === it.row ? ' active' : '');
         const reason = it.reason ? ` - ${it.reason}` : '';
         el.textContent = `${it.pickupDate} / ${it.orderNo} / ${it.name}${reason}`;
         el.onclick = () => { selected = it; renderList(); renderDetail(); };
         div.appendChild(el);
-      });
+    });
   }
 
   function renderDetail(){
@@ -229,7 +250,7 @@
     if (!sourceNo) { alert('元予約Noが空です'); return; }
     google.script.run.withSuccessHandler((res) => afterAction(res && res.ok ? '変更処理完了' : (res.message || '変更処理失敗')))
       .withFailureHandler(e => setStatus('Error: ' + (e.message || e)))
-      .ncw_applyChangeFlow(selected.row, sourceNo);
+      .ncw_applyChangeFlow(selected.row, selected.sourceNo);
   }
 
   function afterAction(msg){

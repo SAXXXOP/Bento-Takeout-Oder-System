@@ -106,7 +106,8 @@ function migrateOrderStatusToBPlan() {
  * - STATUS は「空欄=有効 / 無効 / ★要確認」以外は警告
  * - 無効/★要確認 で理由が空なら目立たせる
  */
-function applyOrderStatusGuards() {
+function applyOrderStatusGuards(opts) {
+  opts = opts || {};
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName(CONFIG.SHEET.ORDER_LIST);
   if (!sheet) return;
@@ -125,12 +126,27 @@ function applyOrderStatusGuards() {
 
   // 2) 条件付き書式（列範囲）
   const targetRange = sheet.getRange(2, 1, lastRow - 1, CONFIG.COLUMN.PICKUP_DATE_RAW); // A〜P
+  const reasonRange = sheet.getRange(2, reasonCol, lastRow - 1, 1);
 
-  const rules = sheet.getConditionalFormatRules().filter(r => {
-    // 既存ルールを全部消さず、今回の範囲に完全一致するものだけ置き換え…は難しいので、
-    // ここでは「追加」だけします。気になる場合は一度手動でルール整理してください。
-    return true;
+  // 既存の「運用ガード由来」のルールだけを除外してから、今回のルールを上書き（重複防止）
+  const keepRules = sheet.getConditionalFormatRules().filter(rule => {
+    const bc = rule.getBooleanCondition && rule.getBooleanCondition();
+    if (!bc) return true;
+    if (bc.getCriteriaType() !== SpreadsheetApp.BooleanCriteria.CUSTOM_FORMULA) return true;
+
+    const criteriaValues = bc.getCriteriaValues();
+    const formula = String((criteriaValues && criteriaValues[0]) || "");
+    const isOurRule = formula.includes(`="${CONFIG.STATUS.INVALID}"`) || formula.includes(`="${CONFIG.STATUS.NEEDS_CHECK}"`);
+    if (!isOurRule) return true;
+
+    const ranges = rule.getRanges() || [];
+    const hitsTarget = ranges.some(r => r.getRow() === 2 && r.getColumn() === 1 && r.getNumColumns() === CONFIG.COLUMN.PICKUP_DATE_RAW);
+    const hitsReason  = ranges.some(r => r.getRow() === 2 && r.getColumn() === reasonCol && r.getNumColumns() === 1);
+    // 対象範囲（行2〜、列A〜P / 理由列）にかかる運用ガードルールは除外
+    return !(hitsTarget || hitsReason);
   });
+
+  const rules = [...keepRules];
 
   // 行全体：無効 → 灰色
   rules.push(
@@ -150,8 +166,7 @@ function applyOrderStatusGuards() {
       .build()
   );
 
-  // 理由セル：無効 or ★要確認 なのに理由空 → 薄い赤（理由列だけ）
-  const reasonRange = sheet.getRange(2, reasonCol, lastRow - 1, 1);
+ // 理由セル：無効 or ★要確認 なのに理由空 → 薄い赤（理由列だけ）
   rules.push(
     SpreadsheetApp.newConditionalFormatRule()
       .whenFormulaSatisfied(
@@ -164,7 +179,8 @@ function applyOrderStatusGuards() {
 
   sheet.setConditionalFormatRules(rules);
 
-  SpreadsheetApp.getUi().alert("運用ガードを適用しました（入力制限＋色付け＋理由未記入の強調）。");
+  const msg = "運用ガードを適用しました（入力制限＋色付け＋理由未記入の強調）。";
+  if (!opts.silent) ss.toast(msg, "★予約管理", 5);
 }
 
 /** 理由未記入の行を一覧でチェック（運用監査用） */
