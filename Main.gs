@@ -127,6 +127,11 @@ function onFormSubmit(e) {
       needsCheckReasons.push(formData._needsCheckNameReason);
     }
 
+    // ★追加：フォーム解析（数量の自由記入等）で積んだ要確認理由を合流
+    if (Array.isArray(formData._needsCheckReasons) && formData._needsCheckReasons.length) {
+      needsCheckReasons.push(...formData._needsCheckReasons);
+    }
+
     // 電話番号が空（必須運用なら）
     if (!formData.phoneNumber || !String(formData.phoneNumber).trim()) {
       needsCheckReasons.push("電話番号が未入力です");

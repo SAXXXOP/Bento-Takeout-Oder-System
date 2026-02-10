@@ -33,7 +33,7 @@ function onOpen() {
 
   // ===== 日々の運用（よく使う：朝→処理の順） =====
   menu
-    .addItem('★要確認一覧を更新', 'refreshNeedsCheckView')
+    .addItem('★要確認一覧を更新', 'updateNeedsReviewListWithGuards')
     .addItem('当日まとめシートを更新', 'createProductionSheet')
     .addItem('指定日の予約札を作成', 'createDailyReservationCards')
     .addItem('日次準備（当日まとめ予約札：指定日まとめて）', 'runDailyPrepPrompt')
@@ -118,6 +118,18 @@ function onOpen() {
 
   menu.addToUi();
 }
+
+/**
+ * ★要確認一覧を更新（ステータス運用ガード適用→一覧更新の順）
+ */
+function updateNeedsReviewListWithGuards() {
+  // 1) 先にガード適用（★要確認/無効にすべきものを最新化）
+  applyOrderStatusGuards();
+
+  // 2) その結果を踏まえて、★要確認一覧を作り直す
+  updateNeedsReviewList();
+}
+
 
 /**
  * メニューを再表示（Script Properties の変更を反映）
