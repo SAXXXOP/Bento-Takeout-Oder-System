@@ -13,7 +13,7 @@ const CustomerService = {
 
     const values = sheet.getDataRange().getValues();
     const lineId = formData.userId;
-    const phone = formData.phoneNumber;
+    let phone = formData.phoneNumber;
     const newName = formData.userName;
     const now = new Date();
     const pickupDate = getPickupDateForHistory_(formData, now);
@@ -48,6 +48,17 @@ const CustomerService = {
     // === 既存顧客の更新 ===
     if (foundRow !== -1) {
       const row = values[foundRow - 1];
+
+      // ★追加：フォームでTEL未入力でも、顧客名簿にTELがあれば補完（要確認「電話番号未入力」から除外するため）
+      if (!phone || !String(phone).trim()) {
+        const storedTel = String(row[CONFIG.CUSTOMER_COLUMN.TEL - 1] || "")
+          .replace(/'/g, "")
+          .trim();
+        if (storedTel) {
+          phone = storedTel;               // この関数内の以降処理用
+          formData.phoneNumber = storedTel; // Main.gs 側の判定・注文保存用
+        }
+      }
 
       const oldNameRaw = String(row[CONFIG.CUSTOMER_COLUMN.NAME - 1] || "");
       const newNameRaw = String(newName || "");
@@ -284,7 +295,10 @@ function appendNameConflictLogV2_(ss, payload) {
   row[(col["記録日時"] || 1) - 1] = payload.at || new Date();
   row[(col["状態"] || 2) - 1] = "PENDING";
   if (col["LINE_ID"]) row[col["LINE_ID"] - 1] = SECURITY_.sanitizeForSheet(payload.lineId || "");
-  if (col["電話番号"]) row[col["電話番号"] - 1] = SECURITY_.sanitizeForSheet(payload.phone || "");
+  if (col["電話番号"]) {
+    const tel0 = payload.phone ? String(payload.phone).replace(/'/g, "").trim() : "";
+    row[col["電話番号"] - 1] = tel0 ? ("'" + SECURITY_.sanitizeForSheet(tel0)) : "";
+  }
   if (col["顧客行"]) row[col["顧客行"] - 1] = payload.customerRow || "";
   if (col["旧氏名"]) row[col["旧氏名"] - 1] = SECURITY_.sanitizeForSheet(payload.oldName || "");
   if (col["新氏名"]) row[col["新氏名"] - 1] = SECURITY_.sanitizeForSheet(payload.newName || "");

@@ -113,11 +113,6 @@ function onFormSubmit(e) {
       needsCheckReasons.push("LINE_IDが取得できません");
     }
 
-    // 電話番号が空（必須運用なら）
-    if (!formData.phoneNumber || !String(formData.phoneNumber).trim()) {
-      needsCheckReasons.push("電話番号が未入力です");
-    }
-
     // 3. 予約番号生成
     const reservationInfo = ReservationService.create(formData);
 
@@ -130,6 +125,11 @@ function onFormSubmit(e) {
     // ★追加：氏名不一致など、顧客更新で判明した要確認理由を合流
     if (formData._needsCheckNameReason) {
       needsCheckReasons.push(formData._needsCheckNameReason);
+    }
+
+    // 電話番号が空（必須運用なら）
+    if (!formData.phoneNumber || !String(formData.phoneNumber).trim()) {
+      needsCheckReasons.push("電話番号が未入力です");
     }
 
     // ★ここで meta を確定（この1個だけを後段に渡す）
