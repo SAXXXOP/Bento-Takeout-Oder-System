@@ -105,17 +105,18 @@ const LineService = (() => {
       "━━━━━━━━━━━━━",
       title,
       "━━━━━━━━━━━━━",
-      "■予約No：" + reservationNo,
-      "■受取り：" + pickupInfo,
-      "■お名前：" + (d.userName || "") + " 様",
-      "■お電話：" + tel,
+      "■予約No:" + reservationNo,
+      "■受取り:" + pickupInfo,
+      "■お名前:" + (d.userName || "") + " 様",
+      "■お電話:" + tel,
       headerNote,
       "【ご要望】",
       d.note || "なし",
       "【ご注文内容】",
       formatOrderDetailsForCustomer(d.orderDetails),
       " 合計：" + (d.totalItems || 0) + "点 / " + totalPriceStr + "円",
-      "━━━━━━━━━━━━━"
+      "━━━━━━━━━━━━━",
+      "◆受け取り時間に遅れる場合はご連絡ください（野菜を肴に 096-360-8083）。ご連絡がないまま30分を過ぎた場合、キャンセル扱いとなる場合があります。"
     ].join("\n");
   }
 
