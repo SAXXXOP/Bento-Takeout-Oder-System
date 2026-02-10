@@ -3,9 +3,100 @@
  * ★要確認の処理をサイドバーで完結させる
  */
 
+// ===== NCW debug helpers（NeedsCheckWorkflow_.gs 冒頭に追加推奨）=====
+
+function ncw_dbg_(...args) {
+  // Apps Script 実行ログに出ます
+  console.log("[NCW]", ...args);
+}
+
+function ncw_codes_(v) {
+  const s = String(v ?? "");
+  return Array.from(s).map(ch => ch.codePointAt(0));
+}
+
+// 「★」「空白」「ゼロ幅」などの揺れを吸収して比較する
+function ncw_normStatus_(v) {
+  return String(v ?? "")
+    .replace(/[\s\u00A0\u200B\uFEFF]/g, "") // 空白/nbsp/ゼロ幅/FEFF
+    .replace(/^★/, "");
+}
+
+// 現状の取得元・件数・ステータス実体をログに出す
+function ncw_debugSnapshot_(tag) {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const orderName = CONFIG.SHEET.ORDER_LIST;
+    const viewName = (CONFIG.SHEET && CONFIG.SHEET.NEEDS_CHECK_VIEW) ? CONFIG.SHEET.NEEDS_CHECK_VIEW : "★要確認一覧";
+    const needs = String(CONFIG.STATUS.NEEDS_CHECK ?? "");
+
+    ncw_dbg_(`snapshot:${tag}`, {
+      orderName,
+      viewName,
+      needs,
+      needsNorm: ncw_normStatus_(needs),
+      needsCodes: ncw_codes_(needs),
+      statusCol: CONFIG.COLUMN.STATUS
+    });
+
+    const view = ss.getSheetByName(viewName);
+    ncw_dbg_("viewSheet", view ? { ok: true, lastRow: view.getLastRow(), lastCol: view.getLastColumn() } : { ok: false });
+
+    if (view && view.getLastRow() >= 2) {
+      const take = Math.min(5, view.getLastRow() - 1);
+      const v = view.getRange(2, 1, take, 12).getValues();
+      ncw_dbg_("viewHeadRows", v.map(r => ({
+        orderRow: r[1],
+        status: r[6],
+        statusNorm: ncw_normStatus_(r[6]),
+        statusCodes: ncw_codes_(r[6]),
+      })));
+    }
+
+    const sheet = ss.getSheetByName(orderName);
+    ncw_dbg_("orderSheet", sheet ? { ok: true, lastRow: sheet.getLastRow(), lastCol: sheet.getLastColumn() } : { ok: false });
+
+    if (sheet && sheet.getLastRow() >= 2 && CONFIG.COLUMN.STATUS) {
+      const lastRow = sheet.getLastRow();
+      const take = Math.min(80, lastRow - 1);
+      const col = CONFIG.COLUMN.STATUS;
+      const arr = sheet.getRange(2, col, take, 1).getValues().flat();
+
+      const hits = [];
+      for (let i = 0; i < arr.length; i++) {
+        const raw = arr[i];
+        const s = String(raw ?? "");
+        if (s.includes("要確認") || ncw_normStatus_(s) === ncw_normStatus_(needs)) {
+          hits.push({
+            row: i + 2,
+            raw: s,
+            norm: ncw_normStatus_(s),
+            codes: ncw_codes_(s),
+          });
+        }
+      }
+      ncw_dbg_("orderStatusHits(sample)", hits.slice(0, 10));
+    }
+  } catch (e) {
+    console.warn("[NCW] snapshot failed:", e);
+  }
+}
+
+// 手動でログだけ出したい時用（エディタから実行OK）
+function ncw_debugRun() {
+  ncw_debugSnapshot_("manual");
+}
+
+function ncw_dbg_(msg, obj) {
+  try { console.debug(`[NCW] ${msg}`, obj || ""); } catch (e) {}
+}
+
 // 一覧を最新化して返す（ガード→ビュー更新→注文一覧から抽出）
 function ncw_refreshAndList() {
-// ★要確認一覧（別シート）を同期する前に、運用ガードも走らせたい要望あり。
+  ncw_dbg_("refreshAndList start");
+  ncw_debugSnapshot_("before");
+  ncw_dbg_("refreshAndList start");
+  // ★要確認一覧（別シート）を同期する前に、運用ガードも走らせたい要望あり。
   // ただし毎回実行でルール増殖リスクがあるので、5分だけ抑制して実行。
   try {
     const cache = CacheService.getScriptCache();
@@ -21,7 +112,17 @@ function ncw_refreshAndList() {
   } catch (e) {
     console.warn("refreshNeedsCheckView failed:", e);
   }
-  return ncw_list();
+  const list = ncw_list();
+  ncw_dbg_("refreshAndList return", { isArray: Array.isArray(list), count: (list && list.length) });
+  return list;
+}
+
+// 互換：サイドバー/旧版が refreshAndList / updateNeedsReviewList を呼んでも動くようにする
+function refreshAndList() {
+  return ncw_refreshAndList();
+}
+function updateNeedsReviewList() {
+  return ncw_refreshAndList();
 }
 
 // 注文一覧から STATUS=★要確認 を抽出して返す
@@ -46,13 +147,13 @@ function ncw_list() {
 
       outFromView.push({
         row: rowNo,                 // 注文一覧の行番号
-        orderNo: r[2] || "",
+        orderNo: ncw_stripQuote_(r[2] || ""),
         pickupDate: r[3] || "",
         name: r[4] || "",
-        tel: r[5] || "",
+        tel: ncw_stripQuote_(r[5] || ""),
         status: r[6] || "",
         reason: r[7] || "",
-        sourceNo: r[8] || "",
+        sourceNo: ncw_stripQuote_(r[8] || ""),
         details: r[9] || "",
         note: r[10] || "",
         timestamp: r[11] || "",
@@ -63,6 +164,7 @@ function ncw_list() {
         }
       });
     }
+    ncw_dbg_("ncw_list fromView", { viewRows: v.length, out: outFromView.length });
     if (outFromView.length) return outFromView;
   }
 
@@ -92,9 +194,9 @@ function ncw_list() {
 
   for (let i = 0; i < values.length; i++) {
     const r = values[i];
-    const status = String(r[CONFIG.COLUMN.STATUS - 1] || "").trim();
-    const needsKey = String(CONFIG.STATUS.NEEDS_CHECK || "").replace(/^★/, "");
-    if (status.replace(/^★/, "") !== needsKey) continue; // "★要確認" と "要確認" を許容
+    const statusRaw = r[CONFIG.COLUMN.STATUS - 1];
+    if (ncw_normStatus_(statusRaw) !== ncw_normStatus_(CONFIG.STATUS.NEEDS_CHECK)) continue;
+    const status = String(statusRaw || "").trim();
 
     const pickupRaw = (CONFIG.COLUMN.PICKUP_DATE_RAW ? r[CONFIG.COLUMN.PICKUP_DATE_RAW - 1] : null);
     const telRaw = r[CONFIG.COLUMN.TEL - 1];
@@ -122,6 +224,7 @@ function ncw_list() {
 
   out.sort((a, b) => (a._sort - b._sort) || a.orderNo.localeCompare(b.orderNo));
   out.forEach(x => delete x._sort);
+  ncw_dbg_("ncw_list: fromOrderList", { count: out.length });
   return out;
 }
 

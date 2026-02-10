@@ -2,7 +2,11 @@
  * ★要確認一覧（別シート）を更新して開く
  */
 function openNeedsCheckView() {
-  refreshNeedsCheckView();
+  if (typeof updateNeedsReviewList === "function") {
+    updateNeedsReviewList(); // ガード→更新
+  } else {
+    refreshNeedsCheckView();
+  }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const name = (CONFIG.SHEET && CONFIG.SHEET.NEEDS_CHECK_VIEW) ? CONFIG.SHEET.NEEDS_CHECK_VIEW : "★要確認一覧";
   ss.getSheetByName(name).activate();
