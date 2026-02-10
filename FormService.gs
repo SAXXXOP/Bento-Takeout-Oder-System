@@ -174,11 +174,6 @@ const FormService = {
         masterPointer++;
         return;
       }
-      
-      // 数量は取れたが、文章も混ざっている → NOTEへも残す（「4個」みたいな単純入力は除外）
-      if (!isSimpleCountText_(countStr)) {
-        appendToNote_(`【${safeTitle}】${String(countStr).trim()}`);
-      }
 
       // 参照先の項目を取得
       let menu = targets[masterPointer];
@@ -202,9 +197,18 @@ const FormService = {
       const count = parseCountFromText_(rawInput);
       const plain = isPlainCountOnly_(rawInput);
 
+      // 原文をNOTEに退避したか（これが true の場合、下の appendRequestNote_ は重複になりやすい）
+      const wroteRawToNote = !isSimpleCountText_(countStr);
+      if (wroteRawToNote) {
+        appendToNote_(`【${safeTitle}】${String(countStr).trim()}`);
+      }
+
       // (A) 数字が拾えない：NOTEへ原文退避＋★要確認
       if (!Number.isFinite(count) || count <= 0) {
-        appendRequestNote_(`【数量判定できず】${label}: ${rawInput}`);
+         // 原文はすでにNOTEへ退避しているなら二重になるので追記しない
+        if (!wroteRawToNote) {
+          appendRequestNote_(`【数量判定できず】${label}: ${rawInput}`);
+        }
         pushNeedsCheck_(`数量判定できず: ${label}`);
         masterPointer++;
         return;
@@ -212,13 +216,17 @@ const FormService = {
 
       // (B) 数字は拾えるが文章入り：NOTEへ原文退避＋★要確認
       if (!plain) {
-        appendRequestNote_(`【自由記入あり】${label}: ${rawInput}`);
+        if (!wroteRawToNote) {
+          appendRequestNote_(`【自由記入あり】${label}: ${rawInput}`);
+        }
         pushNeedsCheck_(`自由記入あり: ${label}`);
       }
 
       if (!menu) {
         // menuが取れないのは想定外なので★要確認
-        appendRequestNote_(`【メニュー紐付け不明】${safeTitle}: ${rawInput}`);
+        if (!wroteRawToNote) {
+          appendRequestNote_(`【メニュー紐付け不明】${safeTitle}: ${rawInput}`);
+        }
         pushNeedsCheck_(`メニュー紐付け不明: ${safeTitle}`);
         masterPointer++;
         return;
