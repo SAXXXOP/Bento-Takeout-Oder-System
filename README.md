@@ -16,7 +16,7 @@ Googleフォームの予約送信を起点に、スプレッドシートへ **�
 - （任意）LINE Webhook / Push による通知・変更導線  
   Webアプリ公開 + `WEBHOOK_KEY` による簡易認証あり:contentReference[oaicite:7]{index=7}:contentReference[oaicite:8]{index=8}
 
-##詳細マニュアル 
+## [詳細マニュアルはここから](docs/index.md)
 
 ---
 
