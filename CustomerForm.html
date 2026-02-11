@@ -17,6 +17,7 @@
   <body>
     <h3>顧客検索</h3>
     <input type="text" id="searchInput" placeholder="氏名または電話番号を入力..." oninput="handleSearch()">
+    <div id="status" style="color:#c00; margin:6px 0;"></div>
     <div id="results"></div>
 
     <div id="editSection" style="display:none;">
@@ -35,13 +36,20 @@
       let currentType = 'kitchen';
       let cache = { kitchen: "", office: "" };
 
+      function setStatus(msg){ document.getElementById('status').innerText = msg || ""; }
+
+
       function handleSearch() {
         const query = document.getElementById('searchInput').value;
         if (query.length < 1) {
           document.getElementById('results').innerHTML = "";
           return;
         }
-        google.script.run.withSuccessHandler(displayResults).searchCustomers(query);
+        setStatus("");
+        google.script.run
+          .withSuccessHandler(displayResults)
+          .withFailureHandler(e => setStatus("Error: " + (e && e.message ? e.message : e)))
+          .searchCustomers(query);
       }
 
       function displayResults(results) {
@@ -57,7 +65,9 @@
       }
 
       function selectCustomer(row) {
-        google.script.run.withSuccessHandler(customer => {
+        setStatus("");
+        google.script.run
+        .withSuccessHandler(customer => {
           selectedRow = customer.row;
           // GASから返ってきた値を確実にセット
           cache.kitchen = customer.noteKitchen || "";
@@ -71,7 +81,9 @@
           currentType = 'kitchen';
           document.getElementById('noteText').value = cache.kitchen;
           updateTabUI();
-        }).getCustomerByRow(row);
+        })
+        .withFailureHandler(e => setStatus("Error: " + (e && e.message ? e.message : e)))
+        .getCustomerByRow(row);
       }
 
       function switchNote(type) {
@@ -91,9 +103,14 @@
       function saveNote() {
         const note = document.getElementById('noteText').value;
         google.script.run.withSuccessHandler(msg => {
+        setStatus("");
+        google.script.run
+        .withSuccessHandler(msg => {
           alert(msg);
           cache[currentType] = note;
-        }).saveCustomerNote(selectedRow, note, currentType);
+        })
+        .withFailureHandler(e => setStatus("Error: " + (e && e.message ? e.message : e)))
+        .saveCustomerNote(selectedRow, note, currentType);
       }
     </script>
   </body>

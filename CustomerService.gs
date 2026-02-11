@@ -218,6 +218,22 @@ const CustomerService = {
 
 };
 
+// =========================
+// Sidebar(HtmlService) から呼ぶためのグローバル関数ラッパー
+// ※google.script.run は “トップレベル関数” しか呼べないため
+// =========================
+function searchCustomers(query) {
+  return CustomerService.searchCustomers(String(query || "").trim());
+}
+
+function getCustomerByRow(row) {
+  return CustomerService.getCustomerByRow(Number(row));
+}
+
+function saveCustomerNote(row, note, type) {
+  return CustomerService.saveCustomerNote(Number(row), String(note || ""), String(type || ""));
+}
+
 function normalizeCustomerName_(s) {
   // 半角/全角スペース・改行等を除去して比較
   return String(s || "").replace(/[ \t\r\n　]/g, "");
