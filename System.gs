@@ -15,6 +15,17 @@ function onOpen() {
   } catch (e) {
     // noop
   }
+
+// ★追加：シート表示/非表示（管理用は普段隠す）を Script Properties から反映
+  // トグルメニューは作らない（管理者がプロパティを直接切替）
+  try {
+    if (typeof SheetVisibility_applyFromProps === "function") {
+      SheetVisibility_applyFromProps();
+    }
+  } catch (e) {
+    // noop
+  }
+
   const ui = SpreadsheetApp.getUi();
 
   // MenuVisibility が無い環境でも壊れないようにフォールバック
@@ -152,6 +163,13 @@ function onOpen() {
     setupRecovery.addItem('初期設定チェック（Script Properties）', 'checkScriptProperties');
     hasSetupItem = true;
   }
+
+  // 管理用シートの表示/非表示（管理者向け）
+  if (vis.showSetupTools && vis.showSetupTools()) {
+    setupRecovery.addItem('管理シート 表示/非表示（トグル）', 'SheetVisibility_toggle_ADMIN');
+    hasSetupItem = true;
+  }
+
   if (hasSetupItem) setupRecovery.addSeparator();
   setupRecovery.addItem('🔄 メニューを再表示（設定再読込）', 'reloadReservationMenu_');
 

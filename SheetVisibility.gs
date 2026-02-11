@@ -3,23 +3,60 @@
  * Script Properties でシート群の表示/非表示を切り替える
  */
 
-const SHEET_GROUPS = {
-  // ★ここをあなたのシート名に合わせて編集
-  ADMIN: ["顧客名簿", "ログ", "設定"],
-  OPS:   ["予約札", "当日まとめ", "要確認一覧"],
-};
-
 // ★プロパティキー（値は "1"=表示, "0"=非表示）
 const SHEET_VIS_PROPS = {
   ADMIN_VISIBLE: "SHEETGROUP_ADMIN_VISIBLE",
   OPS_VISIBLE:   "SHEETGROUP_OPS_VISIBLE",
+  // シート名リスト（カンマ or 改行区切り）
+  ADMIN_SHEETS:  "SHEETGROUP_ADMIN_SHEETS",
+  OPS_SHEETS:    "SHEETGROUP_OPS_SHEETS",
 };
+
+function SheetVisibility_getDefaultSheetGroups_() {
+  const sheet = (typeof CONFIG !== "undefined" && CONFIG.SHEET) ? CONFIG.SHEET : {};
+  return {
+    // 管理用（普段は隠す想定）
+    ADMIN: [
+      sheet.CUSTOMER_LIST || "顧客名簿",
+      sheet.MENU_MASTER || "メニューマスタ",
+      sheet.NAME_CONFLICT_LOG || "氏名不一致ログ",
+      "ログ",
+      "設定",
+    ],
+    // 運用用（普段は表示想定）
+    OPS: [
+      sheet.RESERVATION_CARD || "予約札",
+      sheet.DAILY_SUMMARY || "当日まとめ",
+      sheet.NEEDS_CHECK_VIEW || "★要確認一覧",
+    ],
+  };
+}
+
+function SheetVisibility_getGroupSheetNames_(groupKey) {
+  const p = PropertiesService.getScriptProperties();
+  const propKey =
+    groupKey === "ADMIN" ? SHEET_VIS_PROPS.ADMIN_SHEETS :
+    groupKey === "OPS"   ? SHEET_VIS_PROPS.OPS_SHEETS   : null;
+
+  const raw = propKey ? p.getProperty(propKey) : "";
+  if (raw && raw.trim()) {
+    // カンマ or 改行区切り（シート名にカンマが入るケースは想定しない）
+    return raw.split(/\s*,\s*|\s*\n+\s*/).map(s => s.trim()).filter(Boolean);
+  }
+  const defaults = SheetVisibility_getDefaultSheetGroups_();
+  return defaults[groupKey] || [];
+}
 
 /** 初期値を入れたい時だけ実行（何度実行してもOK） */
 function SheetVisibility_setDefaultProps() {
   const p = PropertiesService.getScriptProperties();
   if (p.getProperty(SHEET_VIS_PROPS.ADMIN_VISIBLE) === null) p.setProperty(SHEET_VIS_PROPS.ADMIN_VISIBLE, "0"); // 管理は既定で隠す
   if (p.getProperty(SHEET_VIS_PROPS.OPS_VISIBLE) === null)   p.setProperty(SHEET_VIS_PROPS.OPS_VISIBLE, "1");   // 運用は既定で表示
+
+  // シート名リストも未設定なら初期値を入れる（必要ならプロパティ側で編集）
+  const defaults = SheetVisibility_getDefaultSheetGroups_();
+  if (p.getProperty(SHEET_VIS_PROPS.ADMIN_SHEETS) === null) p.setProperty(SHEET_VIS_PROPS.ADMIN_SHEETS, defaults.ADMIN.join(","));
+  if (p.getProperty(SHEET_VIS_PROPS.OPS_SHEETS) === null)   p.setProperty(SHEET_VIS_PROPS.OPS_SHEETS, defaults.OPS.join(","));
 }
 
 /** プロパティに従って全グループを適用 */
@@ -61,7 +98,7 @@ function SheetVisibility_toggleBoolProp_(key, defaultValue) {
 
 function SheetVisibility_setGroupHidden_(groupKey, hidden) {
   const ss = SpreadsheetApp.getActive();
-  const names = SHEET_GROUPS[groupKey] || [];
+  const names = SheetVisibility_getGroupSheetNames_(groupKey);
   const targets = names.map(n => ss.getSheetByName(n)).filter(Boolean);
   if (targets.length === 0) return;
 
