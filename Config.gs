@@ -8,7 +8,7 @@ const CONFIG = {
     NAME_SHORT: "氏名（簡易）",
     PHONE: "電話番号",
     PICKUP_DATE: "受け取り希望日",//プルダウン、日付は営業日のみ(前日20時締切適用)GASで自動作成、
-    PICKUP_TIME: "受取り希望時刻",//※現在は未使用
+    PICKUP_TIME: "受取り希望時刻",
     OLD_RESERVATION_NO: "元予約No",
     LINE_ID: "LINE_ID(自動入力)",
     NOTE: "抜き物などご要望" //質問形式チェックボックス
@@ -16,12 +16,61 @@ const CONFIG = {
 
   // 2. スプレッドシート名
   SHEET: {
-    ORDER_LIST: "注文一覧",
-    CUSTOMER_LIST: "顧客名簿",
-    MENU_MASTER: "メニューマスタ",
-    DAILY_SUMMARY: "当日まとめ",
-    RESERVATION_CARD: "予約札",
-    NEEDS_CHECK_VIEW: "★要確認一覧"
+  ORDER_LIST: "注文一覧",
+  CUSTOMER_LIST: "顧客名簿",
+  MENU_MASTER: "メニューマスタ",
+  DAILY_SUMMARY: "当日まとめ",
+  RESERVATION_CARD: "予約札",
+  NEEDS_CHECK_VIEW: "★要確認一覧",
+  NAME_CONFLICT_LOG: "氏名不一致ログ"
+},
+
+
+  // 2.5 Script Properties（キー名一覧：値は Script Properties 側に保存）
+  // 文字列直書きを減らし、タイポ事故を防ぐ目的
+  PROPS: {
+    // LINE / Webhook
+    LINE_TOKEN: "LINE_TOKEN",
+    WEBHOOK_KEY: "WEBHOOK_KEY",
+
+    // Logging
+    LOG_LEVEL: "LOG_LEVEL",
+    LOG_MAX_ROWS: "LOG_MAX_ROWS",
+
+    // Backup（運用）
+    BACKUP_FOLDER_ID: "BACKUP_FOLDER_ID",
+    BACKUP_AT_HOUR: "BACKUP_AT_HOUR",
+    BACKUP_DAILY_RETENTION_DAYS: "BACKUP_DAILY_RETENTION_DAYS",
+    BACKUP_DAILY_FOLDER_KEEP_MONTHS: "BACKUP_DAILY_FOLDER_KEEP_MONTHS",
+    BACKUP_MONTHLY_FOLDER_NAME: "BACKUP_MONTHLY_FOLDER_NAME",
+    BACKUP_MONTHLY_RETENTION_MONTHS: "BACKUP_MONTHLY_RETENTION_MONTHS",
+    BACKUP_USE_MONTHLY_FOLDER: "BACKUP_USE_MONTHLY_FOLDER",
+
+    // Backup（互換/任意）
+    BACKUP_RETENTION_DAYS: "BACKUP_RETENTION_DAYS",
+    BACKUP_MANUAL_FOLDER_NAME: "BACKUP_MANUAL_FOLDER_NAME",
+
+    // Daily prep（運用：予約札 + 当日まとめ 自動作成）
+    DAILY_PREP_AT_HOUR: "DAILY_PREP_AT_HOUR",
+    DAILY_PREP_AT_MINUTE: "DAILY_PREP_AT_MINUTE",
+    DAILY_PREP_OFFSET_DAYS: "DAILY_PREP_OFFSET_DAYS",
+    DAILY_PREP_WEEKDAYS: "DAILY_PREP_WEEKDAYS",
+
+    // Late submission notify（運用：締切後送信の検知メール）
+    LATE_SUBMISSION_NOTIFY_ENABLED: "LATE_SUBMISSION_NOTIFY_ENABLED",
+    LATE_SUBMISSION_NOTIFY_TO: "LATE_SUBMISSION_NOTIFY_TO",
+
+    // Debug（任意）
+    DEBUG_MAIN: "DEBUG_MAIN",
+    DEBUG_ORDER_SAVE: "DEBUG_ORDER_SAVE",
+
+    // Menu visibility（任意）
+    // 管理者/閲覧者の判定に利用（ADMIN_EMAILS はカンマ区切り）
+    ADMIN_EMAILS: "ADMIN_EMAILS",
+
+    // 互換：ユーザーのメールが取得できない環境向け（全員に適用されるフォールバック）
+    // 1/true/yes=管理者メニュー表示, 0/false/no=非表示
+    MENU_SHOW_ADVANCED: "MENU_SHOW_ADVANCED"
   },
 
   // 3. 「注文一覧」シートの列配置
@@ -82,7 +131,8 @@ STATUS: {
     MENU_NAME: 3,    // C (フォームの質問文)
     SUB_MENU: 4,     // D (グリッドの選択肢など)
     PRICE: 5,        // E
-    SHORT_NAME: 6    // F (内部キー・略称)
+    SHORT_NAME: 6,    // F (内部キー・略称)
+    AUTO_REPLY_NAME: 7 // G (任意：自動返信表示名)
   },
 
   // 7. LINE/LIFF 関連設定（メモとして記録）
@@ -98,8 +148,10 @@ STATUS: {
  
     // 実際のトークンは「プロジェクトの設定 > スクリプトプロパティ」に 
     // LINE_TOKEN という名前で保存してください
-    LINE_TOKEN: PropertiesService.getScriptProperties().getProperty('LINE_TOKEN'),
-  },
+    // Script Properties のキー名一覧は CONFIG.PROPS に集約（重複定義しない）
 
-  
+  },
 };
+
+// 互換：過去参照があればここで吸収（中身は CONFIG.PROPS を参照）
+CONFIG.LINE.SCRIPT_PROP_KEYS = CONFIG.PROPS;

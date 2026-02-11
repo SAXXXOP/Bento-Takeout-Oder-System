@@ -106,7 +106,8 @@ function migrateOrderStatusToBPlan() {
  * - STATUS は「空欄=有効 / 無効 / ★要確認」以外は警告
  * - 無効/★要確認 で理由が空なら目立たせる
  */
-function applyOrderStatusGuards() {
+function applyOrderStatusGuards(opts) {
+  opts = opts || {};
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName(CONFIG.SHEET.ORDER_LIST);
   if (!sheet) return;
@@ -125,12 +126,27 @@ function applyOrderStatusGuards() {
 
   // 2) 条件付き書式（列範囲）
   const targetRange = sheet.getRange(2, 1, lastRow - 1, CONFIG.COLUMN.PICKUP_DATE_RAW); // A〜P
+  const reasonRange = sheet.getRange(2, reasonCol, lastRow - 1, 1);
 
-  const rules = sheet.getConditionalFormatRules().filter(r => {
-    // 既存ルールを全部消さず、今回の範囲に完全一致するものだけ置き換え…は難しいので、
-    // ここでは「追加」だけします。気になる場合は一度手動でルール整理してください。
-    return true;
+  // 既存の「運用ガード由来」のルールだけを除外してから、今回のルールを上書き（重複防止）
+  const keepRules = sheet.getConditionalFormatRules().filter(rule => {
+    const bc = rule.getBooleanCondition && rule.getBooleanCondition();
+    if (!bc) return true;
+    if (bc.getCriteriaType() !== SpreadsheetApp.BooleanCriteria.CUSTOM_FORMULA) return true;
+
+    const criteriaValues = bc.getCriteriaValues();
+    const formula = String((criteriaValues && criteriaValues[0]) || "");
+    const isOurRule = formula.includes(`="${CONFIG.STATUS.INVALID}"`) || formula.includes(`="${CONFIG.STATUS.NEEDS_CHECK}"`);
+    if (!isOurRule) return true;
+
+    const ranges = rule.getRanges() || [];
+    const hitsTarget = ranges.some(r => r.getRow() === 2 && r.getColumn() === 1 && r.getNumColumns() === CONFIG.COLUMN.PICKUP_DATE_RAW);
+    const hitsReason  = ranges.some(r => r.getRow() === 2 && r.getColumn() === reasonCol && r.getNumColumns() === 1);
+    // 対象範囲（行2〜、列A〜P / 理由列）にかかる運用ガードルールは除外
+    return !(hitsTarget || hitsReason);
   });
+
+  const rules = [...keepRules];
 
   // 行全体：無効 → 灰色
   rules.push(
@@ -150,8 +166,7 @@ function applyOrderStatusGuards() {
       .build()
   );
 
-  // 理由セル：無効 or ★要確認 なのに理由空 → 薄い赤（理由列だけ）
-  const reasonRange = sheet.getRange(2, reasonCol, lastRow - 1, 1);
+ // 理由セル：無効 or ★要確認 なのに理由空 → 薄い赤（理由列だけ）
   rules.push(
     SpreadsheetApp.newConditionalFormatRule()
       .whenFormulaSatisfied(
@@ -164,7 +179,8 @@ function applyOrderStatusGuards() {
 
   sheet.setConditionalFormatRules(rules);
 
-  SpreadsheetApp.getUi().alert("運用ガードを適用しました（入力制限＋色付け＋理由未記入の強調）。");
+  const msg = "運用ガードを適用しました（入力制限＋色付け＋理由未記入の強調）。";
+  if (!opts.silent) ss.toast(msg, "★予約管理", 5);
 }
 
 /** 理由未記入の行を一覧でチェック（運用監査用） */
@@ -510,12 +526,14 @@ const REASON_TEMPLATES_ = {
     "その他（自由入力）"
   ],
   NEEDS_CHECK: [
+    "個数(その他)欄に自由記入あり",
     "変更期限切れ（前日20時以降）",
     "元予約No不明／見つからない",
     "電話番号未入力",
     "受取日が不正／判定できない",
     "注文内容が空／不正",
     "LINE通知不可（LINE_ID不明）",
+    "氏名不一致（顧客名簿と入力が違う）",
     "その他（自由入力）"
   ]
 };
@@ -574,4 +592,295 @@ function promptReasonFromTemplates_(type) {
 
   const extra = String(add.getResponseText() || "").trim();
   return extra ? `${selected} / ${extra}` : selected;
+}
+
+
+
+/* =========================
+   氏名不一致ログ：手動レビュー（追加）
+   ========================= */
+
+function openNameConflictLog() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sh = getOrCreateNameConflictLogSheet_();
+  ss.setActiveSheet(sh);
+}
+
+function resolveNextNameConflict() {
+  const ui = SpreadsheetApp.getUi();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  const logSh = getOrCreateNameConflictLogSheet_();
+  const ctx = findNextPendingNameConflict_(logSh);
+  if (!ctx) {
+    ui.alert("未処理の「氏名不一致ログ」はありません。");
+    return;
+  }
+
+  const { rowNum, rec, col } = ctx;
+
+  const customerSh = ss.getSheetByName(CONFIG.SHEET.CUSTOMER_LIST);
+  if (!customerSh) throw new Error("顧客名簿シートが見つかりません: " + CONFIG.SHEET.CUSTOMER_LIST);
+
+  const lineId = String(rec.lineId || "").trim();
+  const newName = String(rec.newName || "").trim();
+  const oldNameLogged = String(rec.oldName || "").trim();
+
+  // 顧客行：ログの customerRow が信用できない場合に備えて LINE_ID で再検索
+  let customerRow = parseInt(String(rec.customerRow || "").trim(), 10);
+  if (!Number.isFinite(customerRow) || customerRow < 2) customerRow = 0;
+
+  if (!customerRow || !isCustomerRowMatchingLineId_(customerSh, customerRow, lineId)) {
+    customerRow = findCustomerRowByLineId_(customerSh, lineId);
+  }
+  if (!customerRow) {
+    ui.alert(
+      "顧客名簿で該当LINE_IDが見つかりません。\n\n" +
+      `ログ行: ${rowNum}\nLINE_ID: ${lineId}\n新氏名候補: ${newName}`
+    );
+    return;
+  }
+
+  const currentName = String(customerSh.getRange(customerRow, CONFIG.CUSTOMER_COLUMN.NAME).getValue() || "");
+
+  const orderNo = String(rec.orderNo || "").trim();
+  const totalPrice = Number(rec.totalPrice || 0) || 0;
+  
+  const message =
+    "次の「氏名不一致」を処理します。\n\n" +
+    `ログ行: ${rowNum}\n` +
+    `LINE_ID: ${lineId}\n` +
+    `顧客名簿 行: ${customerRow}\n\n` +
+    `顧客名簿 現在: ${currentName}\n` +
+    `ログ 旧氏名: ${oldNameLogged}\n` +
+    `新氏名候補: ${newName}\n\n` +
+    `予約No: ${orderNo}\n` +
+    `合計金額: ${totalPrice}\n\n` +
+    "番号を入力してください：\n" +
+    "1. 名前を更新（上書き）＋回数/金額を加算\n" +
+    "2. 別名として備考(事務)に追記（名前は維持）＋回数/金額を加算\n" +
+    "3. 却下（何もしない）\n" +
+    "4. 入力ミス（名前は維持）＋回数/金額だけ加算";
+  const res = ui.prompt("氏名不一致の処理", message, ui.ButtonSet.OK_CANCEL);
+  if (res.getSelectedButton() !== ui.Button.OK) return;
+
+  const n = parseInt(String(res.getResponseText() || "").trim(), 10);
+  if (![1,2,3,4].includes(n)) {
+    ui.alert("番号が不正です（1〜4）。");
+    return;
+  }
+
+  const now = new Date();
+  const who = safeActor_();
+  // LINE_ID が未登録なら補完（任意だが、整合性が上がる）
+  maybeSetCustomerLineId_(customerSh, customerRow, lineId);
+
+  const memo = `予約No:${orderNo} / +${totalPrice}`;
+
+  if (n === 1) {
+    // 上書き＋加算
+    customerSh.getRange(customerRow, CONFIG.CUSTOMER_COLUMN.NAME).setValue(newName);
+    applyCustomerStatsIncrement_(customerSh, customerRow, totalPrice, now);
+
+    markNameConflictResolved_(logSh, rowNum, col, "APPROVED", "NAME_UPDATED_AND_STATS_ADDED", now, who, memo);
+    ui.alert(`OK：氏名を更新し、回数/金額を加算しました。\n行${customerRow}: ${currentName} → ${newName}`);
+
+  } else if (n === 2) {
+    // 別名追記＋加算
+    const noteCell = customerSh.getRange(customerRow, CONFIG.CUSTOMER_COLUMN.NOTE_OFFICE);
+    const note0 = String(noteCell.getValue() || "");
+    const note1 = appendAliasNote_(note0, newName, now);
+    noteCell.setValue(note1);
+
+    applyCustomerStatsIncrement_(customerSh, customerRow, totalPrice, now);
+
+    markNameConflictResolved_(logSh, rowNum, col, "APPROVED", "ALIAS_AND_STATS_ADDED", now, who, memo);
+    ui.alert(`OK：別名を追記し、回数/金額を加算しました。\n行${customerRow}: ${newName}`);
+  } else if (n === 3) {
+    // 却下（何もしない）※メモだけ残せるようにする
+    const mres = ui.prompt(
+      "却下メモ（任意）",
+      "お客様の入力ミスなど、判断理由があれば入力してください。\n空欄OK（キャンセルでも処理は続行します）。",
+      ui.ButtonSet.OK_CANCEL
+    );
+
+    let rejectMemo = "";
+    if (mres.getSelectedButton() === ui.Button.OK) {
+      rejectMemo = String(mres.getResponseText() || "").trim();
+    }
+    // シート安全化（存在すれば使う／無ければそのまま）
+    if (typeof SECURITY_ !== "undefined" && SECURITY_.sanitizeForSheet) {
+      rejectMemo = SECURITY_.sanitizeForSheet(rejectMemo);
+    }
+
+    markNameConflictResolved_(logSh, rowNum, col, "REJECTED", "NO_ACTION", now, who, rejectMemo);
+    ui.alert("OK：却下として記録しました（顧客名簿は変更なし）。");
+  } else if (n === 4) {
+  applyCustomerStatsIncrement_(customerSh, customerRow, totalPrice, now);
+  markNameConflictResolved_(logSh, rowNum, col, "APPROVED", "STATS_ADDED_ONLY", now, who, memo + " / 入力ミス");
+  ui.alert("OK：入力ミスとして回数/金額だけ加算しました（顧客名簿の氏名は変更なし）。");
+  }
+
+
+
+  // ログシートへ移動して見えるように
+  ss.setActiveSheet(logSh);
+  logSh.setActiveRange(logSh.getRange(rowNum, 1));
+}
+
+function applyCustomerStatsIncrement_(customerSh, customerRow, totalPrice, now) {
+  const countCell = customerSh.getRange(customerRow, CONFIG.CUSTOMER_COLUMN.VISIT_COUNT);
+  const spendCell = customerSh.getRange(customerRow, CONFIG.CUSTOMER_COLUMN.TOTAL_SPEND);
+
+  const curCount = Number(countCell.getValue() || 0) || 0;
+  const curSpend = Number(spendCell.getValue() || 0) || 0;
+
+  customerSh.getRange(customerRow, CONFIG.CUSTOMER_COLUMN.LAST_VISIT).setValue(now);
+  countCell.setValue(curCount + 1);
+  spendCell.setValue(curSpend + (Number(totalPrice || 0) || 0));
+}
+
+function maybeSetCustomerLineId_(customerSh, customerRow, lineId) {
+  const v = String(customerSh.getRange(customerRow, CONFIG.CUSTOMER_COLUMN.LINE_ID).getValue() || "").trim();
+  if (!v && lineId) customerSh.getRange(customerRow, CONFIG.CUSTOMER_COLUMN.LINE_ID).setValue(lineId);
+}
+
+
+/** ログシート（なければ作る） */
+function getOrCreateNameConflictLogSheet_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const name =
+    (CONFIG.SHEET && CONFIG.SHEET.NAME_CONFLICT_LOG) ? CONFIG.SHEET.NAME_CONFLICT_LOG : "氏名不一致ログ";
+
+  let sh = ss.getSheetByName(name);
+  if (!sh) {
+    sh = ss.insertSheet(name);
+  }
+
+  // ヘッダが無ければ作る
+  if (sh.getLastRow() === 0) {
+    sh.appendRow([
+      "記録日時", "状態", "LINE_ID", "電話番号", "顧客行", "旧氏名", "新氏名",
+      "処理", "処理日時", "処理者", "メモ",
+      "予約No", "合計金額"
+    ]);
+    sh.setFrozenRows(1);
+  }
+
+  // 既存ヘッダから列マップを作る（順番が違っても動く）
+  ensureNameConflictHeader_(sh);
+  return sh;
+}
+
+function ensureNameConflictHeader_(sh) {
+  const header = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
+  const required = ["記録日時","状態","LINE_ID","電話番号","顧客行","旧氏名","新氏名","処理","処理日時","処理者","メモ","予約No","合計金額"];
+  const missing = required.filter(h => !header.includes(h));
+
+  // 既に運用中のログを壊さないため、足りない列は末尾に追加する
+  if (missing.length) {
+    const startCol = sh.getLastColumn() + 1;
+    sh.getRange(1, startCol, 1, missing.length).setValues([missing]);
+  }
+}
+
+function findNextPendingNameConflict_(logSh) {
+  const lastRow = logSh.getLastRow();
+  if (lastRow < 2) return null;
+
+  const header = logSh.getRange(1, 1, 1, logSh.getLastColumn()).getValues()[0].map(String);
+  const col = {
+  at: header.indexOf("記録日時") + 1,
+  status: header.indexOf("状態") + 1,
+  lineId: header.indexOf("LINE_ID") + 1,
+  tel: header.indexOf("電話番号") + 1,
+  customerRow: header.indexOf("顧客行") + 1,
+  oldName: header.indexOf("旧氏名") + 1,
+  newName: header.indexOf("新氏名") + 1,
+  action: header.indexOf("処理") + 1,
+  resolvedAt: header.indexOf("処理日時") + 1,
+  resolvedBy: header.indexOf("処理者") + 1,
+  memo: header.indexOf("メモ") + 1,
+  orderNo: header.indexOf("予約No") + 1,
+  totalPrice: header.indexOf("合計金額") + 1,
+};
+
+  // 必須列が無いときは止める
+  if (!col.status || !col.lineId || !col.newName) {
+    SpreadsheetApp.getUi().alert("氏名不一致ログの列構成が想定外です（ヘッダを確認してください）。");
+    return null;
+  }
+
+  const data = logSh.getRange(2, 1, lastRow - 1, logSh.getLastColumn()).getValues();
+  for (let i = 0; i < data.length; i++) {
+    const status = String(data[i][col.status - 1] || "").trim();
+    if (!status || status.toUpperCase() === "PENDING" || status === "未処理") {
+      const rowNum = i + 2;
+      const rec = {
+        at: data[i][col.at - 1],
+        status: data[i][col.status - 1],
+        lineId: data[i][col.lineId - 1],
+        tel: col.tel ? data[i][col.tel - 1] : "",
+        customerRow: col.customerRow ? data[i][col.customerRow - 1] : "",
+        oldName: col.oldName ? data[i][col.oldName - 1] : "",
+        newName: data[i][col.newName - 1],
+        orderNo: col.orderNo ? data[i][col.orderNo - 1] : "",
+        totalPrice: col.totalPrice ? data[i][col.totalPrice - 1] : 0,
+      };
+      return { rowNum, rec, col };
+    }
+  }
+  return null;
+}
+
+function markNameConflictResolved_(logSh, rowNum, col, status, action, resolvedAt, resolvedBy, memo) {
+  if (col.status) logSh.getRange(rowNum, col.status).setValue(status);
+  if (col.action) logSh.getRange(rowNum, col.action).setValue(action);
+  if (col.resolvedAt) logSh.getRange(rowNum, col.resolvedAt).setValue(resolvedAt);
+  if (col.resolvedBy) logSh.getRange(rowNum, col.resolvedBy).setValue(resolvedBy);
+  if (col.memo) logSh.getRange(rowNum, col.memo).setValue(memo || "");
+}
+
+function findCustomerRowByLineId_(customerSh, lineId) {
+  if (!lineId) return 0;
+  const lastRow = customerSh.getLastRow();
+  if (lastRow < 2) return 0;
+
+  const vals = customerSh.getRange(2, CONFIG.CUSTOMER_COLUMN.LINE_ID, lastRow - 1, 1).getValues();
+  for (let i = 0; i < vals.length; i++) {
+    const v = String(vals[i][0] || "").trim();
+    if (v && v === lineId) return i + 2;
+  }
+  return 0;
+}
+
+function isCustomerRowMatchingLineId_(customerSh, rowNum, lineId) {
+  if (!rowNum || rowNum < 2) return false;
+  const v = String(customerSh.getRange(rowNum, CONFIG.CUSTOMER_COLUMN.LINE_ID).getValue() || "").trim();
+  return v && lineId && v === lineId;
+}
+
+function appendAliasNote_(note0, aliasName, now) {
+  const a = String(aliasName || "").trim();
+  if (!a) return String(note0 || "");
+
+  const ts = Utilities.formatDate(now, Session.getScriptTimeZone(), "yyyy/MM/dd");
+  const line = `[別名 ${ts}] ${a}`;
+
+  const base = String(note0 || "").trim();
+  if (!base) return line;
+
+  // 既に同じ別名が入っていれば二重登録しない
+  if (base.includes(a)) return base;
+
+  return base + "\n" + line;
+}
+
+function safeActor_() {
+  try {
+    const email = Session.getEffectiveUser().getEmail();
+    return email || "manual";
+  } catch (e) {
+    return "manual";
+  }
 }

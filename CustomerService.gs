@@ -13,9 +13,11 @@ const CustomerService = {
 
     const values = sheet.getDataRange().getValues();
     const lineId = formData.userId;
-    const phone = formData.phoneNumber;
+    let phone = formData.phoneNumber;
     const newName = formData.userName;
     const now = new Date();
+    const pickupDate = getPickupDateForHistory_(formData, now);
+
 
     let foundRow = -1;
 
@@ -46,32 +48,109 @@ const CustomerService = {
     // === 既存顧客の更新 ===
     if (foundRow !== -1) {
       const row = values[foundRow - 1];
-      const oldName = row[CONFIG.CUSTOMER_COLUMN.NAME - 1];
-      const betterName = (newName && newName.length > (oldName || "").length) ? newName : oldName;
-      const currentCount = parseInt(row[CONFIG.CUSTOMER_COLUMN.VISIT_COUNT - 1]) || 0;
-      const currentTotal = parseInt(row[CONFIG.CUSTOMER_COLUMN.TOTAL_SPEND - 1]) || 0;
 
-      sheet.getRange(foundRow, CONFIG.CUSTOMER_COLUMN.LINE_ID).setValue(lineId || row[CONFIG.CUSTOMER_COLUMN.LINE_ID - 1]);
-      sheet.getRange(foundRow, CONFIG.CUSTOMER_COLUMN.NAME).setValue(betterName);
-      sheet.getRange(foundRow, CONFIG.CUSTOMER_COLUMN.LAST_VISIT).setValue(now);
+      // ★追加：フォームでTEL未入力でも、顧客名簿にTELがあれば補完（要確認「電話番号未入力」から除外するため）
+      if (!phone || !String(phone).trim()) {
+        const storedTel = String(row[CONFIG.CUSTOMER_COLUMN.TEL - 1] || "")
+          .replace(/'/g, "")
+          .trim();
+        if (storedTel) {
+          phone = storedTel;               // この関数内の以降処理用
+          formData.phoneNumber = storedTel; // Main.gs 側の判定・注文保存用
+        }
+      }
+
+      const oldNameRaw = String(row[CONFIG.CUSTOMER_COLUMN.NAME - 1] || "");
+      const newNameRaw = String(newName || "");
+
+      const oldNorm = normalizeCustomerName_(oldNameRaw);
+      const newNorm = normalizeCustomerName_(newNameRaw);
+
+      let nameToWrite = oldNameRaw;
+
+      // 旧名が空で、新名がある → そのまま採用（初回登録の補完）
+      if (!oldNorm && newNorm) {
+        nameToWrite = newNameRaw;
+
+      // 旧名も新名もあるが一致しない → 上書きしない＋要確認＋ログ
+      } else if (oldNorm && newNorm && oldNorm !== newNorm) {
+
+      // ★追加：部分一致なら「同一人物候補」扱い（上書きせず、要確認にも振らない）
+      if (isPartialNameMatch_(oldNorm, newNorm)) {
+        // nameToWrite は oldNameRaw のまま（上書きなし）
+        // _needsCheckNameReason もログも出さない
+      } else {
+        // 従来どおり：不一致 → 要確認＋ログ
+        formData._needsCheckNameReason =
+          `氏名不一致（顧客名簿:${oldNameRaw} / 入力:${newNameRaw}）`;
+
+        appendNameConflictLogV2_(sheet.getParent(), {
+          at: now,
+          orderNo: formData._reservationNoForLog || "",
+          totalPrice: formData.totalPrice || 0,
+          lineId: lineId || row[CONFIG.CUSTOMER_COLUMN.LINE_ID - 1] || "",
+          phone: phone || "",
+          customerRow: foundRow,
+          oldName: oldNameRaw,
+          newName: newNameRaw
+        });
+
+        // nameToWrite は oldNameRaw のまま（= 上書きしない）
+      }
+
+    } else {
+      // 一致（空白差など）は従来通り「長い方」を採用
+      if (newNameRaw && newNameRaw.length > oldNameRaw.length) {
+        nameToWrite = newNameRaw;
+      }
+    }
+
+
+      sheet.getRange(foundRow, CONFIG.CUSTOMER_COLUMN.LINE_ID)
+        .setValue(lineId || row[CONFIG.CUSTOMER_COLUMN.LINE_ID - 1]);
+
+      sheet.getRange(foundRow, CONFIG.CUSTOMER_COLUMN.NAME).setValue(nameToWrite);
+      sheet.getRange(foundRow, CONFIG.CUSTOMER_COLUMN.LAST_VISIT).setValue(pickupDate);
+
+      // ★追加：現状値を行から取得（空・文字列でも0扱いにする）
+      const currentCount = (() => {
+        const n = parseInt(String(row[CONFIG.CUSTOMER_COLUMN.VISIT_COUNT - 1] || "0").replace(/,/g, ""), 10);
+        return Number.isFinite(n) ? n : 0;
+      })();
+      const currentTotal = (() => {
+        const n = Number(String(row[CONFIG.CUSTOMER_COLUMN.TOTAL_SPEND - 1] || "0").replace(/,/g, ""));
+        return Number.isFinite(n) ? n : 0;
+      })();
+      const addTotal = (() => {
+        const n = Number(String(formData.totalPrice || 0).replace(/,/g, ""));
+        return Number.isFinite(n) ? n : 0;
+      })();
+
       sheet.getRange(foundRow, CONFIG.CUSTOMER_COLUMN.VISIT_COUNT).setValue(currentCount + 1);
       sheet.getRange(foundRow, CONFIG.CUSTOMER_COLUMN.TOTAL_SPEND).setValue(currentTotal + (formData.totalPrice || 0));
 
+      
+      // ★追加：履歴1-3を更新（最新→履歴1、既存履歴1→履歴2…）
+      const historyEntry = buildCustomerHistoryEntry_(formData, pickupDate);
+      shiftCustomerHistory_(sheet, foundRow, historyEntry);
+
+
       return true;
     }
+
 
     // === 新規顧客の追加 ===
     const newRow = [];
     newRow[CONFIG.CUSTOMER_COLUMN.LINE_ID - 1] = lineId;
     newRow[CONFIG.CUSTOMER_COLUMN.NAME - 1] = newName;
     newRow[CONFIG.CUSTOMER_COLUMN.TEL - 1] = phone ? "'" + phone : "";
-    newRow[CONFIG.CUSTOMER_COLUMN.FIRST_VISIT - 1] = now;
-    newRow[CONFIG.CUSTOMER_COLUMN.LAST_VISIT - 1] = now;
+    newRow[CONFIG.CUSTOMER_COLUMN.FIRST_VISIT - 1] = pickupDate;
+    newRow[CONFIG.CUSTOMER_COLUMN.LAST_VISIT - 1] = pickupDate;
     newRow[CONFIG.CUSTOMER_COLUMN.VISIT_COUNT - 1] = 1;
     newRow[CONFIG.CUSTOMER_COLUMN.TOTAL_SPEND - 1] = formData.totalPrice || 0;
     newRow[CONFIG.CUSTOMER_COLUMN.NOTE_COOK - 1] = "";
     newRow[CONFIG.CUSTOMER_COLUMN.NOTE_OFFICE - 1] = "";
-    newRow[CONFIG.CUSTOMER_COLUMN.HISTORY_1 - 1] = "";
+    newRow[CONFIG.CUSTOMER_COLUMN.HISTORY_1 - 1] = buildCustomerHistoryEntry_(formData, pickupDate);
     newRow[CONFIG.CUSTOMER_COLUMN.HISTORY_2 - 1] = "";
     newRow[CONFIG.CUSTOMER_COLUMN.HISTORY_3 - 1] = "";
 
@@ -137,4 +216,207 @@ const CustomerService = {
   return "保存しました";
   }
 
-}; // ← 最後にセミコロン付きの閉じカッコが必要
+};
+
+// =========================
+// Sidebar(HtmlService) から呼ぶためのグローバル関数ラッパー
+// ※google.script.run は “トップレベル関数” しか呼べないため
+// =========================
+function searchCustomers(query) {
+  return CustomerService.searchCustomers(String(query || "").trim());
+}
+
+function getCustomerByRow(row) {
+  return CustomerService.getCustomerByRow(Number(row));
+}
+
+function saveCustomerNote(row, note, type) {
+  return CustomerService.saveCustomerNote(Number(row), String(note || ""), String(type || ""));
+}
+
+function normalizeCustomerName_(s) {
+  // NFKC正規化 + 空白（全角含む）を除去して比較
+  let x = String(s || "");
+  try { x = x.normalize("NFKC"); } catch (e) {}
+  return x.trim().replace(/[\s\u3000]+/g, "");
+}
+
+// 追加：部分一致（サブストリング）を「同一人物候補」とみなす
+// - 短すぎる一致で誤爆しないためのガード付き
+function isPartialNameMatch_(aNorm, bNorm) {
+  const a = String(aNorm || "");
+  const b = String(bNorm || "");
+  if (!a || !b) return false;
+
+  const shorter = (a.length <= b.length) ? a : b;
+  const longer  = (a.length <= b.length) ? b : a;
+
+  // ガード：短すぎる一致は信用しない
+  if (shorter.length < 3) return false;
+
+  // ガード：短い方が長い方の半分未満なら誤爆しやすいので除外（必要なら調整可）
+  if (shorter.length / longer.length < 0.5) return false;
+
+  return longer.includes(shorter);
+}
+
+// （旧実装削除）appendNameConflictLog_ は廃止（appendNameConflictLogV2_ を使用）
+function appendNameConflictLogV2_(ss, payload) {
+  const sheetName = (CONFIG.SHEET && CONFIG.SHEET.NAME_CONFLICT_LOG)
+    ? CONFIG.SHEET.NAME_CONFLICT_LOG
+    : "氏名不一致ログ";
+
+  const sh = ss.getSheetByName(sheetName) || ss.insertSheet(sheetName);
+
+  // ヘッダが無いなら AdminTools 仕様で作る
+  if (sh.getLastRow() === 0) {
+    sh.appendRow([
+      "記録日時", "状態", "LINE_ID", "電話番号", "顧客行", "旧氏名", "新氏名",
+      "処理", "処理日時", "処理者", "メモ",
+      "予約No", "合計金額"
+    ]);
+    sh.setFrozenRows(1);
+  }
+
+  // AdminTools 側の ensure を流用（足りない列があれば末尾に追加）
+  ensureNameConflictHeader_(sh);
+
+  const header = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
+  const col = {};
+  header.forEach((h, i) => { if (h) col[h] = i + 1; });
+
+  const row = Array(sh.getLastColumn()).fill("");
+
+  row[(col["記録日時"] || 1) - 1] = payload.at || new Date();
+  row[(col["状態"] || 2) - 1] = "PENDING";
+  if (col["LINE_ID"]) row[col["LINE_ID"] - 1] = SECURITY_.sanitizeForSheet(payload.lineId || "");
+  if (col["電話番号"]) {
+    const tel0 = payload.phone ? String(payload.phone).replace(/'/g, "").trim() : "";
+    row[col["電話番号"] - 1] = tel0 ? ("'" + SECURITY_.sanitizeForSheet(tel0)) : "";
+  }
+  if (col["顧客行"]) row[col["顧客行"] - 1] = payload.customerRow || "";
+  if (col["旧氏名"]) row[col["旧氏名"] - 1] = SECURITY_.sanitizeForSheet(payload.oldName || "");
+  if (col["新氏名"]) row[col["新氏名"] - 1] = SECURITY_.sanitizeForSheet(payload.newName || "");
+  if (col["予約No"]) row[col["予約No"] - 1] = payload.orderNo ? "'" + String(payload.orderNo) : "";
+  if (col["合計金額"]) row[col["合計金額"] - 1] = Number(payload.totalPrice || 0) || 0;
+
+  sh.appendRow(row);
+}
+
+
+// （旧実装削除）getOrCreateNameConflictLogSheet_(ss) / appendNameConflictLog_(ss, payload) / normalizeCustomerName_(name)
+// は AdminTools 側の getOrCreateNameConflictLogSheet_() と衝突して undefined エラーの原因になるため削除
+
+
+function getPickupDateForHistory_(formData, fallbackNow) {
+  const now = fallbackNow || new Date();
+
+  // ① 最優先：FormService.parse が入れる Date（pickupDateRaw）
+  const d0 = formData && formData.pickupDateRaw;
+  if (d0 instanceof Date && !isNaN(d0.getTime())) {
+    const d = new Date(d0);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+
+  // ② 保険：表示文字列 "M/D / ..." から月日だけ拾う
+  const s = formData && formData.pickupDate ? String(formData.pickupDate) : "";
+  const m = s.match(/(\d{1,2})\s*\/\s*(\d{1,2})/);
+  if (m) {
+    const month = Number(m[1]);
+    const day = Number(m[2]);
+
+    // 年跨ぎ（12月に1月を選ぶケース）だけ補正
+    let year = now.getFullYear();
+    if (now.getMonth() === 11 && month === 1) year++;
+
+    const d = new Date(year, month - 1, day);
+    d.setHours(0, 0, 0, 0);
+    if (!isNaN(d.getTime())) return d;
+  }
+
+  // ③ どうしても取れないときは送信日
+  const d = new Date(now);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+
+
+function buildCustomerHistoryEntry_(formData, now) {
+  const tz = Session.getScriptTimeZone();
+  const pickupDate = getPickupDateForHistory_(formData, now);
+  const dateStr = Utilities.formatDate(pickupDate, tz, "yyyy/MM/dd");
+
+
+  const orderNo = formData && formData._reservationNoForLog
+    ? String(formData._reservationNoForLog).replace(/'/g, "")
+    : "";
+
+  const price = Number(String((formData && formData.totalPrice) || 0).replace(/,/g, "")) || 0;
+
+  const memo = [
+    orderNo ? `予約No:${orderNo}` : "",
+    price ? `+${price}` : ""
+  ].filter(Boolean).join(" / ");
+
+  const raw = memo ? `${dateStr} ${memo}` : dateStr;
+  return SECURITY_.sanitizeForSheet(raw);
+}
+
+function shiftCustomerHistory_(sheet, row, entry) {
+  if (!entry) return;
+
+  const col1 = CONFIG.CUSTOMER_COLUMN.HISTORY_1;
+  const range = sheet.getRange(row, col1, 1, 3);
+  const [h1, h2] = range.getValues()[0].map(v => String(v || "").trim());
+
+  const entryDate = String(entry).split(" ")[0];
+  const h1Date = String(h1).split(" ")[0];
+
+  // 同日なら履歴1だけ差し替え（同日に複数回注文で履歴が埋まるのを軽減）
+  if (h1 && h1Date === entryDate) {
+    range.getCell(1, 1).setValue(entry);
+    return;
+  }
+
+  // entry -> 履歴1, 旧履歴1 -> 履歴2, 旧履歴2 -> 履歴3（旧履歴3は捨てる）
+  range.setValues([[entry, h1, h2]]);
+}
+
+/**  
+ * 受取日を安全に取るヘルパー
+ **/
+function getPickupDateForHistory_(formData, fallbackNow) {
+  const now = fallbackNow || new Date();
+
+  // ① FormService.parse(e) が作る Date（最優先）
+  const d0 = formData && formData.pickupDateRaw;
+  if (d0 instanceof Date && !isNaN(d0.getTime())) {
+    const d = new Date(d0);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+
+  // ② 表示用文字列 "M/D / ..." から月日だけ拾う（保険）
+  const s = formData && formData.pickupDate ? String(formData.pickupDate) : "";
+  const m = s.match(/(\d{1,2})\s*\/\s*(\d{1,2})/);
+  if (m) {
+    const month = Number(m[1]);
+    const day = Number(m[2]);
+
+    // 年跨ぎ（12月に1月を選ぶケース）だけ FormService と同じ補正
+    let year = now.getFullYear();
+    if (now.getMonth() === 11 && month === 1) year++;
+
+    const d = new Date(year, month - 1, day);
+    d.setHours(0, 0, 0, 0);
+    if (!isNaN(d.getTime())) return d;
+  }
+
+  // ③ どうしても取れないときは送信日
+  const d = new Date(now);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+

@@ -1,13 +1,61 @@
 // LineService.gs
 const LineService = (() => {
+
+    function getAutoReplyMap_() {
+      const cache = CacheService.getScriptCache();
+      const key = "AUTO_REPLY_MAP_V1";
+      const cached = cache.get(key);
+      if (cached) {
+        try { return JSON.parse(cached) || {}; } catch (e) {}
+      }
+
+      const map = {};
+      const menus = MenuRepository.getMenu();
+      menus.forEach(menu => {
+        const parent = String(menu.parentName || "").trim();
+        if (!parent) return;
+        const child = String(menu.childName || "").trim();
+        const fullKey = child ? `${parent}(${child})` : parent;
+
+        const auto = String(menu.autoReplyName || "").trim();
+        const display = auto || fullKey; // 空欄なら従来のフル表記にフォールバック
+
+        map[fullKey] = display;
+        const short = String(menu.shortName || "").trim();
+        if (short) map[short] = display;
+      });
+
+      cache.put(key, JSON.stringify(map), 300); // 5分キャッシュ
+      return map;
+    }
+
+    function formatOrderDetailsForCustomer(orderDetails) {
+      const s = String(orderDetails || "").replace(/\r\n/g, "\n");
+      if (!s.trim()) return "";
+      const map = getAutoReplyMap_();
+
+      return s
+        .split("\n")
+        .filter(l => l.trim() !== "")
+        .map(line => {
+          // 例）・KARA_S x 2 / ・唐揚げ弁当(小) x 2
+          const m = line.match(/^(\s*・\s*)(.+?)(\s*(?:x|×)\s*\d+.*)$/i);
+          if (!m) return line;
+          const name = m[2].trim();
+          const display = map[name] || name;
+          return m[1] + display + m[3];
+        })
+        .join("\n");
+    }
+
   function sendReservationMessage(reservationNo, formData, meta) {
     if (!formData || !formData.userId) return { ok: false, reason: "missing_userId" };
 
     const normalized = normalizeMeta(meta);
 
-    const title = normalized.isChange
-      ? "【予約変更を承りました】"
-      : "【ご予約ありがとうございます】";
+    const title = normalized.lateSubmission
+      ? "【受付できませんでした（締切後）】"
+      : (normalized.isChange ? "【予約変更を承りました】" : "【ご予約ありがとうございます】");
 
     let text = "";
     try {
@@ -27,11 +75,12 @@ const LineService = (() => {
         // oldNo があれば「変更希望あり」とみなす（フラグ漏れ対策）
         changeRequested: !!meta.changeRequested || !!oldNo,
         oldNo,
-        changeFailReason: String(meta.changeFailReason || "")
+        changeFailReason: String(meta.changeFailReason || ""),
+        lateSubmission: !!meta.lateSubmission
       };
     }
     // 互換：boolean の場合
-    return { isChange: !!meta, changeRequested: false, oldNo: "", changeFailReason: "" };
+    return { isChange: !!meta, changeRequested: false, oldNo: "", changeFailReason: "", lateSubmission: false };
   }
 
   function buildMessage(title, reservationNo, d, meta) {
@@ -56,22 +105,23 @@ const LineService = (() => {
       "━━━━━━━━━━━━━",
       title,
       "━━━━━━━━━━━━━",
-      "■予約No：" + reservationNo,
-      "■受取り：" + pickupInfo,
-      "■お名前：" + (d.userName || "") + " 様",
-      "■お電話：" + tel,
+      "■予約No:" + reservationNo,
+      "■受取り:" + pickupInfo,
+      "■お名前:" + (d.userName || "") + " 様",
+      "■お電話:" + tel,
       headerNote,
       "【ご要望】",
       d.note || "なし",
       "【ご注文内容】",
-      d.orderDetails || "",
+      formatOrderDetailsForCustomer(d.orderDetails),
       " 合計：" + (d.totalItems || 0) + "点 / " + totalPriceStr + "円",
-      "━━━━━━━━━━━━━"
+      "━━━━━━━━━━━━━",
+      "◆受け取り時間に遅れる場合はご連絡ください（野菜を肴に 096-360-8083）。ご連絡がないまま30分を過ぎた場合、キャンセル扱いとなる場合があります。"
     ].join("\n");
   }
 
   function pushText(toUserId, text) {
-    const token = PropertiesService.getScriptProperties().getProperty("LINE_TOKEN");
+    const token = ScriptProps.get(ScriptProps.KEYS.LINE_TOKEN);
     if (!token) return { ok: false, reason: "missing_LINE_TOKEN" };
 
     const url = "https://api.line.me/v2/bot/message/push";
@@ -101,5 +151,8 @@ const LineService = (() => {
     }
   }
 
-  return { sendReservationMessage: sendReservationMessage };
+  return {
+    sendReservationMessage: sendReservationMessage,
+    formatOrderDetailsForCustomer: formatOrderDetailsForCustomer
+  };
 })();

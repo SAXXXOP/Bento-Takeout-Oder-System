@@ -2,7 +2,11 @@
  * ★要確認一覧（別シート）を更新して開く
  */
 function openNeedsCheckView() {
-  refreshNeedsCheckView();
+  if (typeof updateNeedsReviewList === "function") {
+    updateNeedsReviewList(); // ガード→更新
+  } else {
+    refreshNeedsCheckView();
+  }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const name = (CONFIG.SHEET && CONFIG.SHEET.NEEDS_CHECK_VIEW) ? CONFIG.SHEET.NEEDS_CHECK_VIEW : "★要確認一覧";
   ss.getSheetByName(name).activate();
@@ -46,8 +50,10 @@ function refreshNeedsCheckView() {
   const rows = [];
   for (let i = 0; i < values.length; i++) {
     const r = values[i];
-    const status = String(r[CONFIG.COLUMN.STATUS - 1] || "");
-    if (status !== CONFIG.STATUS.NEEDS_CHECK) continue;
+    const status = String(r[CONFIG.COLUMN.STATUS - 1] || "").trim();
+    // "★要確認" と "要確認" の揺れを許容（ついでに空白も吸収）
+    const needsKey = String(CONFIG.STATUS.NEEDS_CHECK || "").replace(/^★/, "").trim();
+    if (status.replace(/^★/, "").trim() !== needsKey) continue;
 
     const sheetRowNo = i + 2;
     const pickupRaw = r[CONFIG.COLUMN.PICKUP_DATE_RAW - 1]; // Date型のはず

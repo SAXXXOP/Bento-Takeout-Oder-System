@@ -11,8 +11,8 @@ const ReservationService = {
    * 形式: MMdd-連番（例: 0203-1）
    */
   create(formData) {
-    const ss = SpreadsheetApp.getActive();
-    const sheet = ss.getSheetByName("注文一覧");
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName(CONFIG.SHEET.ORDER_LIST);
     if (!sheet) {
       throw new Error("注文一覧シートが見つかりません");
     }
@@ -23,7 +23,8 @@ const ReservationService = {
     let nextNum = 1;
 
     if (lastRow > 1) {
-      const lastNo = sheet.getRange(lastRow, 2).getValue().toString();
+      const lastNoRaw = String(sheet.getRange(lastRow, CONFIG.COLUMN.ORDER_NO).getValue() || "");
+      const lastNo = lastNoRaw.replace(/^'/, ""); // ← 先頭の'を除去（連番判定が壊れるのを防ぐ）
 
       // 同日の予約なら連番を引き継ぐ
       if (lastNo.indexOf(prefix) === 0) {

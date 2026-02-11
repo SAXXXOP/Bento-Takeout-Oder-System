@@ -24,27 +24,25 @@ function backupSpreadsheetDaily() {
   if (!lock.tryLock(30 * 1000)) return;
 
   try {
-    const props = PropertiesService.getScriptProperties();
-    const folderId = String(props.getProperty("BACKUP_FOLDER_ID") || "").trim();
+    // UIが使える（手動実行）なら通知。トリガー実行では取得できないのでnullのまま
+    let ui = null;
+    try { ui = SpreadsheetApp.getUi(); } catch (e) {}
+
+    const folderId = String(ScriptProps.get(ScriptProps.KEYS.BACKUP_FOLDER_ID, "")).trim();
     if (!folderId) {
       throw new Error("BACKUP_FOLDER_ID が未設定です（Script Properties に親フォルダIDを入れてください）。");
     }
 
     // ▼運用方針：日次60日 + 月次12ヶ月
-    const dailyRetentionDays = parseInt(
-      props.getProperty("BACKUP_DAILY_RETENTION_DAYS") ||
-      props.getProperty("BACKUP_RETENTION_DAYS") || // 互換
-      "60",
-      10
+    const dailyRetentionDays = ScriptProps.getInt(
+      ScriptProps.KEYS.BACKUP_DAILY_RETENTION_DAYS,
+      ScriptProps.getInt(ScriptProps.KEYS.BACKUP_RETENTION_DAYS, 60) // 互換
     );
-    const monthlyRetentionMonths = parseInt(
-      props.getProperty("BACKUP_MONTHLY_RETENTION_MONTHS") || "12",
-      10
-    );
+    const monthlyRetentionMonths = ScriptProps.getInt(ScriptProps.KEYS.BACKUP_MONTHLY_RETENTION_MONTHS, 12);
 
-    const useMonthly = String(props.getProperty("BACKUP_USE_MONTHLY_FOLDER") || "1") === "1";
-    const keepDailyFolderMonths = parseInt(props.getProperty("BACKUP_DAILY_FOLDER_KEEP_MONTHS") || "3", 10);
-    const monthlyFolderName = String(props.getProperty("BACKUP_MONTHLY_FOLDER_NAME") || "MonthlySnapshots");
+    const useMonthly = ScriptProps.getBool(ScriptProps.KEYS.BACKUP_USE_MONTHLY_FOLDER, true);
+    const keepDailyFolderMonths = ScriptProps.getInt(ScriptProps.KEYS.BACKUP_DAILY_FOLDER_KEEP_MONTHS, 3);
+    const monthlyFolderName = String(ScriptProps.get(ScriptProps.KEYS.BACKUP_MONTHLY_FOLDER_NAME, "MonthlySnapshots"));
 
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     if (!ss) {
@@ -58,18 +56,21 @@ function backupSpreadsheetDaily() {
 
     const rootFolder = DriveApp.getFolderById(folderId);
     const srcFile = DriveApp.getFileById(ss.getId());
+    const originalFormId = getFormIdFromUrl_(ss.getFormUrl()); // 元フォームID（誤移動防止用）
+
 
     // 当月フォルダ（なければ作成）：日次バックアップの置き場
     const targetFolder = useMonthly ? getOrCreateMonthlyFolder_(rootFolder) : rootFolder;
 
     // 1) 日次バックアップ作成（スプレッドシート丸ごとコピー）
-    srcFile.makeCopy(dailyBackupName, targetFolder);
+    const copiedDaily = srcFile.makeCopy(dailyBackupName, targetFolder);
+    moveAutoCopiedFormToFolder_(originalFormId, copiedDaily.getId(), targetFolder, `${dailyBackupName}_FORM`);
 
     // 2) 日次バックアップを「直近N日」だけ残す（Backups_YYYYMM を横断して掃除）
     purgeOldDailyBackupsUnderRoot_(rootFolder, dailyPrefix, dailyRetentionDays);
 
     // 3) 月次スナップショット：当月分が無ければ1個作る（MonthlySnapshots フォルダ）
-    ensureMonthlySnapshot_(rootFolder, srcFile, ss.getName(), monthlyFolderName);
+    ensureMonthlySnapshot_(rootFolder, srcFile, ss.getName(), monthlyFolderName, originalFormId);
 
     // 4) 月次スナップショットを「直近Nヶ月」だけ残す
     purgeOldMonthlySnapshots_(rootFolder, ss.getName(), monthlyFolderName, monthlyRetentionMonths);
@@ -79,8 +80,16 @@ function backupSpreadsheetDaily() {
       purgeOldMonthFolders_(rootFolder, keepDailyFolderMonths);
     }
 
+     // 手動実行時だけ結果が見えるように
+    if (ui) {
+      ui.alert(
+        `OK：日次バックアップを作成しました。\n保存先：${targetFolder.getName()}\nファイル名：${dailyBackupName}`
+      );
+    }
+
   } catch (e) {
     console.error("backupSpreadsheetDaily error:", String(e), e && e.stack);
+    try { SpreadsheetApp.getUi().alert(`NG：日次バックアップに失敗しました。\n${String(e)}`); } catch (ee) {}
   } finally {
     lock.releaseLock();
   }
@@ -90,8 +99,7 @@ function backupSpreadsheetDaily() {
  * 毎日バックアップのトリガーを設定（重複は削除）
  */
 function installDailyBackupTrigger() {
-  const props = PropertiesService.getScriptProperties();
-  const atHour = parseInt(props.getProperty("BACKUP_AT_HOUR") || "3", 10);
+  const atHour = ScriptProps.getInt(ScriptProps.KEYS.BACKUP_AT_HOUR, 3);
 
   deleteDailyBackupTriggers_();
 
@@ -237,7 +245,7 @@ function getOrCreateNamedSubfolder_(rootFolder, name) {
  * 保存先：root / <monthlyFolderName>（デフォルト MonthlySnapshots）
  * ファイル名：<ssName>_monthly_YYYYMM
  */
-function ensureMonthlySnapshot_(rootFolder, srcFile, ssName, monthlyFolderName) {
+function ensureMonthlySnapshot_(rootFolder, srcFile, ssName, monthlyFolderName, originalFormId) {
   const tz = Session.getScriptTimeZone();
   const yyyymm = Utilities.formatDate(new Date(), tz, "yyyyMM");
 
@@ -245,7 +253,8 @@ function ensureMonthlySnapshot_(rootFolder, srcFile, ssName, monthlyFolderName) 
   const snapshotName = `${ssName}_monthly_${yyyymm}`;
 
   if (folder.getFilesByName(snapshotName).hasNext()) return;
-  srcFile.makeCopy(snapshotName, folder);
+  const copiedMonthly = srcFile.makeCopy(snapshotName, folder);
+  moveAutoCopiedFormToFolder_(originalFormId, copiedMonthly.getId(), folder, `${snapshotName}_FORM`);
 }
 
 /**
@@ -296,11 +305,8 @@ function createManualSnapshot() {
   if (!lock.tryLock(30 * 1000)) return;
 
   try {
-    const props = PropertiesService.getScriptProperties();
-    const folderId = String(props.getProperty("BACKUP_FOLDER_ID") || "").trim();
-    if (!folderId) throw new Error("BACKUP_FOLDER_ID が未設定です。");
-
-    const manualFolderName = String(props.getProperty("BACKUP_MANUAL_FOLDER_NAME") || "ManualSnapshots");
+    const folderId = String(ScriptProps.get(ScriptProps.KEYS.BACKUP_FOLDER_ID, "")).trim();
+    const manualFolderName = String(ScriptProps.get(ScriptProps.KEYS.BACKUP_MANUAL_FOLDER_NAME, "ManualSnapshots")).trim();
 
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     if (!ss) throw new Error("アクティブなスプレッドシートが取得できません（コンテナバインドで実行してください）。");
@@ -326,8 +332,10 @@ function createManualSnapshot() {
     const rootFolder = DriveApp.getFolderById(folderId);
     const manualFolder = getOrCreateNamedSubfolder_(rootFolder, manualFolderName);
     const srcFile = DriveApp.getFileById(ss.getId());
+    const originalFormId = getFormIdFromUrl_(ss.getFormUrl()); // 元フォームID
 
-    srcFile.makeCopy(name, manualFolder);
+    const copiedManual = srcFile.makeCopy(name, manualFolder);
+    moveAutoCopiedFormToFolder_(originalFormId, copiedManual.getId(), manualFolder, `${name}_FORM`);
 
     try {
       SpreadsheetApp.getUi().alert(`OK：手動スナップショットを作成しました。\n保存先：${manualFolderName}\nファイル名：${name}`);
@@ -354,10 +362,52 @@ function sanitizeFileToken_(s) {
     .replace(/^_+|_+$/g, "");
 }
 
+/**
+ * GoogleフォームURLからフォームIDを抽出
+ * - /forms/d/e/<ID>/... 形式と /forms/d/<ID>/... 形式に対応
+ */
+function getFormIdFromUrl_(url) {
+  const s = String(url || "");
+  let m = s.match(/\/d\/e\/([a-zA-Z0-9_-]+)/);
+  if (m && m[1]) return m[1];
+  m = s.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  if (m && m[1]) return m[1];
+  return "";
+}
 
-function addBackupMenu_() {
-  SpreadsheetApp.getUi()
-    .createMenu("バックアップ")
-    .addItem("手動スナップショット作成", "createManualSnapshot")
-    .addToUi();
+/**
+ * スプレッドシートコピー時に自動生成された「フォームのコピー」をバックアップ先フォルダへ移動
+ * - copiedSpreadsheetId: makeCopyで作ったスプレッドシート（File）のID
+ * - originalFormId と一致する場合は誤移動防止で何もしない
+ */
+function moveAutoCopiedFormToFolder_(originalFormId, copiedSpreadsheetId, targetFolder, renameTo) {
+  try {
+    if (!originalFormId) return;
+    if (!copiedSpreadsheetId || !targetFolder) return;
+
+    let formId = "";
+    for (let i = 0; i < 3; i++) {
+      try {
+        const copiedSS = SpreadsheetApp.openById(copiedSpreadsheetId);
+        formId = getFormIdFromUrl_(copiedSS.getFormUrl());
+      } catch (e) {}
+      if (formId) break;
+      Utilities.sleep(500);
+    }
+
+    if (!formId) return;
+    if (formId === originalFormId) return; // 元フォームを触らない
+
+    const formFile = DriveApp.getFileById(formId);
+
+    // フォルダ配下へ（必要ならマイドライブ直下から外す）
+    targetFolder.addFile(formFile);
+    try { DriveApp.getRootFolder().removeFile(formFile); } catch (e) {}
+
+    if (renameTo) {
+      try { formFile.setName(String(renameTo)); } catch (e) {}
+    }
+  } catch (e) {
+    console.error("moveAutoCopiedFormToFolder_ error:", String(e), e && e.stack);
+  }
 }

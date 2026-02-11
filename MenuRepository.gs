@@ -6,8 +6,8 @@ const MenuRepository = {
     const lastRow = sheet.getLastRow();
     if (lastRow < 2) return [];
     
-    // A列からF列までを明示的に指定して取得
-    const values = sheet.getRange(1, 1, lastRow, 6).getValues();
+    // A列からG列まで（Gは任意：自動返信表示名）
+    const values = sheet.getRange(1, 1, lastRow, 7).getValues();
     const data = [];
     
     for (let i = 1; i < values.length; i++) {
@@ -21,7 +21,8 @@ const MenuRepository = {
         parentName: row[2], // C: メニュー名
         childName: row[3],  // D: 小メニュー
         price: row[4],      // E: 価格
-        shortName: row[5]   // F: 略称
+        shortName: row[5],  // F: 略称
+        autoReplyName: row[6] // G: 自動返信表示名（任意）
       });
     }
     return data;

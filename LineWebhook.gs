@@ -29,8 +29,7 @@ function doPost(e) {
 
   try {
   // 1) 簡易認証：URLに ?key= を必須化
-  const props = PropertiesService.getScriptProperties();
-  const expectedKey = props.getProperty("WEBHOOK_KEY");
+  const expectedKey = ScriptProps.get(ScriptProps.KEYS.WEBHOOK_KEY, "");
   const providedKey = (e && e.parameter && e.parameter.key) ? String(e.parameter.key) : "";
   if (expectedKey && providedKey !== expectedKey) {
     logToSheet("WARN", "unauthorized webhook", { hasKey: !!providedKey });
@@ -99,8 +98,7 @@ function doPost(e) {
       }
 
       if (postData.startsWith("change_confirm_no:")) {
-      // ★追加：押した直後に“読み込み中”を出す（予約確認→準備完了表示までの不安対策）
-      startLoadingAnimation(userId, 10);
+      // ※ローディング開始は上で実施済み（change_confirm_no / change_page）
 
       const orderNo = postData.split(":")[1] || "";
 
@@ -414,6 +412,11 @@ function buildPagerBubble(page, totalPages) {
    ========================= */
 
 function buildConfirmFlex(orderNo, itemsText, formUrl) {
+  const customerItemsText =
+    (LineService && typeof LineService.formatOrderDetailsForCustomer === "function")
+      ? LineService.formatOrderDetailsForCustomer(itemsText)
+      : (itemsText || "");
+      
   return {
     type: "flex",
     altText: "変更フォームを開く",
@@ -434,7 +437,7 @@ function buildConfirmFlex(orderNo, itemsText, formUrl) {
             cornerRadius: "md",
             contents: [
               { type: "text", text: `対象No: ${orderNo}`, size: "sm", weight: "bold" },
-              { type: "text", text: `内容:\n${itemsText || ""}`, size: "xs", color: "#666666", wrap: true }
+              { type: "text", text: `内容:\n${customerItemsText}`, size: "xs", color: "#666666", wrap: true }
             ]
           },
           {
@@ -504,7 +507,7 @@ function replyText(token, text) {
 
 function replyTexts(token, texts) {
   const url = "https://api.line.me/v2/bot/message/reply";
-  const accessToken = PropertiesService.getScriptProperties().getProperty("LINE_TOKEN");
+  const lineToken = ScriptProps.get(ScriptProps.KEYS.LINE_TOKEN);
 
   const payload = {
     replyToken: token,
@@ -515,7 +518,7 @@ function replyTexts(token, texts) {
     method: "post",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${accessToken}`
+      Authorization: `Bearer ${lineToken}`,
     },
     payload: JSON.stringify(payload),
     muteHttpExceptions: true
@@ -533,7 +536,7 @@ function replyTexts(token, texts) {
 
 function replyFlex(token, flexMsg) {
   const url = "https://api.line.me/v2/bot/message/reply";
-  const accessToken = PropertiesService.getScriptProperties().getProperty("LINE_TOKEN");
+  const lineToken = ScriptProps.get(ScriptProps.KEYS.LINE_TOKEN);
 
   const payload = {
     replyToken: token,
@@ -544,7 +547,7 @@ function replyFlex(token, flexMsg) {
     method: "post",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${accessToken}`
+      Authorization: `Bearer ${lineToken}`,
     },
     payload: JSON.stringify(payload),
     muteHttpExceptions: true
@@ -565,8 +568,8 @@ if (code < 200 || code >= 300) {
  * （replyTokenは1回しか使えないため必須）
  */
 function replyMulti(token, messages) {
+  const lineToken = ScriptProps.get(ScriptProps.KEYS.LINE_TOKEN);
   const url = "https://api.line.me/v2/bot/message/reply";
-  const accessToken = PropertiesService.getScriptProperties().getProperty("LINE_TOKEN");
 
   const payload = {
     replyToken: token,
@@ -577,7 +580,7 @@ function replyMulti(token, messages) {
     method: "post",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${accessToken}`
+      Authorization: `Bearer ${lineToken}`,
     },
     payload: JSON.stringify(payload),
     muteHttpExceptions: true
@@ -601,7 +604,7 @@ function replyMulti(token, messages) {
 function startLoadingAnimation(chatId, loadingSeconds) {
   if (!chatId) return;
 
-  const token = PropertiesService.getScriptProperties().getProperty("LINE_TOKEN");
+  const token = ScriptProps.get(ScriptProps.KEYS.LINE_TOKEN);
   if (!token) {
     logToSheet("WARN", "loading animation: missing LINE_TOKEN");
     return;
@@ -686,7 +689,7 @@ function getChangeableReservations(userId, options) {
 
   const COL_NO = idx(CONFIG.COLUMN.ORDER_NO);
   const COL_PICKUP_DATE = idx(CONFIG.COLUMN.PICKUP_DATE);          // E
-  const COL_PICKUP_DATE_RAW = idx(CONFIG.COLUMN.PICKUP_DATE_RAW);  // O
+  const COL_PICKUP_DATE_RAW = idx(CONFIG.COLUMN.PICKUP_DATE_RAW);  // P
   const COL_DETAILS = idx(CONFIG.COLUMN.DETAILS);
   const COL_TOTAL_COUNT = idx(CONFIG.COLUMN.TOTAL_COUNT);
   const COL_LINE_ID = idx(CONFIG.COLUMN.LINE_ID);
@@ -715,7 +718,7 @@ function getChangeableReservations(userId, options) {
     if (NG.includes(status)) continue;
 
     const pickupDateStrRaw = row[COL_PICKUP_DATE];      // E
-    const pickupDateRawCell = row[COL_PICKUP_DATE_RAW]; // O
+    const pickupDateRawCell = row[COL_PICKUP_DATE_RAW]; // P
 
     let dateOnly = parsePickupDate(pickupDateRawCell);
     if (!dateOnly) dateOnly = parsePickupDate(pickupDateStrRaw);
@@ -826,9 +829,8 @@ function parsePickupDate(value) {
 
 function logToSheet(level, message, extra) {
   try {
-    const props = PropertiesService.getScriptProperties();
-    const threshold = String(props.getProperty("LOG_LEVEL") || "WARN").toUpperCase();
-    const maxRows = Number(props.getProperty("LOG_MAX_ROWS") || 2000);
+    const threshold = String(ScriptProps.get(ScriptProps.KEYS.LOG_LEVEL, "WARN")).toUpperCase();
+    const maxRows = ScriptProps.getInt(ScriptProps.KEYS.LOG_MAX_ROWS, 2000);
 
     const order = { DEBUG: 10, INFO: 20, WARN: 30, ERROR: 40 };
     const lv = String(level || "INFO").toUpperCase();
