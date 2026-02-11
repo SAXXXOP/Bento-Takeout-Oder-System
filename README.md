@@ -77,7 +77,7 @@ Googleフォームの予約送信を起点に、スプレッドシートへ **�
 #### 任意（推奨/運用で）
 - バックアップの保持期間や月次設定など（未設定時のデフォルトあり）:contentReference[oaicite:16]{index=16}
 - デバッグ：`DEBUG_MAIN`, `DEBUG_ORDER_SAVE` など:contentReference[oaicite:17]{index=17}
-- メニュー表示制御：`MENU_SHOW_*`（普段使わないメニューを隠す）:contentReference[oaicite:18]{index=18}
+- メニュー表示制御：管理者/閲覧者（`ADMIN_EMAILS` で管理者を追加）:contentReference[oaicite:18]{index=18}
 
 > テンプレ配布/初期化向けに Script Properties を一括で用意する関数もあります（`ensureTemplateScriptProperties`, `overwriteTemplateScriptProperties`）。
 
