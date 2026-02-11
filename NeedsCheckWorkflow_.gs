@@ -100,32 +100,7 @@ function ncw_dbg_(...args) {
   } catch (e) {}
 }
 
-// 一覧を最新化して返す（ガード→ビュー更新→注文一覧から抽出）
-function ncw_refreshAndList() {
-  ncw_dbg_("refreshAndList start");
-  ncw_debugSnapshot_("before");
-  // ★要確認一覧（別シート）を同期する前に、運用ガードも走らせたい要望あり。
-  // ただし毎回実行でルール増殖リスクがあるので、5分だけ抑制して実行。
-  try {
-    const cache = CacheService.getScriptCache();
-    if (!cache.get("ncw_guard_recent") && typeof applyOrderStatusGuards === "function") {
-      applyOrderStatusGuards({ silent: true });
-      cache.put("ncw_guard_recent", "1", 300); // 5分
-    }
-  } catch (e) {
-    console.warn("applyOrderStatusGuards skipped/failed:", e);
-  }
-  try {
-    if (typeof refreshNeedsCheckView === "function") refreshNeedsCheckView();
-  } catch (e) {
-    console.warn("refreshNeedsCheckView failed:", e);
-  }
-  const items = ncw_list();
-  ncw_dbg_("refreshAndList return", { isArray: Array.isArray(items), count: (items && items.length) });
-  ncw_debugSnapshot_("after");
-  // ★必ず {items:[...]} を返す（クライアント側の型ゆらぎ対策）
-  return { items };
-}
++// ※旧：ncw_refreshAndList の実装（重複定義）を削除。下の互換ラッパーで v3 に統一する
 
 /**
  * ★要確認ワークフロー：API入口 v2（戻り値を必ず返す）
@@ -208,13 +183,11 @@ function ncw_ping_v2() {
 }
 
 
-// 互換：サイドバー/旧版が refreshAndList / updateNeedsReviewList を呼んでも動くようにする
+// 互換：サイドバー/旧版が refreshAndList / ncw_refreshAndList を呼んでも動くようにする
 function refreshAndList() {
   return ncw_refreshAndList_v3_20260210();
 }
-function updateNeedsReviewList() {
-  return ncw_refreshAndList_v3_20260210();
-}
+
 function ncw_refreshAndList() {
   return ncw_refreshAndList_v3_20260210();
 }

@@ -235,8 +235,10 @@ function saveCustomerNote(row, note, type) {
 }
 
 function normalizeCustomerName_(s) {
-  // 半角/全角スペース・改行等を除去して比較
-  return String(s || "").replace(/[ \t\r\n　]/g, "");
+  // NFKC正規化 + 空白（全角含む）を除去して比較
+  let x = String(s || "");
+  try { x = x.normalize("NFKC"); } catch (e) {}
+  return x.trim().replace(/[\s\u3000]+/g, "");
 }
 
 // 追加：部分一致（サブストリング）を「同一人物候補」とみなす
@@ -258,30 +260,7 @@ function isPartialNameMatch_(aNorm, bNorm) {
   return longer.includes(shorter);
 }
 
-
-function appendNameConflictLog_(ss, data) {
-  const sheetName = (CONFIG.SHEET && CONFIG.SHEET.NAME_CONFLICT_LOG)
-    ? CONFIG.SHEET.NAME_CONFLICT_LOG
-    : "氏名不一致ログ";
-
-  const sh = ss.getSheetByName(sheetName) || ss.insertSheet(sheetName);
-
-  if (sh.getLastRow() === 0) {
-    sh.appendRow(["timestamp", "orderNo", "lineId", "phone", "oldName", "newName"]);
-  }
-
-  const ts = Utilities.formatDate(data.ts || new Date(), "Asia/Tokyo", "yyyy-MM-dd HH:mm:ss");
-
-  sh.appendRow([
-    ts,
-    SECURITY_.sanitizeForSheet(String(data.orderNo || "")),
-    SECURITY_.sanitizeForSheet(String(data.lineId || "")),
-    SECURITY_.sanitizeForSheet(String(data.phone || "")),
-    SECURITY_.sanitizeForSheet(String(data.oldName || "")),
-    SECURITY_.sanitizeForSheet(String(data.newName || ""))
-  ]);
-}
-
+// （旧実装削除）appendNameConflictLog_ は廃止（appendNameConflictLogV2_ を使用）
 function appendNameConflictLogV2_(ss, payload) {
   const sheetName = (CONFIG.SHEET && CONFIG.SHEET.NAME_CONFLICT_LOG)
     ? CONFIG.SHEET.NAME_CONFLICT_LOG
@@ -325,73 +304,8 @@ function appendNameConflictLogV2_(ss, payload) {
 }
 
 
-// ===== 氏名不一致ログ：CustomerService側（書き込み担当） =====
-
-function normalizeCustomerName_(name) {
-  let s = String(name || "");
-  try { s = s.normalize("NFKC"); } catch (e) {}
-  // 空白・全角空白・改行などを除去して比較しやすく
-  return s.trim().replace(/[\s\u3000]+/g, "");
-}
-
-function getOrCreateNameConflictLogSheet_(ss) {
-  const sheetName = CONFIG.SHEET.NAME_CONFLICT_LOG;
-  let sh = ss.getSheetByName(sheetName);
-  if (!sh) sh = ss.insertSheet(sheetName);
-
-  // ヘッダ（増減に強く：無ければ末尾に追加）
-  const required = [
-    "状態", "記録日時", "予約No",
-    "LINE_ID", "電話番号",
-    "旧氏名", "新氏名",
-    "理由",
-    "処理者", "処理日時", "メモ"
-  ];
-
-  const lastCol = Math.max(1, sh.getLastColumn());
-  const header = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(x => String(x || "").trim());
-  const existing = new Set(header.filter(Boolean));
-
-  // シートが完全に空っぽ/ヘッダ未作成の場合
-  if (sh.getLastRow() === 0 || header.every(v => !v)) {
-    sh.getRange(1, 1, 1, required.length).setValues([required]);
-    return sh;
-  }
-
-  // 不足分を末尾に足す
-  const toAdd = required.filter(h => !existing.has(h));
-  if (toAdd.length) {
-    sh.getRange(1, header.length + 1, 1, toAdd.length).setValues([toAdd]);
-  }
-
-  return sh;
-}
-
-function appendNameConflictLog_(ss, payload) {
-  const sh = getOrCreateNameConflictLogSheet_(ss);
-
-  const lastCol = Math.max(1, sh.getLastColumn());
-  const header = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(x => String(x || "").trim());
-  const col = {};
-  header.forEach((h, i) => { if (h) col[h] = i + 1; });
-
-  const row = Array(lastCol).fill("");
-
-  // 必ず “未処理(PENDING)”
-  row[(col["状態"] || 1) - 1] = "PENDING";
-
-  const ts = payload.ts || new Date();
-  if (col["記録日時"]) row[col["記録日時"] - 1] = ts;
-
-  if (col["予約No"]) row[col["予約No"] - 1] = payload.orderNo ? "'" + String(payload.orderNo) : "";
-  if (col["LINE_ID"]) row[col["LINE_ID"] - 1] = SECURITY_.sanitizeForSheet(payload.lineId || "");
-  if (col["電話番号"]) row[col["電話番号"] - 1] = SECURITY_.sanitizeForSheet(payload.phone || "");
-  if (col["旧氏名"]) row[col["旧氏名"] - 1] = SECURITY_.sanitizeForSheet(payload.oldName || "");
-  if (col["新氏名"]) row[col["新氏名"] - 1] = SECURITY_.sanitizeForSheet(payload.newName || "");
-  if (col["理由"]) row[col["理由"] - 1] = SECURITY_.sanitizeForSheet(payload.reason || "");
-
-  sh.appendRow(row);
-}
+// （旧実装削除）getOrCreateNameConflictLogSheet_(ss) / appendNameConflictLog_(ss, payload) / normalizeCustomerName_(name)
+// は AdminTools 側の getOrCreateNameConflictLogSheet_() と衝突して undefined エラーの原因になるため削除
 
 
 function getPickupDateForHistory_(formData, fallbackNow) {
@@ -478,7 +392,11 @@ function getPickupDateForHistory_(formData, fallbackNow) {
 
   // ① FormService.parse(e) が作る Date（最優先）
   const d0 = formData && formData.pickupDateRaw;
-  if (d0 instanceof Date && !isNaN(d0.getTime())) return d0; // :contentReference[oaicite:5]{index=5}
+  if (d0 instanceof Date && !isNaN(d0.getTime())) {
+    const d = new Date(d0);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
 
   // ② 表示用文字列 "M/D / ..." から月日だけ拾う（保険）
   const s = formData && formData.pickupDate ? String(formData.pickupDate) : "";
@@ -492,10 +410,13 @@ function getPickupDateForHistory_(formData, fallbackNow) {
     if (now.getMonth() === 11 && month === 1) year++;
 
     const d = new Date(year, month - 1, day);
+    d.setHours(0, 0, 0, 0);
     if (!isNaN(d.getTime())) return d;
   }
 
   // ③ どうしても取れないときは送信日
-  return now;
+  const d = new Date(now);
+  d.setHours(0, 0, 0, 0);
+  return d;
 }
 

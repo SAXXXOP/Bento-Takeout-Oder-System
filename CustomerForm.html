@@ -102,15 +102,19 @@
 
       function saveNote() {
         const note = document.getElementById('noteText').value;
-        google.script.run.withSuccessHandler(msg => {
+        if (!selectedRow) {
+          setStatus("顧客を選択してください");
+          return;
+        }
         setStatus("");
         google.script.run
-        .withSuccessHandler(msg => {
-          alert(msg);
-          cache[currentType] = note;
-        })
-        .withFailureHandler(e => setStatus("Error: " + (e && e.message ? e.message : e)))
-        .saveCustomerNote(selectedRow, note, currentType);
+          .withSuccessHandler(msg => {
+            alert(msg);
+            cache[currentType] = note;
+            setStatus("保存しました");
+          })
+          .withFailureHandler(e => setStatus("Error: " + (e && e.message ? e.message : e)))
+          .saveCustomerNote(selectedRow, note, currentType);
       }
     </script>
   </body>
