@@ -121,6 +121,52 @@ function st_clearBelowHeader_(sheet, headerRows) {
   return rows;
 }
 
+// ===== トリガー（フォーム送信） =====
+/**
+ * フォーム送信トリガーを設定（既存の onFormSubmit トリガーは削除して作り直す）
+ * メニュー「導入ツール > トリガー（フォーム送信） > 設定」から呼ばれます。
+ */
+function installFormSubmitTrigger() {
+  const ui = SpreadsheetApp.getUi();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const handler = "onFormSubmit";
+
+  // 既存トリガーを削除（重複防止）
+  const deleted = st_deleteTriggersByHandler_(handler);
+
+  // スプレッドシートがフォームに紐づいているか
+  const formUrl = (ss.getFormUrl && ss.getFormUrl()) || "";
+  if (!formUrl) {
+    ui.alert(
+      "NG：このスプレッドシートがフォームに紐づいていません。\n" +
+      "スプレッドシートの「フォーム」メニューからフォームを紐づけてから実行してください。"
+    );
+    return;
+  }
+
+  // まずはフォーム側トリガー（e.response が取れて安定）→ダメならスプレッドシート側でフォールバック
+  let createdTarget = "フォーム";
+  try {
+    const form = FormApp.openByUrl(formUrl);
+    ScriptApp.newTrigger(handler).forForm(form).onFormSubmit().create();
+  } catch (e) {
+    createdTarget = "スプレッドシート（フォールバック）";
+    ScriptApp.newTrigger(handler).forSpreadsheet(ss).onFormSubmit().create();
+  }
+
+  ui.alert(`OK：フォーム送信トリガーを設定しました。\n削除：${deleted}件 / 作成先：${createdTarget}`);
+}
+
+/**
+ * フォーム送信トリガーを削除
+ * メニュー「導入ツール > トリガー（フォーム送信） > 削除」から呼ばれます。
+ */
+function deleteFormSubmitTrigger() {
+  const ui = SpreadsheetApp.getUi();
+  const deleted = st_deleteTriggersByHandler_("onFormSubmit");
+  ui.alert(`OK：フォーム送信トリガーを削除しました（${deleted}件）。`);
+}
+
 function configureDailyPrepSettingsPrompt() {
   const ui = SpreadsheetApp.getUi();
 
@@ -368,20 +414,25 @@ function st_parseWeekdays_(text) {
     .replace(/\s+/g, "");
 
   // "1-5" のような範囲を展開、"," で複数可
+  // 0(日)〜6(土) に加えて 7(日) も許容（=日）
   const set = new Set();
   const parts = normalized.split(",").filter(Boolean);
   parts.forEach(p => {
     const m = p.match(/^(\d)(?:-(\d))?$/);
     if (!m) throw new Error("weekdays が不正です（例: 1-5, 0,2,4,6）。");
-    const a = parseInt(m[1], 10);
-    const b = m[2] ? parseInt(m[2], 10) : a;
-    if (a < 0 || a > 6 || b < 0 || b > 6) throw new Error("weekdays は 0(日)〜6(土) です。");
-    if (a <= b) {
-      for (let i = a; i <= b; i++) set.add(i);
+    const a0 = parseInt(m[1], 10);
+    const b0 = m[2] ? parseInt(m[2], 10) : a0;
+    if (a0 < 0 || a0 > 7 || b0 < 0 || b0 > 7) throw new Error("weekdays は 0(日)〜6(土)（または 7=日）です。");
+
+    const add = (x0) => set.add(x0 === 7 ? 0 : x0); // 7 を日(0)として扱う
+
+    if (a0 <= b0) {
+      // 例: 4-7 => 4,5,6,7(=0)
+      for (let i = a0; i <= b0; i++) add(i);
     } else {
-      // 5-1 のような逆は週跨ぎ扱いで展開（5,6,0,1）
-      for (let i = a; i <= 6; i++) set.add(i);
-      for (let i = 0; i <= b; i++) set.add(i);
+      // 例: 5-1 => 5,6,7(=0),0,1
+      for (let i = a0; i <= 7; i++) add(i);
+      for (let i = 0; i <= b0; i++) add(i);
     }
   });
   return set;
