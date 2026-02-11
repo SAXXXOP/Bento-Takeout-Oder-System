@@ -16,7 +16,7 @@
 - Logger：ログ出力、LOG_LEVEL/LOG_MAX
 - Config：CONFIG.SHEET/COLUMN/FORM
 - DeploymentTools：テンプレ移植、導入補助
-- MenuVisibility：MENU_SHOW_* の表示制御
+- MenuVisibility：管理者/閲覧者でメニュー表示制御（ADMIN_EMAILS）
 
 ---
 
