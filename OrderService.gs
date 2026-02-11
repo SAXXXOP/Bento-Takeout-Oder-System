@@ -5,6 +5,7 @@ function normalizeChangeMeta_(metaOrBool, oldNo) {
       changeRequested: !!metaOrBool.changeRequested || !!oldNo,
       oldNo: String(metaOrBool.oldNo || oldNo || "").replace(/'/g, "").trim(),
       changeFailReason: String(metaOrBool.changeFailReason || ""),
+      needsCheck: !!metaOrBool.needsCheck,
       needsCheckReason: String(metaOrBool.needsCheckReason || ""),
       lateSubmission: !!metaOrBool.lateSubmission
     };
@@ -14,6 +15,7 @@ function normalizeChangeMeta_(metaOrBool, oldNo) {
     changeRequested: !!oldNo,
     oldNo: String(oldNo || "").replace(/'/g, "").trim(),
     changeFailReason: "",
+    needsCheck: false,
     needsCheckReason: "",
     lateSubmission: false
   };
@@ -98,6 +100,7 @@ const OrderService = {
 
     const needsCheck =
       (meta.changeRequested && !meta.isChange) ||
+      (meta.needsCheck === true) ||
       (!!meta.needsCheckReason && String(meta.needsCheckReason).trim());
 
     // ★締切後送信は INVALID（厳密締切の“最終防波堤”）

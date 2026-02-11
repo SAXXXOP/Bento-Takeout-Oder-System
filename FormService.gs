@@ -123,9 +123,16 @@ const FormService = {
       const limited = s.length > 200 ? s.slice(0, 200) + "…(省略)" : s;
       formData.note = formData.note ? (String(formData.note) + "\n" + limited) : limited;
     };
+    // ★要確認：理由は空欄でもOK（運用側で後から入力）
+    const markNeedsCheck_ = () => {
+      formData._needsCheckFlag = true;
+    };
     const pushNeedsCheck_ = (reason) => {
+      markNeedsCheck_();
+      const r = String(reason || "").trim();
+      if (!r) return;
       if (!formData._needsCheckReasons) formData._needsCheckReasons = [];
-      formData._needsCheckReasons.push(String(reason || "").trim());
+      formData._needsCheckReasons.push(r);
     };
 
     // "４個" / "4個" / "  ４  " / "4こ" などから数量だけ拾う（先頭/途中の整数）
@@ -219,7 +226,8 @@ const FormService = {
         if (!wroteRawToNote) {
           appendRequestNote_(`【自由記入あり】${label}: ${rawInput}`);
         }
-        pushNeedsCheck_(`自由記入あり: ${label}`);
+        // ★要確認にはするが、理由(REASON)は自動入力しない（空欄のまま）
+        markNeedsCheck_();
       }
 
       if (!menu) {

@@ -143,6 +143,8 @@ function onFormSubmit(e) {
       changeRequested,
       oldNo,
       changeFailReason,
+      // ★理由が空でも「★要確認」にできるフラグ
+      needsCheck: !!formData._needsCheckFlag || needsCheckReasons.length > 0,
       needsCheckReason: needsCheckReasons.join(" / "),
       lateSubmission: !!formData._lateSubmission
     };
