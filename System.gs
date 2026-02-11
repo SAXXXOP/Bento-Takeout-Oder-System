@@ -32,18 +32,23 @@ function onOpen() {
     ? !!vis.isAdmin()
     : (vis && typeof vis.showAdvanced === "function" ? !!vis.showAdvanced() : true);
 
-  // ★追加：メニューの管理者判定と同じ結果で、シート表示/非表示も自動切替
-  // - 管理者: ADMINグループ表示 + OPSグループ表示
-  // - 閲覧者: ADMINグループ非表示 + OPSグループ表示
+  // ★変更：シート表示/非表示を「管理者/閲覧者」判定と同期
   try {
     if (typeof SheetVisibility_applyByRole_ === "function") {
       SheetVisibility_applyByRole_(isAdmin);
     } else if (typeof SheetVisibility_applyFromProps === "function") {
-      // 互換（旧実装しかない場合）
+      // 念のためフォールバック
       SheetVisibility_applyFromProps();
     }
   } catch (e) {
-    // noop
+    // 失敗を握りつぶさずログに残す（原因確定用）
+    try {
+      logToSheet("ERROR", "SheetVisibility onOpen failed", {
+        isAdmin,
+        err: String(e),
+        stack: e && e.stack ? String(e.stack) : ""
+      });
+    } catch (_) {}
   }
 
 
