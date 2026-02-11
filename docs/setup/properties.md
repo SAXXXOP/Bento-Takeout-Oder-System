@@ -29,8 +29,10 @@
 - `LOG_LEVEL`：例 `INFO` / `DEBUG`
 - `LOG_MAX`：ログ最大行数（肥大化対策）
 
-### メニュー表示制御
-- `MENU_SHOW_*`：普段使わないメニューを隠す（詳しくは `setup/menu-visibility.md`）
+### メニュー表示制御（管理者/閲覧者）
+- `ADMIN_EMAILS`：管理者メール（カンマ区切り）
+- `MENU_SHOW_ADVANCED`：緊急用フォールバック（メール判定できない環境向け、全員に適用）
+  - 詳細は `setup/menu-visibility.md`
 
 ### バックアップの詳細（実装に存在する場合）
 例：
