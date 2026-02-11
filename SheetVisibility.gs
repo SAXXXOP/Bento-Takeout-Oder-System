@@ -70,6 +70,19 @@ function SheetVisibility_applyFromProps() {
   SheetVisibility_setGroupHidden_("OPS",   !opsVisible);
 }
 
+/**
+ * ★追加：管理者/閲覧者で自動適用（メニュー判定と同期）
+ * - 管理者(isAdmin=true): ADMIN を表示、OPS も表示
+ * - 閲覧者(isAdmin=false): ADMIN を非表示、OPS は表示
+ *
+ * ※ SheetVisibility_setDefaultProps() は「シート名リスト初期化」のために維持
+ */
+function SheetVisibility_applyByRole_(isAdmin) {
+  SheetVisibility_setDefaultProps();
+  SheetVisibility_setGroupHidden_("ADMIN", !isAdmin);
+  SheetVisibility_setGroupHidden_("OPS", false);
+}
+
 /** 管理グループ：プロパティをトグル→適用 */
 function SheetVisibility_toggle_ADMIN() {
   SheetVisibility_toggleBoolProp_(SHEET_VIS_PROPS.ADMIN_VISIBLE, false);

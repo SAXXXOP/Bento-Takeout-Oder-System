@@ -16,16 +16,6 @@ function onOpen() {
     // noop
   }
 
-// ★追加：シート表示/非表示（管理用は普段隠す）を Script Properties から反映
-  // トグルメニューは作らない（管理者がプロパティを直接切替）
-  try {
-    if (typeof SheetVisibility_applyFromProps === "function") {
-      SheetVisibility_applyFromProps();
-    }
-  } catch (e) {
-    // noop
-  }
-
   const ui = SpreadsheetApp.getUi();
 
   // MenuVisibility が無い環境でも壊れないようにフォールバック
@@ -41,6 +31,21 @@ function onOpen() {
   const isAdmin = (vis && typeof vis.isAdmin === "function")
     ? !!vis.isAdmin()
     : (vis && typeof vis.showAdvanced === "function" ? !!vis.showAdvanced() : true);
+
+  // ★追加：メニューの管理者判定と同じ結果で、シート表示/非表示も自動切替
+  // - 管理者: ADMINグループ表示 + OPSグループ表示
+  // - 閲覧者: ADMINグループ非表示 + OPSグループ表示
+  try {
+    if (typeof SheetVisibility_applyByRole_ === "function") {
+      SheetVisibility_applyByRole_(isAdmin);
+    } else if (typeof SheetVisibility_applyFromProps === "function") {
+      // 互換（旧実装しかない場合）
+      SheetVisibility_applyFromProps();
+    }
+  } catch (e) {
+    // noop
+  }
+
 
   const menu = ui.createMenu('★予約管理');
 
