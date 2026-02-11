@@ -1,4 +1,125 @@
-// ===== 導入ツール（統合）：日次準備設定 / トリガー =====
+// ===== 導入ツール（統合）：本番初期化 / 日次準備設定 / トリガー =====
+
+/**
+ * 本番初期化（危険）：シート上のテストデータのみ削除（フォーム回答は残す）
+ * メニュー「導入ツール > 本番初期化（危険） > テストデータ削除」から呼ばれます。
+ */
+function initProductionCleanSheetOnly() {
+  initProductionClean_(false);
+}
+
+/**
+ * 本番初期化（危険）：シートのテストデータ削除 + フォーム回答も全削除
+ * メニュー「導入ツール > 本番初期化（危険） > ＋フォーム回答も削除」から呼ばれます。
+ */
+function initProductionCleanWithFormResponses() {
+  initProductionClean_(true);
+}
+
+function initProductionClean_(deleteFormResponses) {
+  // UIが使えない実行（トリガー等）は事故りやすいので拒否
+  let ui = null;
+  try { ui = SpreadsheetApp.getUi(); } catch (e) {}
+  if (!ui) throw new Error("initProductionClean: UI が使用できない実行環境です（トリガー実行不可）。");
+
+  // 管理者ガード（MenuVisibility があれば）
+  try {
+    if (typeof MenuVisibility !== "undefined" && MenuVisibility && typeof MenuVisibility.isAdmin === "function") {
+      if (!MenuVisibility.isAdmin()) {
+        ui.alert("権限エラー", "管理者のみ実行できます。", ui.ButtonSet.OK);
+        return;
+      }
+    }
+  } catch (e) {}
+
+  const title = "本番初期化（危険）";
+  const msg = [
+    "以下を削除します：",
+    "- 注文一覧 / 顧客名簿 / ★要確認一覧 / ログ / 氏名不一致ログ（データ行）",
+    "- 当日まとめ / 予約札（内容）",
+    deleteFormResponses ? "- フォーム回答（全件）" : "",
+    "",
+    "実行する場合は DELETE と入力してください。"
+  ].filter(Boolean).join("\n");
+
+  const res = ui.prompt(title, msg, ui.ButtonSet.OK_CANCEL);
+  if (res.getSelectedButton() !== ui.Button.OK) return;
+  if (String(res.getResponseText() || "").trim().toUpperCase() !== "DELETE") {
+    ui.alert("キャンセルしました（DELETE が一致しません）");
+    return;
+  }
+
+  const lock = LockService.getDocumentLock();
+  if (!lock.tryLock(30000)) {
+    ui.alert("他の処理が実行中のため中止しました（ロック取得失敗）");
+    return;
+  }
+
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+    // CONFIG があればそれを優先。無い場合は固定名でフォールバック。
+    const SH = (typeof CONFIG !== "undefined" && CONFIG && CONFIG.SHEET) ? CONFIG.SHEET : {
+      ORDER_LIST: "注文一覧",
+      DAILY_SUMMARY: "当日まとめ",
+      RESERVATION_CARD: "予約札",
+      MENU_MASTER: "メニューマスタ",
+      CUSTOMER_LIST: "顧客名簿",
+      NEEDS_CHECK_VIEW: "★要確認一覧",
+      LOG: "ログ",
+      SETTINGS: "設定",
+      NAME_CONFLICT_LOG: "氏名不一致ログ",
+    };
+
+    const cleared = [];
+
+    // データ行だけ削除（1行目はヘッダ想定）
+    [SH.ORDER_LIST, SH.CUSTOMER_LIST, SH.NEEDS_CHECK_VIEW, SH.LOG, SH.NAME_CONFLICT_LOG].forEach(name => {
+      const sh = ss.getSheetByName(name);
+      if (!sh) return;
+      const n = st_clearBelowHeader_(sh, 1);
+      cleared.push(`${name}: ${n}行`);
+    });
+
+    // 内容を全部クリア（レイアウトは残す）
+    [SH.DAILY_SUMMARY, SH.RESERVATION_CARD].forEach(name => {
+      const sh = ss.getSheetByName(name);
+      if (!sh) return;
+      sh.clearContents();
+      cleared.push(`${name}: クリア`);
+    });
+
+    let formMsg = "";
+    if (deleteFormResponses) {
+      const formUrl = ss.getFormUrl();
+      if (!formUrl) {
+        formMsg = "フォーム未紐づけのため、フォーム回答削除はスキップしました。";
+      } else {
+        const form = FormApp.openByUrl(formUrl);
+        const before = form.getResponses().length;
+        form.deleteAllResponses();
+        formMsg = `フォーム回答を削除しました: ${before}件`;
+      }
+    }
+
+    ui.alert(
+      "完了：本番初期化",
+      "削除/クリア結果\n" + cleared.join("\n") + (formMsg ? ("\n\n" + formMsg) : ""),
+      ui.ButtonSet.OK
+    );
+  } finally {
+    try { lock.releaseLock(); } catch (e) {}
+  }
+}
+
+function st_clearBelowHeader_(sheet, headerRows) {
+  const lastRow = sheet.getLastRow();
+  const lastCol = sheet.getLastColumn();
+  if (lastRow <= headerRows || lastCol <= 0) return 0;
+  const rows = lastRow - headerRows;
+  sheet.getRange(headerRows + 1, 1, rows, lastCol).clearContent();
+  return rows;
+}
 
 function configureDailyPrepSettingsPrompt() {
   const ui = SpreadsheetApp.getUi();
