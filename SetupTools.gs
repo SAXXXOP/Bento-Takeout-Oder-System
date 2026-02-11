@@ -144,16 +144,15 @@ function getTemplatePropsDefaults_() {
     [CONFIG.PROPS.LATE_SUBMISSION_NOTIFY_ENABLED]: "0",
     [CONFIG.PROPS.LATE_SUBMISSION_NOTIFY_TO]: "__SET_ME__",
     [CONFIG.PROPS.DEBUG_MAIN]: "0",
-    [CONFIG.PROPS.DEBUG_ORDER_SAVE]: "0",
+    // Menu visibility（任意）
+    // 管理者追加（カンマ区切り）。未設定なら「オーナーのみ管理者」
+    [CONFIG.PROPS.ADMIN_EMAILS]: "__SET_ME__",
 
-    // Menu visibility（任意）: 1=表示 / 0=非表示
-    [CONFIG.PROPS.MENU_SHOW_ADVANCED]: "1",
-    [CONFIG.PROPS.MENU_SHOW_ORDERNO]: "1",
-    [CONFIG.PROPS.MENU_SHOW_NAME_CONFLICT]: "1",
-    [CONFIG.PROPS.MENU_SHOW_STATUS]: "1",
-    [CONFIG.PROPS.MENU_SHOW_BACKUP]: "1",
-    [CONFIG.PROPS.MENU_SHOW_SETUP]: "1",
-    [CONFIG.PROPS.MENU_SHOW_PROP_CHECK]: "1",
+    // 互換：ユーザーのメールが取得できない環境向け（全員に適用されるフォールバック）
+
+    // Menu visibility（任意）
+    // 1=管理者メニュー表示 / 0=日々の運用のみ
+    [CONFIG.PROPS.MENU_SHOW_ADVANCED]: "0",
   };
 
   // 互換：LOG_MAX が残ってる環境向け

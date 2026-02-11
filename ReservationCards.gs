@@ -95,14 +95,21 @@ function createDailyReservationCards(targetDateOrInput) {
     }
   });
 
+  // ★0件でも予約札を空にする（前回の札が残らないように）
+  cardSheet.clear().clearFormats();
+
   if (cardsToPrint.length === 0) {
-    if (ui) ui.alert("該当データがありませんでした。");
-    else console.log("createDailyReservationCards: 該当データなし");
+    if (ui) ui.alert("該当データがありませんでした。（予約札は空にしました）");
+    else console.log("createDailyReservationCards: 該当データなし（予約札は空にした）");
+
+    // レイアウトだけ整えておく（通常処理と同等）
+    for (let c = 1; c <= 3; c++) cardSheet.setColumnWidth(c, 230);
+    cardSheet.setRowHeights(1, cardSheet.getMaxRows(), 21);
+    if (ui) cardSheet.activate();
     return;
   }
 
   cardsToPrint.sort((a, b) => b.height - a.height);
-  cardSheet.clear().clearFormats();
   
   const MAX_PAGE_ROWS = 46; 
   let columnHeights = [1, 1, 1];

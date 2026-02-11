@@ -65,14 +65,12 @@ const CONFIG = {
     DEBUG_ORDER_SAVE: "DEBUG_ORDER_SAVE",
 
     // Menu visibility（任意）
-    // 1/true/yes=表示, 0/false/no=非表示
-    MENU_SHOW_ADVANCED: "MENU_SHOW_ADVANCED",
-    MENU_SHOW_ORDERNO: "MENU_SHOW_ORDERNO",
-    MENU_SHOW_NAME_CONFLICT: "MENU_SHOW_NAME_CONFLICT",
-    MENU_SHOW_STATUS: "MENU_SHOW_STATUS",
-    MENU_SHOW_BACKUP: "MENU_SHOW_BACKUP",
-    MENU_SHOW_SETUP: "MENU_SHOW_SETUP",
-    MENU_SHOW_PROP_CHECK: "MENU_SHOW_PROP_CHECK"
+    // 管理者/閲覧者の判定に利用（ADMIN_EMAILS はカンマ区切り）
+    ADMIN_EMAILS: "ADMIN_EMAILS",
+
+    // 互換：ユーザーのメールが取得できない環境向け（全員に適用されるフォールバック）
+    // 1/true/yes=管理者メニュー表示, 0/false/no=非表示
+    MENU_SHOW_ADVANCED: "MENU_SHOW_ADVANCED"
   },
 
   // 3. 「注文一覧」シートの列配置
