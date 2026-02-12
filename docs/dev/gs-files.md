@@ -13,7 +13,7 @@
 - DailyPrep：予約札/当日まとめの生成、日次トリガー
 - LineService：LINE送信/受信（doPost）
 - Backup：Driveバックアップ
-- Logger：ログ出力、LOG_LEVEL/LOG_MAX
+- Logger：ログ出力、LOG_LEVEL/LOG_MAX_ROWS
 - Config：CONFIG.SHEET/COLUMN/FORM
 - DeploymentTools：テンプレ移植、導入補助
 - MenuVisibility：管理者/閲覧者でメニュー表示制御（ADMIN_EMAILS）
