@@ -2,11 +2,9 @@
  * ★要確認一覧（別シート）を更新して開く
  */
 function openNeedsCheckView() {
-  if (typeof updateNeedsReviewList === "function") {
-    updateNeedsReviewList(); // ガード→更新
-  } else {
-    refreshNeedsCheckView();
-  }
+  // ★要確認一覧を更新する前に、ステータス運用ガードを適用（入力制限/色付け）
+  if (typeof applyOrderStatusGuards === "function") applyOrderStatusGuards({ silent: true });
+  refreshNeedsCheckView();
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const name = (CONFIG.SHEET && CONFIG.SHEET.NEEDS_CHECK_VIEW) ? CONFIG.SHEET.NEEDS_CHECK_VIEW : "★要確認一覧";
   ss.getSheetByName(name).activate();

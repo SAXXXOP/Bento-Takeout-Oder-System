@@ -248,3 +248,74 @@ function logInfo_(runId, funcName, message, detail) { return SHEET_LOGGER_.info(
 function logWarn_(runId, funcName, message, detail) { return SHEET_LOGGER_.warn(runId, funcName, message, detail); }
 function logError_(runId, funcName, err, detail) { return SHEET_LOGGER_.error(runId, funcName, err, detail); }
 function logEnd_(runId, funcName, message, detail) { return SHEET_LOGGER_.end(runId, funcName, message, detail); }
+
+
+/**
+ * 現在のプロパティを一覧表示（危険な値はマスク）
+ * - Script / Document / User の3種を出します
+ * - UI実行時：ダイアログ表示
+ * - トリガー等(UI不可)：Loggerに出します
+ */
+function showCurrentProperties() {
+  const data = getAllPropertiesMasked_();
+  const json = JSON.stringify(data, null, 2);
+
+  // UIが使えるならダイアログ、無理ならログ
+  try {
+    const ui = SpreadsheetApp.getUi();
+    const html = HtmlService
+      .createHtmlOutput(`<pre style="white-space:pre-wrap;word-break:break-word;">${escapeHtml_(json)}</pre>`)
+      .setWidth(900)
+      .setHeight(700);
+    ui.showModalDialog(html, '現在のプロパティ一覧（マスク）');
+  } catch (e) {
+    Logger.log(json);
+  }
+}
+
+/** Script/Document/User のプロパティを取得してマスクしたものを返す */
+function getAllPropertiesMasked_() {
+  const script = PropertiesService.getScriptProperties().getProperties();
+
+  let doc = {};
+  try { doc = PropertiesService.getDocumentProperties().getProperties(); } catch (e) {}
+
+  let user = {};
+  try { user = PropertiesService.getUserProperties().getProperties(); } catch (e) {}
+
+  return {
+    script: maskProps_(script),
+    document: maskProps_(doc),
+    user: maskProps_(user),
+  };
+}
+
+/** 文字列をHTMLエスケープ */
+function escapeHtml_(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+/** それっぽい機密キーは値をマスクする */
+function maskProps_(props) {
+  const out = {};
+  const secretKeyRe = /(TOKEN|KEY|SECRET|PASS|PASSWORD|WEBHOOK)/i;
+
+  Object.keys(props || {}).sort().forEach(k => {
+    const v = props[k];
+    if (secretKeyRe.test(k)) {
+      out[k] = maskValue_(v);
+    } else {
+      out[k] = v;
+    }
+  });
+  return out;
+}
+
+function maskValue_(v) {
+  const s = String(v ?? '');
+  if (s.length <= 6) return '***';
+  return s.slice(0, 3) + '…' + s.slice(-2);
+}

@@ -205,15 +205,6 @@ function showNeedsCheckWorkflowSidebar() {
 }
 
 /**
- * 互換：旧名 updateNeedsReviewList() → 現行 refreshNeedsCheckView()
- */
-function updateNeedsReviewList() {
-  // ★要確認一覧を更新する前に、ステータス運用ガードを適用（入力制限/色付け）
-  if (typeof applyOrderStatusGuards === "function") applyOrderStatusGuards({ silent: true });
-  return refreshNeedsCheckView();
-}
-
-/**
  * メニューを再表示（Script Properties の変更を反映）
  */
 function reloadReservationMenu_() {
