@@ -15,8 +15,6 @@
  * - BACKUP_MONTHLY_FOLDER_NAME = MonthlySnapshots // 月次スナップショット保存フォルダ名（親直下に作成）
  * - BACKUP_AT_HOUR = 3                     // トリガー実行時刻（installDailyBackupTriggerで使用）
  *
- * ■互換（任意）
- * - BACKUP_RETENTION_DAYS = 30             // 旧キー（BACKUP_DAILY_RETENTION_DAYS が未設定のときに参照）
  */
 
 function backupSpreadsheetDaily() {
@@ -36,7 +34,7 @@ function backupSpreadsheetDaily() {
     // ▼運用方針：日次60日 + 月次12ヶ月
     const dailyRetentionDays = ScriptProps.getInt(
       ScriptProps.KEYS.BACKUP_DAILY_RETENTION_DAYS,
-      ScriptProps.getInt(ScriptProps.KEYS.BACKUP_RETENTION_DAYS, 60) // 互換
+      60
     );
     const monthlyRetentionMonths = ScriptProps.getInt(ScriptProps.KEYS.BACKUP_MONTHLY_RETENTION_MONTHS, 12);
 

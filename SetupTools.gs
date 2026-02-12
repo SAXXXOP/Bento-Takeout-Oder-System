@@ -74,7 +74,7 @@ function initProductionClean_(deleteFormResponses) {
     const cleared = [];
 
     // データ行だけ削除（1行目はヘッダ想定）
-    [SH.ORDER_LIST, SH.CUSTOMER_LIST, SH.NEEDS_CHECK_VIEW, SH.LOG, SH.NAME_CONFLICT_LOG].forEach(name => {
+    [SH.ORDER_LIST, SH.CUSTOMER_LIST, SH.NEEDS_CHECK_VIEW, "ログ", SH.NAME_CONFLICT_LOG].forEach(name => {
       const sh = ss.getSheetByName(name);
       if (!sh) return;
       const n = st_clearBelowHeader_(sh, 1);

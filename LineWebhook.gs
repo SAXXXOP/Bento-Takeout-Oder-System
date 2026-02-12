@@ -709,10 +709,8 @@ function getChangeableReservations(userId, options) {
       CONFIG.STATUS.INVALID,
       CONFIG.STATUS.NEEDS_CHECK,
 
-      // 旧データ互換も除外するなら
-      CONFIG.STATUS.LEGACY_CHANGE_BEFORE,
-      CONFIG.STATUS.LEGACY_CHANGED,
-      "変更前", "変更済", "キャンセル"
+    // 旧データ（過去の運用値）はここで除外（Configには持たせない）
+    "変更前", "変更済", "キャンセル"
     ];
 
     if (NG.includes(status)) continue;

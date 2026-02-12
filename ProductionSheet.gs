@@ -119,16 +119,15 @@ function createProductionSheet(targetDateOrInput) {
     const orderNo = String(row[CONFIG.COLUMN.ORDER_NO - 1] || "").replace("'", "");
     const name = String(row[CONFIG.COLUMN.NAME - 1] || "");
 
-    // 注文一覧F列（リクエスト）を拾う：CONFIGに無ければ 6(F列) を使用
-    const REQUEST_COL = (CONFIG.COLUMN && CONFIG.COLUMN.REQUEST) ? CONFIG.COLUMN.REQUEST : 6;
-    const request = String(row[REQUEST_COL - 1] || "").replace(/\r?\n/g, " ").trim();
+    // 注文一覧F列（NOTE）を拾う（Config定義に統一）
+    const note = String(row[CONFIG.COLUMN.NOTE - 1] || "").replace(/\r?\n/g, " ").trim();
 
     // 顧客名簿の調理注意
     const cookNote = customerMap[lineId] ? String(customerMap[lineId]).replace(/\r?\n/g, " ").trim() : "";
 
     const parts = [];
     if (cookNote) parts.push(`⚠ ${cookNote} ⚠`);
-    if (request) parts.push(`◆${request}`);
+    if (note) parts.push(`◆${note}`);
     
 
     if (parts.length > 0) {

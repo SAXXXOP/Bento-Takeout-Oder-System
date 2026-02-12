@@ -16,14 +16,71 @@ const CONFIG = {
 
   // 2. スプレッドシート名
   SHEET: {
+  FORM_RESPONSES: "フォームの回答 1",
   ORDER_LIST: "注文一覧",
   CUSTOMER_LIST: "顧客名簿",
   MENU_MASTER: "メニューマスタ",
   DAILY_SUMMARY: "当日まとめ",
   RESERVATION_CARD: "予約札",
   NEEDS_CHECK_VIEW: "★要確認一覧",
+  HOLIDAYS: "休業日設定",
+  LOG: "ログ",
   NAME_CONFLICT_LOG: "氏名不一致ログ"
-},
+  },
+
+  // 2.1 シートID（SchemaExportの結果を転記）
+  // ※テンプレを「ファイルのコピー」等で複製すると sheetId は変わる可能性があります
+  //    その場合でも getSheet() は name フォールバックで動きます（ただし再同期推奨）
+  SHEET_ID: {
+    FORM_RESPONSES: 362515472,
+    ORDER_LIST: 1296644400,
+    RESERVATION_CARD: 359066877,
+    DAILY_SUMMARY: 1041436078,
+    NEEDS_CHECK_VIEW: 895113105,
+    MENU_MASTER: 383783652,
+    CUSTOMER_LIST: 72852425,
+    HOLIDAYS: 878661641,
+    LOG: 1319133233,
+    NAME_CONFLICT_LOG: 1185105983
+  },
+
+  /**
+   * keyでシート取得（sheetId優先→nameフォールバック）
+   * 例: CONFIG.getSheet("ORDER_LIST")
+   */
+  getSheet(key, ss) {
+    ss = ss || SpreadsheetApp.getActiveSpreadsheet();
+    const name = this.SHEET && this.SHEET[key];
+    if (!name) throw new Error(`Unknown sheet key: ${key}`);
+
+    const id = this.SHEET_ID && this.SHEET_ID[key];
+    let sheet = null;
+    if (id) sheet = ss.getSheets().find(s => s.getSheetId() === id) || null;
+    if (!sheet) sheet = ss.getSheetByName(name) || null;
+    if (!sheet) throw new Error(`Sheet not found: ${key} (${name})`);
+    return sheet;
+  },
+
+  /** 必須タブが揃ってるかチェック（処理の先頭で呼ぶ用） */
+  assertSheets(ss) {
+    ss = ss || SpreadsheetApp.getActiveSpreadsheet();
+    const requiredKeys = [
+      "ORDER_LIST",
+      "CUSTOMER_LIST",
+      "MENU_MASTER",
+      "DAILY_SUMMARY",
+      "RESERVATION_CARD",
+      "NEEDS_CHECK_VIEW",
+      "HOLIDAYS",
+      "LOG",
+      "NAME_CONFLICT_LOG"
+    ];
+    const missing = [];
+    requiredKeys.forEach(k => {
+      try { this.getSheet(k, ss); } catch (e) { missing.push(`${k}=${this.SHEET[k]}`); }
+    });
+    if (missing.length) throw new Error(`必須タブが見つかりません: ${missing.join(", ")}`);
+  },
 
 
   // 2.5 Script Properties（キー名一覧：値は Script Properties 側に保存）
@@ -45,9 +102,6 @@ const CONFIG = {
     BACKUP_MONTHLY_FOLDER_NAME: "BACKUP_MONTHLY_FOLDER_NAME",
     BACKUP_MONTHLY_RETENTION_MONTHS: "BACKUP_MONTHLY_RETENTION_MONTHS",
     BACKUP_USE_MONTHLY_FOLDER: "BACKUP_USE_MONTHLY_FOLDER",
-
-    // Backup（互換/任意）
-    BACKUP_RETENTION_DAYS: "BACKUP_RETENTION_DAYS",
     BACKUP_MANUAL_FOLDER_NAME: "BACKUP_MANUAL_FOLDER_NAME",
 
     // Daily prep（運用：予約札 + 当日まとめ 自動作成）
@@ -109,21 +163,15 @@ const CONFIG = {
     HISTORY_3: 12      // L
   },
 
-// 5. ステータス文言（B案運用）
-STATUS: {
-  // === 運用（これだけ見ればOK）===
-  ACTIVE: "",              // 有効（作る・集計する）
-  INVALID: "無効",         // 無効（作らない・除外）
-  NEEDS_CHECK: "★要確認" // 要確認（止めて確認）
-},
-  /** === 旧データ互換 ===
-  LEGACY_NORMAL: "通常",
-  LEGACY_CHANGE_BEFORE: "変更前",
-  LEGACY_CHANGE_AFTER: "変更後",
-  LEGACY_CHANGED: "変更済",
-  LEGACY_CANCEL: "キャンセル"
- */
+  // 5. ステータス文言（B案運用）
+  STATUS: {
+    // === 運用（これだけ見ればOK）===
+    ACTIVE: "",              // 有効（作る・集計する）
+    INVALID: "無効",         // 無効（作らない・除外）
+    NEEDS_CHECK: "★要確認" // 要確認（止めて確認）
 
+  },
+  
   // 6. 「メニューマスタ」シートの列配置
   MENU_COLUMN: {
     ID: 1,           // A
