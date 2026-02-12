@@ -67,6 +67,21 @@ const ScriptProps = (() => {
     clearScriptPropsCache_();
   }
 
+  // ★追加：削除
+  function del(key) {
+    writableProps_().deleteProperty(String(key));
+    clearScriptPropsCache_();
+  }
+
+  // ★追加：まとめて削除
+  function delMany(keys) {
+    const props = writableProps_();
+    (keys || []).forEach((k) => {
+      try { props.deleteProperty(String(k)); } catch (e) {}
+    });
+    clearScriptPropsCache_();
+  }
+
   function getInt(key, defaultValue) {
     const n = parseInt(get(key, String(defaultValue)), 10);
     return Number.isFinite(n) ? n : defaultValue;
@@ -84,5 +99,5 @@ const ScriptProps = (() => {
     return { ok: missing.length === 0, missing };
   }
 
-  return { KEYS, get, getInt, getBool, validate, clearCache: clearScriptPropsCache_, set, setMany };
+  return { KEYS, get, getInt, getBool, validate, clearCache: clearScriptPropsCache_, set, setMany, del, delMany };
 })();

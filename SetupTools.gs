@@ -291,14 +291,10 @@ function getTemplatePropsDefaults_() {
     [CONFIG.PROPS.LOG_LEVEL]: "WARN",
     [CONFIG.PROPS.LOG_MAX_ROWS]: "2000",
     [CONFIG.PROPS.BACKUP_FOLDER_ID]: "__SET_ME__",
-    [CONFIG.PROPS.BACKUP_AT_HOUR]: "3",
-    [CONFIG.PROPS.BACKUP_DAILY_RETENTION_DAYS]: "60",
-    [CONFIG.PROPS.BACKUP_DAILY_FOLDER_KEEP_MONTHS]: "12",
-    [CONFIG.PROPS.BACKUP_USE_MONTHLY_FOLDER]: "1",
-    [CONFIG.PROPS.BACKUP_MONTHLY_RETENTION_MONTHS]: "12",
-    [CONFIG.PROPS.BACKUP_MONTHLY_FOLDER_NAME]: "MonthlySnapshots",
-    [CONFIG.PROPS.BACKUP_MANUAL_FOLDER_NAME]: "ManualSnapshots",
-    [CONFIG.PROPS.BACKUP_RETENTION_DAYS]: "60",
+    // バックアップの詳細設定は「任意」。
+    // 未設定でも BackupService のデフォルト（例: 日次60日+月次12ヶ月）で動くため
+    // テンプレでは作らず、Script Properties の増殖を防ぐ。
+
     // Daily prep（運用：予約札 + 当日まとめ 自動作成）
     [CONFIG.PROPS.DAILY_PREP_AT_HOUR]: "7",
     [CONFIG.PROPS.DAILY_PREP_AT_MINUTE]: "0",
@@ -348,6 +344,35 @@ function overwriteTemplateScriptProperties() {
   const defaults = getTemplatePropsDefaults_();
   ScriptProps.setMany(defaults);
   SpreadsheetApp.getUi().alert("OK：テンプレ用 Script Properties を上書きしました（全部ダミー）。");
+}
+
+/**
+ * バックアップ関連の「任意キー」を削除して、プロパティを最小化する。
+ * ※ BACKUP_FOLDER_ID（必須）は残す
+ */
+function cleanupBackupScriptProperties() {
+  const ui = SpreadsheetApp.getUi();
+  const keys = [
+    CONFIG.PROPS.BACKUP_AT_HOUR,
+    CONFIG.PROPS.BACKUP_DAILY_RETENTION_DAYS,
+    CONFIG.PROPS.BACKUP_DAILY_FOLDER_KEEP_MONTHS,
+    CONFIG.PROPS.BACKUP_USE_MONTHLY_FOLDER,
+    CONFIG.PROPS.BACKUP_MONTHLY_RETENTION_MONTHS,
+    CONFIG.PROPS.BACKUP_MONTHLY_FOLDER_NAME,
+    CONFIG.PROPS.BACKUP_MANUAL_FOLDER_NAME,
+    CONFIG.PROPS.BACKUP_RETENTION_DAYS, // 旧互換キー
+  ];
+
+  const all = PropertiesService.getScriptProperties().getProperties();
+  const existed = keys.filter(k => (k in all));
+
+  ScriptProps.delMany(existed);
+
+  ui.alert(
+    "OK：バックアップ関連の任意キーを削除しました。\n\n" +
+    "削除数: " + existed.length + "\n" +
+    "残る必須キー: " + CONFIG.PROPS.BACKUP_FOLDER_ID
+  );
 }
 
 // ===== 初期設定チェック（Script Properties） =====

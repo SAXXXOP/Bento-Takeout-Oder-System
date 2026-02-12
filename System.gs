@@ -167,6 +167,8 @@ function onOpen() {
             ui.createMenu('テンプレ配布（プロパティ）')
               .addItem('キー作成（未設定のみ）', 'ensureTemplateScriptProperties')
               .addItem('全てダミーで上書き', 'overwriteTemplateScriptProperties')
+              .addSeparator()
+              .addItem('バックアップ項目を整理（任意キー削除）', 'cleanupBackupScriptProperties')
           )
       );
   }
