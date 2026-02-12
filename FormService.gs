@@ -22,6 +22,8 @@ const FormService = {
 
     let pickupDateObj = null;
     let rawDate = "", rawTime = "";
+    const pickupDateKeyNorm = String(CONFIG.FORM.PICKUP_DATE || "").replace(/け/g, "");
+    const pickupTimeKeyNorm = String(CONFIG.FORM.PICKUP_TIME || "").replace(/け/g, "");
 
     // FormService.gs（新規追加：配列/文字列を安全に文字列化）
     function normalizeMultiAnswer_(answer) {
@@ -53,14 +55,15 @@ const FormService = {
       const item = r.getItem();
       if (!item) return;
       const title = item.getTitle() ? item.getTitle().trim() : "";
+      const titleNorm = title.replace(/け/g, "");
       const answer = r.getResponse();
 
       if (title.includes(CONFIG.FORM.NAME_SHORT)) formData.simpleName = answer || "";
       else if (title === CONFIG.FORM.NAME_FULL) formData.rawName = answer || "";
       else if (title.includes(CONFIG.FORM.PHONE)) formData.phoneNumber = answer ? "'" + answer : "";
       else if (title.includes(CONFIG.FORM.OLD_RESERVATION_NO)) formData.oldReservationNo = answer || ""; // ★追加
-      else if (title === CONFIG.FORM.PICKUP_DATE) rawDate = answer || "";
-      else if (title === CONFIG.FORM.PICKUP_TIME) rawTime = answer || "";
+      else if (pickupDateKeyNorm && titleNorm.includes(pickupDateKeyNorm)) rawDate = answer || "";
+      else if (pickupTimeKeyNorm && titleNorm.includes(pickupTimeKeyNorm)) rawTime = answer || "";
       else if (title.includes(CONFIG.FORM.LINE_ID)) formData.userId = answer || "";
       else if (title.includes(CONFIG.FORM.NOTE)) { formData.note = normalizeMultiAnswer_(answer);}
       else this.parseOrder(title, answer, formData);
@@ -83,8 +86,7 @@ const FormService = {
     formData.pickupDateRaw = pickupDateObj;
 
     // 表示用（既存仕様）
-    formData.pickupDate =
-      (rawDate || rawTime) ? `${rawDate} / ${rawTime}` : "";
+    formData.pickupDate = [rawDate, rawTime].filter(Boolean).join(" / ");
 
     // ユーザー名確定
     formData.userName = formData.simpleName || formData.rawName || "";

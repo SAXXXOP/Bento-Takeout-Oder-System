@@ -1,7 +1,8 @@
 const MenuRepository = {
   getMenu() {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const sheet = ss.getSheetByName("メニューマスタ");
+    const sheet = ss.getSheetByName(CONFIG.SHEET.MENU_MASTER);
+    if (!sheet) throw new Error("メニューマスタが見つかりません: " + CONFIG.SHEET.MENU_MASTER);
     // getLastRow()を使用して、実際にデータがある最後の行まで確実に取得する
     const lastRow = sheet.getLastRow();
     if (lastRow < 2) return [];
