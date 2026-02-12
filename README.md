@@ -76,10 +76,10 @@ Googleフォームの予約送信を起点に、スプレッドシートへ **�
 
 #### 任意（推奨/運用で）
 - バックアップの保持期間や月次設定など（未設定時のデフォルトあり）:contentReference[oaicite:16]{index=16}
-- デバッグ：`DEBUG_MAIN`, `DEBUG_ORDER_SAVE` など:contentReference[oaicite:17]{index=17}
-- メニュー表示制御：管理者/閲覧者（`ADMIN_EMAILS` で管理者を追加）:contentReference[oaicite:18]{index=18}
+- デバッグ：`DEBUG_MAIN` など（旧キー `DEBUG_ORDER_SAVE` は互換）:contentReference[oaicite:17]{index=17}
+- 締切後送信メール通知：`LATE_SUBMISSION_NOTIFY_TO`（宛先を入れたら有効）:contentReference[oaicite:18]{index=18}
 
-> テンプレ配布/初期化向けに Script Properties を一括で用意する関数もあります（`ensureTemplateScriptProperties`, `overwriteTemplateScriptProperties`）。
+> テンプレ配布/初期化向けに Script Properties を一括で用意する関数もあります（`ensureTemplateScriptProperties`, `overwriteTemplateScriptProperties` など）。また、増えすぎた任意キーを削除して最小化する `cleanupAllOptionalScriptProperties` などの関数もあります。（`ensureTemplateScriptProperties`, `overwriteTemplateScriptProperties`）。
 
 ---
 
