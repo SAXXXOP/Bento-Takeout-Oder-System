@@ -41,7 +41,7 @@
 ### 4) Script Properties を設定（必要な分だけ）
 - LINE連携を使う：`LINE_TOKEN`, `WEBHOOK_KEY`
 - バックアップを使う：`BACKUP_FOLDER_ID`
-- ログを整える：`LOG_LEVEL`, `LOG_MAX`
+- ログを整える：`LOG_LEVEL`, `LOG_MAX_ROWS`
 
 詳しくは：`setup/properties.md`
 
