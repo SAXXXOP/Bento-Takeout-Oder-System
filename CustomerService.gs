@@ -307,42 +307,6 @@ function appendNameConflictLogV2_(ss, payload) {
 // （旧実装削除）getOrCreateNameConflictLogSheet_(ss) / appendNameConflictLog_(ss, payload) / normalizeCustomerName_(name)
 // は AdminTools 側の getOrCreateNameConflictLogSheet_() と衝突して undefined エラーの原因になるため削除
 
-
-function getPickupDateForHistory_(formData, fallbackNow) {
-  const now = fallbackNow || new Date();
-
-  // ① 最優先：FormService.parse が入れる Date（pickupDateRaw）
-  const d0 = formData && formData.pickupDateRaw;
-  if (d0 instanceof Date && !isNaN(d0.getTime())) {
-    const d = new Date(d0);
-    d.setHours(0, 0, 0, 0);
-    return d;
-  }
-
-  // ② 保険：表示文字列 "M/D / ..." から月日だけ拾う
-  const s = formData && formData.pickupDate ? String(formData.pickupDate) : "";
-  const m = s.match(/(\d{1,2})\s*\/\s*(\d{1,2})/);
-  if (m) {
-    const month = Number(m[1]);
-    const day = Number(m[2]);
-
-    // 年跨ぎ（12月に1月を選ぶケース）だけ補正
-    let year = now.getFullYear();
-    if (now.getMonth() === 11 && month === 1) year++;
-
-    const d = new Date(year, month - 1, day);
-    d.setHours(0, 0, 0, 0);
-    if (!isNaN(d.getTime())) return d;
-  }
-
-  // ③ どうしても取れないときは送信日
-  const d = new Date(now);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-
-
 function buildCustomerHistoryEntry_(formData, now) {
   const tz = Session.getScriptTimeZone();
   const pickupDate = getPickupDateForHistory_(formData, now);
