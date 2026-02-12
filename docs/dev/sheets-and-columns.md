@@ -11,7 +11,7 @@
 - 予約札
 - 顧客名簿
 - メニューマスタ
-- 要確認一覧
+- ★要確認一覧
 - ログ
 - 設定
 
@@ -26,8 +26,9 @@
 - ORDER_NO（予約No）
 - NAME（氏名）
 - TEL（電話）
-- PICKUP_DATE / PICKUP_TIME（受け取り）
-- ORDER_DETAILS（注文明細・内部キー）
+- PICKUP_DATE（受け取り：表示用 "M/D... / 時刻"）
+- PICKUP_DATE_RAW（受け取り日：内部Date）
+- DETAILS（注文明細）
 - STATUS（空/無効/★要確認）
 - REASON（要確認理由など）
 - NOTE（備考）
