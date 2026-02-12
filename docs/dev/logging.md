@@ -18,7 +18,7 @@
 
 推奨プロパティ：
 - `LOG_LEVEL`
-- `LOG_MAX`
+- `LOG_MAX_ROWS`
 
 ---
 
