@@ -1,4 +1,7 @@
-// SchemaExport.gs（Apps Script / JSですが、指定に合わせてjavaフェンスで記載）
+/** 
+ *  SchemaExport.gs（Apps Script / JSですが、指定に合わせてjavaフェンスで記載）
+ *  新店舗での運用の際は、初手シートIDも確認しCONFIGに反映
+*/
 function exportSheetSchemaJson() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
 
