@@ -20,7 +20,7 @@
   "WEBHOOK_KEY": "yyyy",
   "BACKUP_FOLDER_ID": "zzzz",
   "LOG_LEVEL": "INFO",
-  "LOG_MAX": "5000"
+  "LOG_MAX_ROWS": "5000"
 }
 ```
 
