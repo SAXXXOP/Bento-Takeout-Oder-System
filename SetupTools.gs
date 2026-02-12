@@ -284,42 +284,27 @@ function deleteDailyPrepTrigger() {
  * テンプレ配布用：Script Properties の「キーを作り直す」「値をダミー化する」
  */
 
+// UI が使えない文脈（トリガー/エディタ等）でも落ちないためのヘルパ
+function st_getUi_() {
+  try { return SpreadsheetApp.getUi(); } catch (e) { return null; }
+}
+function st_alertOrLog_(message) {
+  const ui = st_getUi_();
+  if (ui) ui.alert(String(message));
+  else console.log(String(message));
+}
+
 function getTemplatePropsDefaults_() {
+  // テンプレ/配布用：まずは「必須最小限」だけ作る方針
+  // （必要な機能を有効化したいときに、該当キーだけ追加で設定する）
   const defaults = {
+    // LINE連携を使う場合に必要
     [CONFIG.PROPS.LINE_TOKEN]: "__SET_ME__",
     [CONFIG.PROPS.WEBHOOK_KEY]: "__SET_ME__",
-    [CONFIG.PROPS.LOG_LEVEL]: "WARN",
-    [CONFIG.PROPS.LOG_MAX_ROWS]: "2000",
+
+    // バックアップを使う場合に必要（使わない運用なら未設定でもOK）
     [CONFIG.PROPS.BACKUP_FOLDER_ID]: "__SET_ME__",
-    // バックアップの詳細設定は「任意」。
-    // 未設定でも BackupService のデフォルト（例: 日次60日+月次12ヶ月）で動くため
-    // テンプレでは作らず、Script Properties の増殖を防ぐ。
-
-    // Daily prep（運用：予約札 + 当日まとめ 自動作成）
-    [CONFIG.PROPS.DAILY_PREP_AT_HOUR]: "7",
-    [CONFIG.PROPS.DAILY_PREP_AT_MINUTE]: "0",
-    [CONFIG.PROPS.DAILY_PREP_OFFSET_DAYS]: "0",
-    // 曜日指定：空=毎日、0=日…6=土（例：月-金 → "1-5" / "月-金" / "Mon-Fri" でもOK）
-    [CONFIG.PROPS.DAILY_PREP_WEEKDAYS]: "0,1,2,3,4,5,6",
-
-    // 締切後送信メール（任意）
-    // 例）有効化: LATE_SUBMISSION_NOTIFY_ENABLED=1 / 宛先: LATE_SUBMISSION_NOTIFY_TO=aaa@example.com,bbb@example.com
-    [CONFIG.PROPS.LATE_SUBMISSION_NOTIFY_ENABLED]: "0",
-    [CONFIG.PROPS.LATE_SUBMISSION_NOTIFY_TO]: "__SET_ME__",
-    [CONFIG.PROPS.DEBUG_MAIN]: "0",
-    // Menu visibility（任意）
-    // 管理者追加（カンマ区切り）。未設定なら「オーナーのみ管理者」
-    [CONFIG.PROPS.ADMIN_EMAILS]: "__SET_ME__",
-
-    // 互換：ユーザーのメールが取得できない環境向け（全員に適用されるフォールバック）
-
-    // Menu visibility（任意）
-    // 1=管理者メニュー表示 / 0=日々の運用のみ
-    [CONFIG.PROPS.MENU_SHOW_ADVANCED]: "0",
   };
-
-  // 互換：LOG_MAX が残ってる環境向け
-  defaults["LOG_MAX"] = defaults[CONFIG.PROPS.LOG_MAX_ROWS];
   return defaults;
 }
 
@@ -335,7 +320,7 @@ function ensureTemplateScriptProperties() {
 
   if (Object.keys(toSet).length > 0) ScriptProps.setMany(toSet);
 
-  SpreadsheetApp.getUi().alert(
+  st_alertOrLog_(
     "OK：テンプレ用 Script Properties を作成しました（未設定のみ）。\n\n作成/更新数: " + Object.keys(toSet).length
   );
 }
@@ -343,7 +328,7 @@ function ensureTemplateScriptProperties() {
 function overwriteTemplateScriptProperties() {
   const defaults = getTemplatePropsDefaults_();
   ScriptProps.setMany(defaults);
-  SpreadsheetApp.getUi().alert("OK：テンプレ用 Script Properties を上書きしました（全部ダミー）。");
+  st_alertOrLog_("OK：テンプレ用 Script Properties を上書きしました（全部ダミー）。");
 }
 
 /**
@@ -351,7 +336,7 @@ function overwriteTemplateScriptProperties() {
  * ※ BACKUP_FOLDER_ID（必須）は残す
  */
 function cleanupBackupScriptProperties() {
-  const ui = SpreadsheetApp.getUi();
+  const ui = st_getUi_();
   const keys = [
     CONFIG.PROPS.BACKUP_AT_HOUR,
     CONFIG.PROPS.BACKUP_DAILY_RETENTION_DAYS,
@@ -368,22 +353,145 @@ function cleanupBackupScriptProperties() {
 
   ScriptProps.delMany(existed);
 
-  ui.alert(
+  const msg =
     "OK：バックアップ関連の任意キーを削除しました。\n\n" +
     "削除数: " + existed.length + "\n" +
-    "残る必須キー: " + CONFIG.PROPS.BACKUP_FOLDER_ID
-  );
+    "残る必須キー: " + CONFIG.PROPS.BACKUP_FOLDER_ID;
+  if (ui) ui.alert(msg); else console.log(msg);
+}
+
+/**
+ * ログ関連の「任意キー」を削除して、プロパティを最小化する。
+ * ※ 未設定でも logToSheet は既定（WARN/2000行）で動きます
+ */
+function cleanupLogScriptProperties() {
+  const ui = st_getUi_();
+  const keys = [
+    CONFIG.PROPS.LOG_LEVEL,
+    CONFIG.PROPS.LOG_MAX_ROWS,
+    "LOG_MAX", // 旧互換キー
+  ];
+  const all = PropertiesService.getScriptProperties().getProperties();
+  const existed = keys.filter(k => (k in all));
+  ScriptProps.delMany(existed);
+  const msg = "OK：ログ関連の任意キーを削除しました。\n\n削除数: " + existed.length;
+  if (ui) ui.alert(msg); else console.log(msg);
+}
+
+/**
+ * 日次準備（予約札/当日まとめ）の設定キーを削除して、プロパティを最小化する。
+ * ※ 未設定でも DailyPrep は既定（7:00/offset0/全曜日）で動きます
+ */
+function cleanupDailyPrepScriptProperties() {
+  const ui = st_getUi_();
+  const keys = [
+    CONFIG.PROPS.DAILY_PREP_AT_HOUR,
+    CONFIG.PROPS.DAILY_PREP_AT_MINUTE,
+    CONFIG.PROPS.DAILY_PREP_OFFSET_DAYS,
+    CONFIG.PROPS.DAILY_PREP_WEEKDAYS,
+  ];
+  const all = PropertiesService.getScriptProperties().getProperties();
+  const existed = keys.filter(k => (k in all));
+  ScriptProps.delMany(existed);
+  const msg =
+    "OK：日次準備の設定キーを削除しました。\n\n" +
+    "削除数: " + existed.length + "\n" +
+    "（必要なら「日次準備設定」メニューで再設定できます）";
+  if (ui) ui.alert(msg); else console.log(msg);
+}
+
+/**
+ * 締切後送信メール通知の「任意キー」を削除して、プロパティを最小化する。
+ * ※ 通知は LATE_SUBMISSION_NOTIFY_TO が未設定なら無効です（ENABLED は旧互換）
+ */
+function cleanupLateSubmissionNotifyScriptProperties() {
+  const ui = st_getUi_();
+  const keys = [CONFIG.PROPS.LATE_SUBMISSION_NOTIFY_ENABLED]; // 旧互換キー
+  const all = PropertiesService.getScriptProperties().getProperties();
+  const existed = keys.filter(k => (k in all));
+  ScriptProps.delMany(existed);
+  const msg =
+    "OK：締切後送信メール通知（旧互換キー）を削除しました。\n\n" +
+    "削除数: " + existed.length + "\n" +
+    "通知の有効/無効は " + CONFIG.PROPS.LATE_SUBMISSION_NOTIFY_TO + " の有無で制御します。";
+  if (ui) ui.alert(msg); else console.log(msg);
+}
+
+/**
+ * Debug の「任意キー」を削除して、プロパティを最小化する。
+ */
+function cleanupDebugScriptProperties() {
+  const ui = st_getUi_();
+  const keys = [
+    CONFIG.PROPS.DEBUG_MAIN,
+    CONFIG.PROPS.DEBUG_ORDER_SAVE, // 旧互換キー
+  ];
+  const all = PropertiesService.getScriptProperties().getProperties();
+  const existed = keys.filter(k => (k in all));
+  ScriptProps.delMany(existed);
+  ui.alert("OK：Debug 関連の任意キーを削除しました。\n\n削除数: " + existed.length);
+}
+
+/**
+ * メニュー表示制御の「任意キー」を削除して、プロパティを最小化する。
+ * ※ ADMIN_EMAILS は未設定でも「オーナーのみ管理者」扱いで動きます
+ */
+function cleanupMenuVisibilityScriptProperties() {
+  const ui = SpreadsheetApp.getUi();
+  const keys = [
+    CONFIG.PROPS.ADMIN_EMAILS,
+    CONFIG.PROPS.MENU_SHOW_ADVANCED, // 旧互換キー
+  ];
+  const all = PropertiesService.getScriptProperties().getProperties();
+  const existed = keys.filter(k => (k in all));
+  ScriptProps.delMany(existed);
+  const msg = "OK：メニュー表示制御の任意キーを削除しました。\n\n削除数: " + existed.length;
+  if (ui) ui.alert(msg); else console.log(msg);
+}
+
+/**
+ * まとめて最小化（バックアップ含む任意キーを一括削除）
+ */
+function cleanupAllOptionalScriptProperties() {
+  const ui = st_getUi_();
+  const groups = [
+    // backup optional
+    [CONFIG.PROPS.BACKUP_AT_HOUR, CONFIG.PROPS.BACKUP_DAILY_RETENTION_DAYS, CONFIG.PROPS.BACKUP_DAILY_FOLDER_KEEP_MONTHS,
+     CONFIG.PROPS.BACKUP_USE_MONTHLY_FOLDER, CONFIG.PROPS.BACKUP_MONTHLY_RETENTION_MONTHS, CONFIG.PROPS.BACKUP_MONTHLY_FOLDER_NAME,
+     CONFIG.PROPS.BACKUP_MANUAL_FOLDER_NAME, CONFIG.PROPS.BACKUP_RETENTION_DAYS],
+    // log
+    [CONFIG.PROPS.LOG_LEVEL, CONFIG.PROPS.LOG_MAX_ROWS, "LOG_MAX"],
+    // daily prep
+    [CONFIG.PROPS.DAILY_PREP_AT_HOUR, CONFIG.PROPS.DAILY_PREP_AT_MINUTE, CONFIG.PROPS.DAILY_PREP_OFFSET_DAYS, CONFIG.PROPS.DAILY_PREP_WEEKDAYS],
+    // late notify (legacy)
+    [CONFIG.PROPS.LATE_SUBMISSION_NOTIFY_ENABLED],
+    // debug (旧互換含む)
+    [CONFIG.PROPS.DEBUG_MAIN, CONFIG.PROPS.DEBUG_ORDER_SAVE],
+    // menu visibility (旧互換含む)
+    [CONFIG.PROPS.ADMIN_EMAILS, CONFIG.PROPS.MENU_SHOW_ADVANCED],
+  ];
+  const all = PropertiesService.getScriptProperties().getProperties();
+  const toDelete = [];
+  groups.forEach(keys => keys.forEach(k => { if (k in all) toDelete.push(k); }));
+  ScriptProps.delMany(toDelete);
+  const msg =
+    "OK：任意キーをまとめて削除しました。\n\n" +
+    "削除数: " + toDelete.length + "\n" +
+    "残る必須キー（例）: " + [CONFIG.PROPS.LINE_TOKEN, CONFIG.PROPS.WEBHOOK_KEY, CONFIG.PROPS.BACKUP_FOLDER_ID].join(", ");
+  if (ui) ui.alert(msg); else console.log(msg);
 }
 
 // ===== 初期設定チェック（Script Properties） =====
 
 function checkScriptProperties() {
-  const ui = SpreadsheetApp.getUi();
+  const ui = st_getUi_();
   const r = ScriptProps.validate();
   if (r.ok) {
-    ui.alert("OK：必須の Script Properties は設定済みです。");
+    const msg = "OK：必須の Script Properties は設定済みです。";
+    if (ui) ui.alert(msg); else console.log(msg);
   } else {
-    ui.alert("NG：未設定の Script Properties があります。\n\n- " + r.missing.join("\n- "));
+    const msg = "NG：未設定の Script Properties があります。\n\n- " + r.missing.join("\n- ");
+    if (ui) ui.alert(msg); else console.log(msg);
   }
 }
 

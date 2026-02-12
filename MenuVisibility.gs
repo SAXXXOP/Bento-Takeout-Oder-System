@@ -100,9 +100,13 @@ const MenuVisibility = (() => {
       if (ownerEmail && me === ownerEmail.toLowerCase()) isAdmin = true;
       if (adminEmails.includes(me)) isAdmin = true;
     } else {
-      // メールが取れない環境向けのフォールバック（互換）
-      mode = "fallback:MENU_SHOW_ADVANCED";
-      isAdmin = getBool_(key_("MENU_SHOW_ADVANCED"), true);
+      // メールが取れない環境では「誰が管理者か」を判定できない。
+      // そのため、必要なら ADMIN_EMAILS に "*" / "ALL" を入れて全員に管理者メニューを出す。
+      // 互換：旧キー MENU_SHOW_ADVANCED=1 でも全員に管理者メニューを出せる（既定は false に寄せる）
+      mode = "fallback:no-email";
+      const allowAllByAdminEmails = adminEmails.includes("*") || adminEmails.includes("all");
+      const legacyAllowAll = getBool_(key_("MENU_SHOW_ADVANCED"), false);
+      isAdmin = allowAllByAdminEmails || legacyAllowAll;
     }
 
     return {

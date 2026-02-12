@@ -22,7 +22,9 @@ function normalizeChangeMeta_(metaOrBool, oldNo) {
 }
 
 function isDebugOrderSave_() {
-  return ScriptProps.getBool(ScriptProps.KEYS.DEBUG_ORDER_SAVE, false);
+  // DEBUG_MAIN をマスタに寄せる（旧キー DEBUG_ORDER_SAVE も互換で読む）
+  return ScriptProps.getBool(ScriptProps.KEYS.DEBUG_MAIN, false)
+    || ScriptProps.getBool(ScriptProps.KEYS.DEBUG_ORDER_SAVE, false);
 }
 
 function assertColumns_(colObj, keys) {

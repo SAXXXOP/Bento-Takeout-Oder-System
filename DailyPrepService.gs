@@ -180,9 +180,6 @@ function dp_notifyLateSubmissionsEmail_(targetDate, runId, opts) {
   const sendEvenIfZero = !!opts.sendEvenIfZero;
   const subjectPrefix = String(opts.subjectPrefix || "");
 
-  const enabled = ScriptProps.getBool(ScriptProps.KEYS.LATE_SUBMISSION_NOTIFY_ENABLED, false);
-  if (!enabled && !force) return;
-
   const toRaw = String((opts.overrideTo != null ? opts.overrideTo : ScriptProps.get(ScriptProps.KEYS.LATE_SUBMISSION_NOTIFY_TO, "")) || "").trim();
   if (!toRaw) return;
 

@@ -165,7 +165,14 @@ function onOpen() {
               .addItem('キー作成（未設定のみ）', 'ensureTemplateScriptProperties')
               .addItem('全てダミーで上書き', 'overwriteTemplateScriptProperties')
               .addSeparator()
+              .addItem('任意キーをまとめて整理（最小化）', 'cleanupAllOptionalScriptProperties')
+              .addSeparator()
               .addItem('バックアップ項目を整理（任意キー削除）', 'cleanupBackupScriptProperties')
+              .addItem('ログ項目を整理（任意キー削除）', 'cleanupLogScriptProperties')
+              .addItem('日次準備項目を整理（任意キー削除）', 'cleanupDailyPrepScriptProperties')
+              .addItem('締切後通知の旧キーを整理', 'cleanupLateSubmissionNotifyScriptProperties')
+              .addItem('Debug項目を整理（任意キー削除）', 'cleanupDebugScriptProperties')
+              .addItem('メニュー表示制御を整理（任意キー削除）', 'cleanupMenuVisibilityScriptProperties')
           )
       );
   }
