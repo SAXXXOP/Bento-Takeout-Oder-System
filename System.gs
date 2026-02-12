@@ -36,9 +36,6 @@ function onOpen() {
   try {
     if (typeof SheetVisibility_applyByRole_ === "function") {
       SheetVisibility_applyByRole_(isAdmin);
-    } else if (typeof SheetVisibility_applyFromProps === "function") {
-      // 念のためフォールバック
-      SheetVisibility_applyFromProps();
     }
   } catch (e) {
     // 失敗を握りつぶさずログに残す（原因確定用）
