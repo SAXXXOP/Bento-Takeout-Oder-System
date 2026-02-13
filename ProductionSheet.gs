@@ -105,7 +105,7 @@ function createProductionSheet(targetDateOrInput) {
   if (!isTarget) return;
 
     const orderNo = String(row[CONFIG.COLUMN.ORDER_NO - 1] || "").replace("'", "");
-    const name = String(row[CONFIG.COLUMN.NAME - 1] || "");
+    const tel = String(row[CONFIG.COLUMN.TEL - 1] || "").replace(/'/g, "");
 
     // 注文一覧F列（NOTE）を拾う（Config定義に統一）
     const note = String(row[CONFIG.COLUMN.NOTE - 1] || "").replace(/\r?\n/g, " ").trim();
@@ -115,8 +115,8 @@ function createProductionSheet(targetDateOrInput) {
     
 
     if (parts.length > 0) {
-      const nameLabel = name ? `${name}様` : "（名前なし）";
-      memos.push(`No.${orderNo}   ${nameLabel} ${parts.join(" ")}`);
+      const label = tel ? `TEL:${tel.replace(/[^0-9]/g, "").slice(-4)}` : "TELなし";
+      memos.push(`No.${orderNo}   ${label} ${parts.join(" ")}`);
     }
 
 

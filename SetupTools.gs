@@ -67,13 +67,12 @@ function initProductionClean_(deleteFormResponses) {
       NEEDS_CHECK_VIEW: "★要確認一覧",
       LOG: "ログ",
       SETTINGS: "設定",
-      NAME_CONFLICT_LOG: "氏名不一致ログ",
     };
 
     const cleared = [];
 
     // データ行だけ削除（1行目はヘッダ想定）
-    [SH.ORDER_LIST, SH.NEEDS_CHECK_VIEW, "ログ", SH.NAME_CONFLICT_LOG].forEach(name => {
+    [SH.ORDER_LIST, SH.NEEDS_CHECK_VIEW, SH.LOG].forEach(name => {
       const sh = ss.getSheetByName(name);
       if (!sh) return;
       const n = st_clearBelowHeader_(sh, 1);

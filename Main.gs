@@ -53,7 +53,15 @@ function onFormSubmit(e) {
     let isChange = changeRequested;
     let changeFailReason = "";
 
+    // ★電話番号を必須（最終防波堤）
+    const telIn = String(formData.phoneNumber || "").replace(/'/g, "").trim();
+    const telDigitsIn = telIn.replace(/[^0-9]/g, ""); // 比較用
+
     if (changeRequested) {
+      if (!telDigitsIn) {
+        isChange = false;
+        changeFailReason = "電話番号が未入力のため変更できません";
+      }
       const pickupDateOnly = getPickupDateOnlyByOrderNo(oldNo);
 
       if (!pickupDateOnly) {
@@ -65,6 +73,16 @@ function onFormSubmit(e) {
         changeFailReason = "変更期限（前日20時）を過ぎています";
         console.warn("change requested after deadline:", { oldNo: oldNo, pickupDate: String(pickupDateOnly) });
       }
+
+      // ★追加：元予約No と 電話番号が一致しているか（不一致なら変更成立させない）
+      if (isChange) {
+      const telOld = getTelByOrderNo_(oldNo); // 下に追加するヘルパ
+      const telDigitsOld = String(telOld || "").replace(/'/g, "").replace(/[^0-9]/g, "");
+      if (telDigitsOld && telDigitsOld !== telDigitsIn) {
+        isChange = false;
+        changeFailReason = "電話番号が一致しません（元予約Noの変更不可）";
+      }
+    }
     }
 
     formData.oldReservationNo = oldNo || "";
@@ -126,9 +144,11 @@ function onFormSubmit(e) {
     }
 
     // 電話番号が空（必須運用なら）
-    if (!formData.phoneNumber || !String(formData.phoneNumber).trim()) {
-      needsCheckReasons.push("電話番号が未入力です");
-    }
+    if (!telDigitsIn) {
+    // フォーム側で必須でも、最終防波堤として INVALID に落とす
+    needsCheckReasons.push("電話番号が未入力です（必須）");
+    formData._forceInvalid = true;
+  }
 
     // ★ここで meta を確定（この1個だけを後段に渡す）
     const changeMeta = {
@@ -139,7 +159,8 @@ function onFormSubmit(e) {
       // ★理由が空でも「★要確認」にできるフラグ
       needsCheck: !!formData._needsCheckFlag || needsCheckReasons.length > 0,
       needsCheckReason: needsCheckReasons.join(" / "),
-      lateSubmission: !!formData._lateSubmission
+      lateSubmission: !!formData._lateSubmission,
+      forceInvalid: !!formData._forceInvalid
     };
 
     // 5. 注文保存
@@ -237,6 +258,31 @@ function getPickupDateOnlyByOrderNo(orderNo) {
     console.warn("getPickupDateOnlyByOrderNo failed:", String(err));
     return null;
   }
+}
+
+// Main.gs（ヘルパ関数群に追加推奨）
+// 元予約Noに紐づく電話番号を取得（なければ空文字）
+function getTelByOrderNo_(orderNo) {
+  const target = String(orderNo || "").replace(/'/g, "").trim();
+  if (!target) return "";
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sh = ss.getSheetByName(CONFIG.SHEET.ORDER_LIST);
+  if (!sh) return "";
+
+  const lastRow = sh.getLastRow();
+  if (lastRow < 2) return "";
+
+  // ORDER_NO列を走査（後ろから探す：最新を拾いやすい）
+  const colNo = CONFIG.COLUMN.ORDER_NO;
+  const colTel = CONFIG.COLUMN.TEL;
+  const vals = sh.getRange(2, colNo, lastRow - 1, 1).getValues();
+
+  for (let i = vals.length - 1; i >= 0; i--) {
+    const no = String(vals[i][0] || "").replace(/^'/, "").replace(/'/g, "").trim();
+    if (no !== target) continue;
+    return sh.getRange(i + 2, colTel).getValue() || "";
+  }
+  return "";
 }
 
 // 直近の注文一覧から電話番号一致を数えて常連扱いにする（顧客名簿なし運用）

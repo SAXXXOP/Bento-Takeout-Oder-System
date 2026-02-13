@@ -65,7 +65,8 @@ const OrderService = {
     // 1) 旧予約は「変更が成立した時だけ」無効化
     if (meta.isChange && meta.oldNo) {
       try {
-        this.updateOldReservation(sheet, meta.oldNo, reservationNo);
+        const telIn = String(formData.phoneNumber || "").replace(/'/g, "").trim();
+        this.updateOldReservation(sheet, meta.oldNo, reservationNo, telIn);
       } catch (err) {
         console.warn("updateOldReservation failed:", String(err));
       }
@@ -89,7 +90,8 @@ const OrderService = {
     rowData[CONFIG.COLUMN.ORDER_NO - 1] = "'" + reservationNo;
     const tel0 = formData.phoneNumber ? String(formData.phoneNumber).replace(/'/g, "").trim() : "";
     rowData[CONFIG.COLUMN.TEL - 1] = tel0 ? ("'" + SECURITY_.sanitizeForSheet(tel0)) : "";
-    rowData[CONFIG.COLUMN.NAME - 1] = SECURITY_.sanitizeForSheet(formData.userName);
+    // 名前は一切収集しない
+    rowData[CONFIG.COLUMN.NAME - 1] = "";
     rowData[CONFIG.COLUMN.PICKUP_DATE - 1] = formData.pickupDate;
     rowData[CONFIG.COLUMN.PICKUP_DATE_RAW - 1] = formData.pickupDateRaw;
     rowData[CONFIG.COLUMN.NOTE - 1] = SECURITY_.sanitizeForSheet(String(formData.note || ""));
@@ -164,9 +166,10 @@ const OrderService = {
 
   },
 
-  updateOldReservation(sheet, oldNo, newNo) {
+  updateOldReservation(sheet, oldNo, newNo, telIn) {
     const targetNo = String(oldNo || "").replace(/'/g, "").trim();
     if (!targetNo) return;
+    const telDigitsIn = String(telIn || "").replace(/[^0-9]/g, "");
 
     const lastRow = sheet.getLastRow();
     if (lastRow < 2) return;
@@ -179,6 +182,18 @@ const OrderService = {
       if (currentNo !== targetNo) continue;
 
       const rowNum = i + 1;
+
+      // ★電話一致チェック（不一致なら無効化しない）
+      if (telDigitsIn) {
+        const telOld = String(sheet.getRange(rowNum, CONFIG.COLUMN.TEL).getValue() || "");
+        const telDigitsOld = telOld.replace(/'/g, "").replace(/[^0-9]/g, "");
+        if (telDigitsOld && telDigitsOld !== telDigitsIn) {
+          logToSheet("WARN", "updateOldReservation: tel mismatch (skip invalidation)", {
+            oldNo: targetNo, newNo, telOld: telDigitsOld, telIn: telDigitsIn
+          });
+          return;
+        }
+      }
 
       // ★旧予約：無効化
       sheet.getRange(rowNum, CONFIG.COLUMN.STATUS).setValue(CONFIG.STATUS.INVALID);

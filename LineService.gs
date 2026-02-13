@@ -100,8 +100,8 @@ const LineService = (() => {
 
     const pickupInfo = String(d.pickupDate || ""); // 例: "2/14(土) / 8:30~9:30"
     const tel = String(d.phoneNumber || "").replace(/^'/, ""); // シート用の先頭'を除去
-    const name = String(d.userName || "").trim();
-    const nameLine = name ? ("■お名前:" + name + " 様") : null;
+    const nameRaw = String(d.userName || "").trim();
+    const nameLine = nameRaw ? `■お名前:${nameRaw} 様` : "■お名前:（未記入）";
 
     return [
       "━━━━━━━━━━━━━",

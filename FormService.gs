@@ -10,7 +10,9 @@ const FormService = {
 
     const itemResponses = response.getItemResponses();
     const formData = {
-      userId: "", userName: "", rawName: "", simpleName: "",
+      userId: "",
+      // 名前は一切収集しない（互換のためキーだけ残すが常に空）
+      userName: "", rawName: "", simpleName: "",
       phoneNumber: "", pickupDate: "", note: "",
       oldReservationNo: "",
       orderDetails: "",              // 保存用（内部キー）
@@ -65,18 +67,29 @@ const FormService = {
       const item = r.getItem();
       if (!item) return;
       const title = item.getTitle() ? item.getTitle().trim() : "";
+      // ===== 名前は一切収集しない：設問が存在しても必ず無視 =====
+      if (title.includes("氏名") || title.includes("お名前") || title.includes("名前") || title.includes("フルネーム")) {
+        return;
+      }
       const titleNorm = title.replace(/け/g, "");
       const answer = r.getResponse();
 
-      if (keyNameShort && title.includes(keyNameShort)) formData.simpleName = answer || "";
-      else if (keyNameFull && title === keyNameFull) formData.rawName = answer || "";
-      else if (keyPhone && title.includes(keyPhone)) formData.phoneNumber = answer ? "'" + answer : "";
-      else if (keyOldNo && title.includes(keyOldNo)) formData.oldReservationNo = answer || ""; // ★追加
-      else if (pickupDateKeyNorm && titleNorm.includes(pickupDateKeyNorm)) rawDate = answer || "";
-      else if (pickupTimeKeyNorm && titleNorm.includes(pickupTimeKeyNorm)) rawTime = answer || "";
-      else if (keyLineId && title.includes(keyLineId)) formData.userId = answer || "";
-      else if (keyNote && title.includes(keyNote)) { formData.note = normalizeMultiAnswer_(answer); }
-      else this.parseOrder(title, answer, formData);
+      if (keyPhone && title.includes(keyPhone)) {
+        // 電話番号は文字列として保持（先頭0落ち防止の ' を付与）
+        formData.phoneNumber = answer ? ("'" + normalizeMultiAnswer_(answer)) : "";
+      } else if (keyOldNo && title.includes(keyOldNo)) {
+        formData.oldReservationNo = answer ? String(answer) : ""; // 予約Noは ' は付けない
+      } else if (pickupDateKeyNorm && titleNorm.includes(pickupDateKeyNorm)) {
+        rawDate = answer || "";
+      } else if (pickupTimeKeyNorm && titleNorm.includes(pickupTimeKeyNorm)) {
+        rawTime = answer || "";
+      } else if (keyLineId && title.includes(keyLineId)) {
+        formData.userId = answer || "";
+      } else if (keyNote && title.includes(keyNote)) {
+        formData.note = normalizeMultiAnswer_(answer);
+      } else {
+        this.parseOrder(title, answer, formData);
+      }
     });
 
     // --- Date生成 ---
@@ -98,8 +111,8 @@ const FormService = {
     // 表示用（既存仕様）
     formData.pickupDate = [rawDate, rawTime].filter(Boolean).join(" / ");
 
-    // ユーザー名確定
-    formData.userName = formData.simpleName || formData.rawName || "";
+    // 名前は一切収集しない
+    formData.userName = "";
 
     return formData;
   },

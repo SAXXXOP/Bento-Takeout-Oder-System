@@ -4,8 +4,9 @@
 const CONFIG = {
   // 1. Googleフォームの質問タイトル（フォームの文言と一致させる）
   FORM: {
-    NAME_FULL: "氏名",
-    NAME_SHORT: "氏名（簡易）",
+    // 名前は一切収集しない（フォームにあっても無視）
+    NAME_SHORT: "",
+    NAME_FULL:  "",
     PHONE: "電話番号",
     PICKUP_DATE: "受け取り希望日",//プルダウン、日付は営業日のみ(前日20時締切適用)GASで自動作成、
     PICKUP_TIME: "受取り希望時刻",
@@ -18,17 +19,12 @@ const CONFIG = {
   SHEET: {
   FORM_RESPONSES: "フォームの回答 1",
   ORDER_LIST: "注文一覧",
-  // CUSTOMER_LIST は廃止方針（顧客名簿を使わない運用）だが、
-  // 旧コード混在期間の互換のためキー自体は一旦残す
-  CUSTOMER_LIST: "顧客名簿",
   MENU_MASTER: "メニューマスタ",
   DAILY_SUMMARY: "当日まとめ",
   RESERVATION_CARD: "予約札",
   NEEDS_CHECK_VIEW: "★要確認一覧",
   HOLIDAYS: "休業日設定",
   LOG: "ログ",
-  // NAME_CONFLICT_LOG は顧客名簿廃止方針では原則不要（互換のためキーだけ残す）
-  NAME_CONFLICT_LOG: "氏名不一致ログ"
   },
 
   // 2.1 シートID（SchemaExportの結果を転記）
@@ -41,12 +37,8 @@ const CONFIG = {
     DAILY_SUMMARY: 1041436078,
     NEEDS_CHECK_VIEW: 895113105,
     MENU_MASTER: 383783652,
-    // CUSTOMER_LIST は廃止方針（互換のためキーだけ残す）
-    CUSTOMER_LIST: 72852425,
     HOLIDAYS: 878661641,
     LOG: 1319133233,
-    // NAME_CONFLICT_LOG は顧客名簿廃止方針では原則不要（互換のためキーだけ残す）
-    NAME_CONFLICT_LOG: 1185105983
   },
 
   /**

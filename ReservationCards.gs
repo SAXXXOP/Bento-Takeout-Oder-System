@@ -148,12 +148,11 @@ function drawDynamicCard(sheet, startRow, col, card) {
   const { rowData, items, height } = card;
   const orderNo = (rowData[CONFIG.COLUMN.ORDER_NO - 1] || "").toString().replace(/'/g, "");
   const isRegular = String(rowData[CONFIG.COLUMN.REGULAR_FLG - 1] || "") === "常連";
-  const rawName = String(rowData[CONFIG.COLUMN.NAME - 1] || "").trim();
-  const nameLabel = rawName ? `${rawName}様` : "（名前なし）";
-  const name = rawName
-    ? (isRegular ? "★ " : "") + rawName + " 様"
-    : (isRegular ? "★ " : "") + "（お名前なし）";
-  const tel = "TEL: " + (rowData[CONFIG.COLUMN.TEL - 1] || "なし").toString().replace(/'/g, "");
+  const telRaw = (rowData[CONFIG.COLUMN.TEL - 1] || "").toString().replace(/'/g, "");
+  const telDigits = telRaw.replace(/[^0-9]/g, "");
+  const tel4 = telDigits ? telDigits.slice(-4) : "";
+  const name = (isRegular ? "★ " : "") + (tel4 ? `TEL下4桁: ${tel4}` : "TEL未入力");
+  const tel = "TEL: " + (telRaw || "なし");
   const totalStr = "計:" + rowData[CONFIG.COLUMN.TOTAL_COUNT - 1] + "点 / " + Number(rowData[CONFIG.COLUMN.TOTAL_PRICE - 1]).toLocaleString() + "円";
 
   // ★受取日時（時刻列が無い場合もOK）

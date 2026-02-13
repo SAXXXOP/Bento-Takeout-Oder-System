@@ -599,20 +599,3 @@ function promptReasonFromTemplates_(type) {
    氏名不一致ログ：手動レビュー（廃止）
    ========================= */
 
-function openNameConflictLog() {
-  // 顧客名簿を廃止したため、この機能は停止
-  try {
-    SpreadsheetApp.getUi().alert("顧客名簿を廃止したため、「氏名不一致ログ」機能は停止しました。");
-  } catch (e) {
-    // トリガー等でUIが使えない場合でも落とさない
-  }
-  console.warn("openNameConflictLog: disabled (customer list removed)");
-}
-
-function resolveNextNameConflict() {
-  // 顧客名簿を廃止したため、この機能は停止
-  try {
-    SpreadsheetApp.getUi().alert("顧客名簿を廃止したため、「氏名不一致ログ」機能は停止しました。");
-  } catch (e) {}
-  console.warn("resolveNextNameConflict: disabled (customer list removed)");
-}
