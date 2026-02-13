@@ -342,7 +342,12 @@ sortedGroups.forEach(item => {
   const dashedParentRows = []; // ★破線を付ける親行を貯める
   const sortedParents = Object.keys(detailTree[g]).sort((a, b) => (itemOrder[a] || 999) - (itemOrder[b] || 999));
 
-  if (sortedParents.length === 1) {
+  // ★例外：スイーツ配下の「ガトー」だけは、親メニューも表示する
+  const soleParent = sortedParents[0];
+  const soleParentDisp = String(displayNameMap[soleParent] || soleParent).trim();
+  const isGatoException = (String(g).trim() === "スイーツ" && soleParentDisp === "ガトー");
+
+  if (sortedParents.length === 1 && !isGatoException) {
   const groupEndRow = tRow - 1;
   applyGroupOuterBorder_(sheet, groupStartRow, groupEndRow, tCol, tCol + 1);
   applyGroupOuterBorder_(sheet, groupStartRow, groupStartRow, tCol, tCol + 1);
@@ -370,7 +375,7 @@ sortedGroups.forEach(item => {
 
     // 親行を描画（既存のままでOK）
     sheet.getRange(tRow, tCol, 1, 2).setFontWeight("bold").setFontSize(12);
-    sheet.getRange(tRow, tCol).setValue(" " + (displayNameMap[p] || p)).setFontLine("underline");
+    sheet.getRange(tRow, tCol).setValue(" " + (displayNameMap[p] || p));
     sheet.getRange(tRow, tCol + 1).setValue(pCount).setHorizontalAlignment("center");
     tRow++;
 
