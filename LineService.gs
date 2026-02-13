@@ -101,8 +101,13 @@ const LineService = (() => {
     const pickupInfo = String(d.pickupDate || ""); // 例: "2/14(土) / 8:30~9:30"
     const tel = String(d.phoneNumber || "").replace(/^'/, ""); // シート用の先頭'を除去
     const nameRaw = String(d.userName || "").trim();
-    const nameLine = nameRaw ? `■お名前:${nameRaw} 様` : "■お名前:（未記入）";
-
+    const nameLine = nameRaw ? `■お名前:${nameRaw} 様` : null;
+    // 末尾にまとめて注意書きを出す（締切後は出さない）
+    const footerNotes = (meta && meta.lateSubmission) ? [] : [
+      "◆受け取り時は予約Noをお伝え下さい。",
+      "◆予定時刻より遅れそうでしたらご連絡ください。ご連絡がないまま30分を過ぎるとキャンセル扱いとなる場合があります。",
+      "【野菜を肴に 096-360-8083】"
+    ];
     return [
       "━━━━━━━━━━━━━",
       title,
@@ -118,7 +123,7 @@ const LineService = (() => {
       formatOrderDetailsForCustomer(d.orderDetails),
       " 合計：" + (d.totalItems || 0) + "点 / " + totalPriceStr + "円",
       "━━━━━━━━━━━━━",
-      "◆受け取り時間に遅れる場合はご連絡ください（野菜を肴に 096-360-8083）。ご連絡がないまま30分を過ぎた場合、キャンセル扱いとなる場合があります。"
+      ...footerNotes
     ].filter(v => v !== null && v !== undefined).join("\n");
   }
 

@@ -82,7 +82,13 @@ function createDailyReservationCards(targetDateOrInput) {
       const fullNoteText = formNote ? "【要】" + formNote : "";
       const formNoteLines = fullNoteText ? Math.ceil(fullNoteText.length / 20) : 0;
 
-      let neededRows = 4 + items.length + 1;
+      const customerName = (CONFIG.COLUMN.NAME != null)
+        ? String(row[CONFIG.COLUMN.NAME - 1] || "").trim()
+        : "";
+      const hasName = !!customerName;
+
+      // ヘッダ行：#予約No / 受取 / (名前) / TEL
+      let neededRows = (hasName ? 4 : 3) + items.length + 1;
       if (formNoteLines > 0) neededRows += formNoteLines;
 
       cardsToPrint.push({ rowData: row, items: items, height: neededRows });
@@ -149,10 +155,14 @@ function drawDynamicCard(sheet, startRow, col, card) {
   const orderNo = (rowData[CONFIG.COLUMN.ORDER_NO - 1] || "").toString().replace(/'/g, "");
   const isRegular = String(rowData[CONFIG.COLUMN.REGULAR_FLG - 1] || "") === "常連";
   const telRaw = (rowData[CONFIG.COLUMN.TEL - 1] || "").toString().replace(/'/g, "");
-  const telDigits = telRaw.replace(/[^0-9]/g, "");
-  const tel4 = telDigits ? telDigits.slice(-4) : "";
-  const name = (isRegular ? "★ " : "") + (tel4 ? `TEL下4桁: ${tel4}` : "TEL未入力");
   const tel = "TEL: " + (telRaw || "なし");
+  const customerName = (CONFIG.COLUMN.NAME != null)
+    ? String(rowData[CONFIG.COLUMN.NAME - 1] || "").trim()
+    : "";
+  const hasName = !!customerName;
+  const mark = isRegular ? "★ " : "";
+  const nameLine = hasName ? (mark + customerName) : "";
+  const telLine = hasName ? tel : (mark + tel); // 名前が無い時は電話行に★を寄せる
   const totalStr = "計:" + rowData[CONFIG.COLUMN.TOTAL_COUNT - 1] + "点 / " + Number(rowData[CONFIG.COLUMN.TOTAL_PRICE - 1]).toLocaleString() + "円";
 
   // ★受取日時（時刻列が無い場合もOK）
@@ -182,8 +192,13 @@ function drawDynamicCard(sheet, startRow, col, card) {
 
   sheet.getRange(r++, col).setValue("# " + orderNo).setBackground("#eeeeee").setFontWeight("bold").setFontSize(10);
   sheet.getRange(r++, col).setValue(pickupStr).setFontSize(9).setFontWeight("bold"); // ★ここが追加行
-  sheet.getRange(r++, col).setValue(name).setFontSize(11).setFontWeight("bold");
-  sheet.getRange(r++, col).setValue(tel).setFontSize(8);
+  if (hasName) {
+    sheet.getRange(r++, col).setValue(nameLine).setFontSize(11).setFontWeight("bold");
+    sheet.getRange(r++, col).setValue(telLine).setFontSize(8);
+  } else {
+    // 名前が無い時：電話を目立たせて、名前行は出さない
+    sheet.getRange(r++, col).setValue(telLine).setFontSize(11).setFontWeight("bold");
+  }
 
   items.forEach((item) => {
     sheet.getRange(r++, col).setValue("・" + item.short).setFontSize(10);
