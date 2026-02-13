@@ -76,16 +76,7 @@ function onOpen() {
       );
   }
 
-  // ===== 補助（氏名不一致） =====
-  if (isAdmin) {
-    menu
-      .addSeparator()
-      .addSubMenu(
-        ui.createMenu('氏名不一致')
-          .addItem('ログを開く', 'openNameConflictLog')
-          .addItem('次の1件を処理', 'resolveNextNameConflict')
-      );
-  }
+  // 氏名は必須にしない方針のため「氏名不一致」メニューは廃止
 
   // ===== 補助（チェック/監査/移行） =====
   if (isAdmin) {
@@ -188,10 +179,12 @@ function onOpen() {
  * ★要確認ワークフロー（サイドバー）
  */
 function showNeedsCheckWorkflowSidebar() {
-  const html = HtmlService.createHtmlOutputFromFile('NeedsCheckWorkflow')
-    .setTitle('★要確認ワークフロー')
-    .setWidth(380);
-  SpreadsheetApp.getUi().showSidebar(html);
+  // 顧客名簿廃止：機能は停止（旧メニュー/旧ブックから呼ばれても落とさない）
+  try {
+    SpreadsheetApp.getUi().alert("顧客名簿は廃止しました（顧客備考サイドバーは利用できません）。");
+  } catch (e) {
+    // UI の無い実行（トリガー等）では何もしない
+  }
 }
 
 /**
