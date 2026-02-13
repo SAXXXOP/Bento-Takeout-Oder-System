@@ -9,7 +9,7 @@
 - System / Menu：onOpen、メニュー構築
 - FormService：フォーム回答解析・正規化
 - OrderService：注文一覧への保存・予約No発行
-- CustomerService：顧客名簿の補完・更新
+-（廃止）CustomerService / CustomerForm：顧客名簿・備考編集（現行では使用しない）
 - DailyPrep：予約札/当日まとめの生成、日次トリガー
 - LineService：LINE送信/受信（doPost）
 - Backup：Driveバックアップ
