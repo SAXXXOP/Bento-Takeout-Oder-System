@@ -11,7 +11,7 @@ const FormService = {
     const itemResponses = response.getItemResponses();
     const formData = {
       userId: "",
-      // 名前は一切収集しない（互換のためキーだけ残すが常に空）
+      // 予約：お名前(任意)（空でもOK）
       userName: "", rawName: "", simpleName: "",
       phoneNumber: "", pickupDate: "", note: "",
       oldReservationNo: "",
@@ -57,7 +57,7 @@ const FormService = {
     function sanitizeSingleLine_(value) {
       return String(value || "")
         .replace(/\r\n|\n|\r/g, " ") // 改行→スペース
-        .replace(/[ \t\u00A0]+/g, " ") // 連続空白・タブ等を1つに
+        .replace(/[ \t\u00A0\u3000]+/g, " ") // 連続空白・タブ等を1つに（全角スペース含む）
         .trim();
     }
 
@@ -67,14 +67,21 @@ const FormService = {
       const item = r.getItem();
       if (!item) return;
       const title = item.getTitle() ? item.getTitle().trim() : "";
-      // ===== 名前は一切収集しない：設問が存在しても必ず無視 =====
-      if (title.includes("氏名") || title.includes("お名前") || title.includes("名前") || title.includes("フルネーム")) {
-        return;
-      }
-      const titleNorm = title.replace(/け/g, "");
       const answer = r.getResponse();
+      const titleNorm = title.replace(/け/g, "");
 
-      if (keyPhone && title.includes(keyPhone)) {
+      // お名前（任意）
+      if (keyNameFull && title.includes(keyNameFull)) {
+        const nm = normalizeMultiAnswer_(answer);
+        formData.rawName = nm;
+        formData.userName = nm;
+        formData.simpleName = nm.replace(/[ \u00A0\u3000]+/g, "");
+      } else if (keyNameShort && title.includes(keyNameShort)) {
+        const nm = normalizeMultiAnswer_(answer);
+        formData.rawName = nm;
+        formData.userName = nm;
+        formData.simpleName = nm.replace(/[ \u00A0\u3000]+/g, "");
+      } else if (keyPhone && title.includes(keyPhone)) {
         // 電話番号は文字列として保持（先頭0落ち防止の ' を付与）
         formData.phoneNumber = answer ? ("'" + normalizeMultiAnswer_(answer)) : "";
       } else if (keyOldNo && title.includes(keyOldNo)) {
@@ -110,9 +117,6 @@ const FormService = {
 
     // 表示用（既存仕様）
     formData.pickupDate = [rawDate, rawTime].filter(Boolean).join(" / ");
-
-    // 名前は一切収集しない
-    formData.userName = "";
 
     return formData;
   },

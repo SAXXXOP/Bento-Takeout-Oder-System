@@ -90,8 +90,8 @@ const OrderService = {
     rowData[CONFIG.COLUMN.ORDER_NO - 1] = "'" + reservationNo;
     const tel0 = formData.phoneNumber ? String(formData.phoneNumber).replace(/'/g, "").trim() : "";
     rowData[CONFIG.COLUMN.TEL - 1] = tel0 ? ("'" + SECURITY_.sanitizeForSheet(tel0)) : "";
-    // 名前は一切収集しない
-    rowData[CONFIG.COLUMN.NAME - 1] = "";
+    // お名前（任意）
+    rowData[CONFIG.COLUMN.NAME - 1] = SECURITY_.sanitizeForSheet(String(formData.userName || ""));
     rowData[CONFIG.COLUMN.PICKUP_DATE - 1] = formData.pickupDate;
     rowData[CONFIG.COLUMN.PICKUP_DATE_RAW - 1] = formData.pickupDateRaw;
     rowData[CONFIG.COLUMN.NOTE - 1] = SECURITY_.sanitizeForSheet(String(formData.note || ""));

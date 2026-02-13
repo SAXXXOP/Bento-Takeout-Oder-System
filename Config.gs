@@ -4,8 +4,9 @@
 const CONFIG = {
   // 1. Googleフォームの質問タイトル（フォームの文言と一致させる）
   FORM: {
-    // 名前は一切収集しない（フォームにあっても無視）
-    NAME_SHORT: "",
+    // 予約：お名前(任意)（空でもOK）
+    // ※ title.includes で判定するので「お名前」などの部分一致でもOK
+    NAME_SHORT: "お名前",
     NAME_FULL:  "",
     PHONE: "電話番号",
     PICKUP_DATE: "受け取り希望日",//プルダウン、日付は営業日のみ(前日20時締切適用)GASで自動作成、

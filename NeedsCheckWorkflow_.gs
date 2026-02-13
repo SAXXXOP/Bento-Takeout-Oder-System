@@ -312,7 +312,7 @@ function ncw_updateOrder(row, patch) {
     if (!sheet) throw new Error("注文一覧が見つかりません");
 
     if (patch.tel != null) sheet.getRange(row, CONFIG.COLUMN.TEL).setValue(patch.tel);
-    // 名前は一切収集しない（編集も禁止）
+    // 名前は任意入力（フォームから入ってきたものは保持するが、ここでの編集は現状しない）
     // if (patch.name != null) sheet.getRange(row, CONFIG.COLUMN.NAME).setValue(patch.name);
     if (patch.note != null) sheet.getRange(row, CONFIG.COLUMN.NOTE).setValue(patch.note);
     if (patch.details != null) sheet.getRange(row, CONFIG.COLUMN.DETAILS).setValue(patch.details);
