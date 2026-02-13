@@ -37,8 +37,8 @@ const CustomerService = {
    * 備考の保存
    */
   saveCustomerNote: function(row, note, type) {
-  // 顧客名簿廃止：保存先がない
-  return "顧客名簿は廃止しました（備考の保存は行いません）";
+    // 顧客名簿廃止：保存先がない
+    return "顧客名簿は廃止しました（備考の保存は行いません）";
   }
 
 };

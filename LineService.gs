@@ -100,6 +100,8 @@ const LineService = (() => {
 
     const pickupInfo = String(d.pickupDate || ""); // 例: "2/14(土) / 8:30~9:30"
     const tel = String(d.phoneNumber || "").replace(/^'/, ""); // シート用の先頭'を除去
+    const name = String(d.userName || "").trim();
+    const nameLine = name ? ("■お名前:" + name + " 様") : null;
 
     return [
       "━━━━━━━━━━━━━",
@@ -107,7 +109,7 @@ const LineService = (() => {
       "━━━━━━━━━━━━━",
       "■予約No:" + reservationNo,
       "■受取り:" + pickupInfo,
-      "■お名前:" + (d.userName || "") + " 様",
+      nameLine,
       "■お電話:" + tel,
       headerNote,
       "【ご要望】",
@@ -117,7 +119,7 @@ const LineService = (() => {
       " 合計：" + (d.totalItems || 0) + "点 / " + totalPriceStr + "円",
       "━━━━━━━━━━━━━",
       "◆受け取り時間に遅れる場合はご連絡ください（野菜を肴に 096-360-8083）。ご連絡がないまま30分を過ぎた場合、キャンセル扱いとなる場合があります。"
-    ].join("\n");
+    ].filter(v => v !== null && v !== undefined).join("\n");
   }
 
   function pushText(toUserId, text) {

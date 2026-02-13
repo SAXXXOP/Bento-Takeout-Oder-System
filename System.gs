@@ -179,11 +179,15 @@ function onOpen() {
  * ★要確認ワークフロー（サイドバー）
  */
 function showNeedsCheckWorkflowSidebar() {
-  // 顧客名簿廃止：機能は停止（旧メニュー/旧ブックから呼ばれても落とさない）
   try {
-    SpreadsheetApp.getUi().alert("顧客名簿は廃止しました（顧客備考サイドバーは利用できません）。");
+    const html = HtmlService
+      .createHtmlOutputFromFile('NeedsCheckWorkflow')
+      .setTitle('★要確認ワークフロー')
+      .setWidth(420);
+    SpreadsheetApp.getUi().showSidebar(html);
   } catch (e) {
-    // UI の無い実行（トリガー等）では何もしない
+    // UI の無い実行（トリガー等）では落とさない
+    console.warn("showNeedsCheckWorkflowSidebar failed:", e);
   }
 }
 
