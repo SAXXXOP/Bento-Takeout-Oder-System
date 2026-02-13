@@ -161,7 +161,7 @@ function drawDynamicCard(sheet, startRow, col, card) {
     : "";
   const hasName = !!customerName;
   const mark = isRegular ? "★ " : "";
-  const nameLine = hasName ? (mark + customerName) : "";
+  const nameLine = hasName ? (mark + addSama_(customerName)) : "";
   const telLine = hasName ? tel : (mark + tel); // 名前が無い時は電話行に★を寄せる
   const totalStr = "計:" + rowData[CONFIG.COLUMN.TOTAL_COUNT - 1] + "点 / " + Number(rowData[CONFIG.COLUMN.TOTAL_PRICE - 1]).toLocaleString() + "円";
 
@@ -214,6 +214,15 @@ function drawDynamicCard(sheet, startRow, col, card) {
       sheet.getRange(r++, col).setValue(chunk).setFontSize(8).setFontColor("#333333");
     }
   }
+}
+
+
+// 追加推奨：drawDynamicCard の直下（同ファイル内で完結）
+function addSama_(name) {
+  const s = String(name || "").trim();
+  if (!s) return "";
+  if (s.endsWith("様")) return s;
+  return s + "様";
 }
 
 /**
