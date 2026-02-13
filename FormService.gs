@@ -22,8 +22,18 @@ const FormService = {
 
     let pickupDateObj = null;
     let rawDate = "", rawTime = "";
-    const pickupDateKeyNorm = String(CONFIG.FORM.PICKUP_DATE || "").replace(/け/g, "");
-    const pickupTimeKeyNorm = String(CONFIG.FORM.PICKUP_TIME || "").replace(/け/g, "");
+
+    // ★フォーム設問が「未設定/空」の時に title.includes("") が暴発しないようガード
+    const keyNameShort = String(CONFIG.FORM.NAME_SHORT || "").trim();
+    const keyNameFull  = String(CONFIG.FORM.NAME_FULL  || "").trim();
+    const keyPhone     = String(CONFIG.FORM.PHONE      || "").trim();
+    const keyOldNo     = String(CONFIG.FORM.OLD_RESERVATION_NO || "").trim();
+    const keyLineId    = String(CONFIG.FORM.LINE_ID    || "").trim();
+    const keyNote      = String(CONFIG.FORM.NOTE       || "").trim();
+    const keyPickupDate = String(CONFIG.FORM.PICKUP_DATE || "").trim();
+    const keyPickupTime = String(CONFIG.FORM.PICKUP_TIME || "").trim();
+    const pickupDateKeyNorm = keyPickupDate ? keyPickupDate.replace(/け/g, "") : "";
+    const pickupTimeKeyNorm = keyPickupTime ? keyPickupTime.replace(/け/g, "") : "";
 
     // FormService.gs（新規追加：配列/文字列を安全に文字列化）
     function normalizeMultiAnswer_(answer) {
@@ -58,14 +68,14 @@ const FormService = {
       const titleNorm = title.replace(/け/g, "");
       const answer = r.getResponse();
 
-      if (title.includes(CONFIG.FORM.NAME_SHORT)) formData.simpleName = answer || "";
-      else if (title === CONFIG.FORM.NAME_FULL) formData.rawName = answer || "";
-      else if (title.includes(CONFIG.FORM.PHONE)) formData.phoneNumber = answer ? "'" + answer : "";
-      else if (title.includes(CONFIG.FORM.OLD_RESERVATION_NO)) formData.oldReservationNo = answer || ""; // ★追加
+      if (keyNameShort && title.includes(keyNameShort)) formData.simpleName = answer || "";
+      else if (keyNameFull && title === keyNameFull) formData.rawName = answer || "";
+      else if (keyPhone && title.includes(keyPhone)) formData.phoneNumber = answer ? "'" + answer : "";
+      else if (keyOldNo && title.includes(keyOldNo)) formData.oldReservationNo = answer || ""; // ★追加
       else if (pickupDateKeyNorm && titleNorm.includes(pickupDateKeyNorm)) rawDate = answer || "";
       else if (pickupTimeKeyNorm && titleNorm.includes(pickupTimeKeyNorm)) rawTime = answer || "";
-      else if (title.includes(CONFIG.FORM.LINE_ID)) formData.userId = answer || "";
-      else if (title.includes(CONFIG.FORM.NOTE)) { formData.note = normalizeMultiAnswer_(answer);}
+      else if (keyLineId && title.includes(keyLineId)) formData.userId = answer || "";
+      else if (keyNote && title.includes(keyNote)) { formData.note = normalizeMultiAnswer_(answer); }
       else this.parseOrder(title, answer, formData);
     });
 
