@@ -116,16 +116,9 @@ function onFormSubmit(e) {
     // 3. 予約番号生成
     const reservationInfo = ReservationService.create(formData);
 
-    // （ログ用：予約Noを顧客更新に渡す）
-    formData._reservationNoForLog = reservationInfo.no;
-
-    // 4. 顧客情報更新
-    formData.isRegular = CustomerService.checkAndUpdateCustomer(formData);
-
-    // ★追加：氏名不一致など、顧客更新で判明した要確認理由を合流
-    if (formData._needsCheckNameReason) {
-      needsCheckReasons.push(formData._needsCheckNameReason);
-    }
+    // 4. 常連判定（顧客名簿廃止：注文一覧から電話番号で簡易判定）
+    // ※電話未入力の場合は判定できないので false
+    formData.isRegular = isRegularByTel_(formData.phoneNumber);
 
     // ★追加：フォーム解析（数量の自由記入等）で積んだ要確認理由を合流
     if (Array.isArray(formData._needsCheckReasons) && formData._needsCheckReasons.length) {
@@ -244,4 +237,44 @@ function getPickupDateOnlyByOrderNo(orderNo) {
     console.warn("getPickupDateOnlyByOrderNo failed:", String(err));
     return null;
   }
+}
+
+// 直近の注文一覧から電話番号一致を数えて常連扱いにする（顧客名簿なし運用）
+// - 小規模店舗前提で、直近 MAX_SCAN 件のみスキャンして負荷を抑える
+// - INVALID は除外（それ以外はカウント対象）
+const REGULAR_MIN_ORDERS_ = 3; // ここ以上で「常連」
+const REGULAR_MAX_SCAN_ = 500; // 直近何件を見るか
+
+function isRegularByTel_(tel) {
+  const telNorm = String(tel || "").replace(/'/g, "").trim();
+  if (!telNorm) return false;
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(CONFIG.SHEET.ORDER_LIST);
+  if (!sheet) return false;
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return false; // ヘッダのみ
+
+  const startRow = Math.max(2, lastRow - REGULAR_MAX_SCAN_ + 1);
+  const numRows = lastRow - startRow + 1;
+
+  const telCol = CONFIG.COLUMN.TEL;
+  const statusCol = CONFIG.COLUMN.STATUS;
+
+  const tels = sheet.getRange(startRow, telCol, numRows, 1).getValues();
+  const statuses = sheet.getRange(startRow, statusCol, numRows, 1).getValues();
+
+  let cnt = 0;
+  for (let i = 0; i < numRows; i++) {
+    const s = String(statuses[i][0] || "");
+    if (s === CONFIG.STATUS.INVALID) continue;
+
+    const t = String(tels[i][0] || "").replace(/'/g, "").trim();
+    if (t && t === telNorm) {
+      cnt++;
+      if (cnt >= REGULAR_MIN_ORDERS_) return true;
+    }
+  }
+  return false;
 }

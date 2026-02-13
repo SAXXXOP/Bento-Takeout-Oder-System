@@ -14,9 +14,7 @@ function SheetVisibility_getDefaultSheetGroups_() {
   return {
     // 管理用（普段は隠す想定）
     ADMIN: [
-      sheet.CUSTOMER_LIST || "顧客名簿",
       sheet.MENU_MASTER || "メニューマスタ",
-      sheet.NAME_CONFLICT_LOG || "氏名不一致ログ",
       "ログ",
       "設定",
     ],

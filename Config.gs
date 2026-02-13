@@ -18,6 +18,8 @@ const CONFIG = {
   SHEET: {
   FORM_RESPONSES: "フォームの回答 1",
   ORDER_LIST: "注文一覧",
+  // CUSTOMER_LIST は廃止方針（顧客名簿を使わない運用）だが、
+  // 旧コード混在期間の互換のためキー自体は一旦残す
   CUSTOMER_LIST: "顧客名簿",
   MENU_MASTER: "メニューマスタ",
   DAILY_SUMMARY: "当日まとめ",
@@ -25,6 +27,7 @@ const CONFIG = {
   NEEDS_CHECK_VIEW: "★要確認一覧",
   HOLIDAYS: "休業日設定",
   LOG: "ログ",
+  // NAME_CONFLICT_LOG は顧客名簿廃止方針では原則不要（互換のためキーだけ残す）
   NAME_CONFLICT_LOG: "氏名不一致ログ"
   },
 
@@ -38,9 +41,11 @@ const CONFIG = {
     DAILY_SUMMARY: 1041436078,
     NEEDS_CHECK_VIEW: 895113105,
     MENU_MASTER: 383783652,
+    // CUSTOMER_LIST は廃止方針（互換のためキーだけ残す）
     CUSTOMER_LIST: 72852425,
     HOLIDAYS: 878661641,
     LOG: 1319133233,
+    // NAME_CONFLICT_LOG は顧客名簿廃止方針では原則不要（互換のためキーだけ残す）
     NAME_CONFLICT_LOG: 1185105983
   },
 
@@ -66,14 +71,12 @@ const CONFIG = {
     ss = ss || SpreadsheetApp.getActiveSpreadsheet();
     const requiredKeys = [
       "ORDER_LIST",
-      "CUSTOMER_LIST",
       "MENU_MASTER",
       "DAILY_SUMMARY",
       "RESERVATION_CARD",
       "NEEDS_CHECK_VIEW",
       "HOLIDAYS",
       "LOG",
-      "NAME_CONFLICT_LOG"
     ];
     const missing = [];
     requiredKeys.forEach(k => {

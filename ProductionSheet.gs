@@ -8,7 +8,6 @@ function createProductionSheet(targetDateOrInput) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const src = ss.getSheetByName(CONFIG.SHEET.ORDER_LIST);
   const master = ss.getSheetByName(CONFIG.SHEET.MENU_MASTER);
-  const customerSheet = ss.getSheetByName(CONFIG.SHEET.CUSTOMER_LIST);
   const sheet = ss.getSheetByName(CONFIG.SHEET.DAILY_SUMMARY);
   
   if (!src || !sheet || !master) return;
@@ -65,14 +64,6 @@ function createProductionSheet(targetDateOrInput) {
 
   // --- 2. データの集計 ---
   const data = src.getDataRange().getValues();
-  const customerMap = {};
-  if (customerSheet) {
-    customerSheet.getDataRange().getValues().slice(1).forEach(r => {
-      const lineId = r[CONFIG.CUSTOMER_COLUMN.LINE_ID - 1];
-      const cookNote = r[CONFIG.CUSTOMER_COLUMN.NOTE_COOK - 1];
-      if(lineId && cookNote) customerMap[lineId] = cookNote.toString();
-    });
-  }
 
   let groupCounts = {};
   let detailTree = {};
@@ -113,25 +104,19 @@ function createProductionSheet(targetDateOrInput) {
 
   if (!isTarget) return;
 
-
-    const lineId = row[CONFIG.COLUMN.LINE_ID - 1];
-
     const orderNo = String(row[CONFIG.COLUMN.ORDER_NO - 1] || "").replace("'", "");
     const name = String(row[CONFIG.COLUMN.NAME - 1] || "");
 
     // 注文一覧F列（NOTE）を拾う（Config定義に統一）
     const note = String(row[CONFIG.COLUMN.NOTE - 1] || "").replace(/\r?\n/g, " ").trim();
 
-    // 顧客名簿の調理注意
-    const cookNote = customerMap[lineId] ? String(customerMap[lineId]).replace(/\r?\n/g, " ").trim() : "";
-
     const parts = [];
-    if (cookNote) parts.push(`⚠ ${cookNote} ⚠`);
     if (note) parts.push(`◆${note}`);
     
 
     if (parts.length > 0) {
-      memos.push(`No.${orderNo}   ${name}様 ${parts.join(" ")}`);
+      const nameLabel = name ? `${name}様` : "（名前なし）";
+      memos.push(`No.${orderNo}   ${nameLabel} ${parts.join(" ")}`);
     }
 
 

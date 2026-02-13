@@ -1,13 +1,3 @@
-/**
- * サイドバーを表示
- */
-function showCustomerEditor() {
-  const html = HtmlService.createHtmlOutputFromFile('CustomerForm')
-    .setTitle('顧客管理エディタ')
-    .setWidth(300);
-  SpreadsheetApp.getUi().showSidebar(html);
-}
-
 function onOpen() {
   // プロパティ変更（特にメニュー表示フラグ）を即反映させるため、メニュー生成前にキャッシュをクリア
   try {
@@ -72,10 +62,6 @@ function onOpen() {
     hasRerunItem = true;
   }
   if (hasRerunItem) menu.addSubMenu(rerunMenu);
-
-  menu
-    .addSeparator()
-    .addItem('顧客備考を編集（サイドバー）', 'showCustomerEditor');
 
   // ===== 要確認の処理（予約No指定） =====
   if (isAdmin) {

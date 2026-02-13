@@ -7,11 +7,9 @@ function createDailyReservationCards(targetDateOrInput) {
   const reportSheet = ss.getSheetByName(CONFIG.SHEET.ORDER_LIST);
   const cardSheet = ss.getSheetByName(CONFIG.SHEET.RESERVATION_CARD);
   const menuSheet = ss.getSheetByName(CONFIG.SHEET.MENU_MASTER);
-  const customerSheet = ss.getSheetByName(CONFIG.SHEET.CUSTOMER_LIST);
   
   if (!reportSheet || !cardSheet) return;
 
-  const customerMap = getCustomerMap(customerSheet);
   const menuMap = getMenuMap(menuSheet);
 
   // トリガー実行ではUIが使えないので安全に扱う
@@ -78,20 +76,16 @@ function createDailyReservationCards(targetDateOrInput) {
       });
 
       items.sort((a, b) => String(a.group).localeCompare(String(b.group)));
-      const lineId = row[CONFIG.COLUMN.LINE_ID - 1];
-      const cInfo = customerMap[lineId] || { specialNote: "", historyLabel: "" };
-
+      
       // 【修正】「【要】」を含めた全文字数で必要行数を計算
       const formNote = row[CONFIG.COLUMN.NOTE - 1] || "";
       const fullNoteText = formNote ? "【要】" + formNote : "";
       const formNoteLines = fullNoteText ? Math.ceil(fullNoteText.length / 20) : 0;
 
       let neededRows = 4 + items.length + 1;
-      if (cInfo.specialNote) neededRows += 1;
       if (formNoteLines > 0) neededRows += formNoteLines;
-      if (cInfo.historyLabel) neededRows += 1;
 
-      cardsToPrint.push({ rowData: row, items: items, customer: cInfo, height: neededRows, fullNoteText: fullNoteText });
+      cardsToPrint.push({ rowData: row, items: items, height: neededRows });
     }
   });
 
@@ -148,10 +142,10 @@ function createDailyReservationCards(targetDateOrInput) {
 }
 
 /**
- * 描画補助関数（【注】と【要】の両方を20文字折り返しに対応）
+ * 描画補助関数（【要】を20文字折り返しに対応）
  */
 function drawDynamicCard(sheet, startRow, col, card) {
-  const { rowData, items, customer, height } = card;
+  const { rowData, items, height } = card;
   const orderNo = (rowData[CONFIG.COLUMN.ORDER_NO - 1] || "").toString().replace(/'/g, "");
   const isRegular = rowData[CONFIG.COLUMN.REGULAR_FLG - 1] === "常連";
   const name = (isRegular ? "★ " : "") + (rowData[CONFIG.COLUMN.NAME - 1] || "不明") + " 様";
@@ -179,7 +173,6 @@ function drawDynamicCard(sheet, startRow, col, card) {
   // 備考と注記のテキスト準備
   const formNote = (rowData[CONFIG.COLUMN.NOTE - 1] || "").toString();
   const fullNoteText = formNote ? "[要]" + formNote : "";
-  const fullSpecialNoteText = customer.specialNote ? "[注]" + customer.specialNote : "";
 
   let r = startRow;
   sheet.getRange(startRow, col, height, 1).setBorder(true, true, true, true, null, null, "#444444", SpreadsheetApp.BorderStyle.SOLID);
@@ -196,14 +189,6 @@ function drawDynamicCard(sheet, startRow, col, card) {
   sheet.getRange(r, col).setValue(totalStr).setFontWeight("bold").setFontSize(9).setBorder(true, null, null, null, null, null, "#444444", SpreadsheetApp.BorderStyle.DASHED);
   r++;
 
-  // --- [注]の20文字分割書き込み ---
-  if (fullSpecialNoteText) {
-    for (let i = 0; i < fullSpecialNoteText.length; i += 20) {
-      let chunk = fullSpecialNoteText.substring(i, i + 20);
-      sheet.getRange(r++, col).setValue(chunk).setFontSize(9).setFontColor("#333333").setFontWeight("bold");
-    }
-  }
-
   // --- 【要】の20文字分割書き込み ---
   if (fullNoteText) {
     for (let i = 0; i < fullNoteText.length; i += 20) {
@@ -211,29 +196,6 @@ function drawDynamicCard(sheet, startRow, col, card) {
       sheet.getRange(r++, col).setValue(chunk).setFontSize(8).setFontColor("#333333");
     }
   }
-
-  if (customer.historyLabel) {
-    sheet.getRange(r++, col).setValue(customer.historyLabel).setFontSize(8).setFontColor("#666666");
-  }
-}
-
-
-/**
- * 補助関数：getCustomerMap
- */
-function getCustomerMap(customerSheet) {
-  const customerMap = {};
-  if (!customerSheet) return customerMap;
-  const cData = customerSheet.getDataRange().getValues();
-  cData.slice(1).forEach(r => {
-    const lineId = r[CONFIG.CUSTOMER_COLUMN.LINE_ID - 1];
-    if (!lineId) return;
-    customerMap[lineId] = {
-      specialNote: r[CONFIG.CUSTOMER_COLUMN.NOTE_COOK - 1] || "", 
-      historyLabel: r[CONFIG.CUSTOMER_COLUMN.HISTORY_1 - 1] ? "前回: " + String(r[CONFIG.CUSTOMER_COLUMN.HISTORY_1 - 1]).split(" ")[0] : "" 
-    };
-  });
-  return customerMap;
 }
 
 /**

@@ -35,7 +35,7 @@ function initProductionClean_(deleteFormResponses) {
   const title = "本番初期化（危険）";
   const msg = [
     "以下を削除します：",
-    "- 注文一覧 / 顧客名簿 / ★要確認一覧 / ログ / 氏名不一致ログ（データ行）",
+    "- 注文一覧 / ★要確認一覧 / ログ / 氏名不一致ログ（データ行）",
     "- 当日まとめ / 予約札（内容）",
     deleteFormResponses ? "- フォーム回答（全件）" : "",
     "",
@@ -64,7 +64,6 @@ function initProductionClean_(deleteFormResponses) {
       DAILY_SUMMARY: "当日まとめ",
       RESERVATION_CARD: "予約札",
       MENU_MASTER: "メニューマスタ",
-      CUSTOMER_LIST: "顧客名簿",
       NEEDS_CHECK_VIEW: "★要確認一覧",
       LOG: "ログ",
       SETTINGS: "設定",
@@ -74,7 +73,7 @@ function initProductionClean_(deleteFormResponses) {
     const cleared = [];
 
     // データ行だけ削除（1行目はヘッダ想定）
-    [SH.ORDER_LIST, SH.CUSTOMER_LIST, SH.NEEDS_CHECK_VIEW, "ログ", SH.NAME_CONFLICT_LOG].forEach(name => {
+    [SH.ORDER_LIST, SH.NEEDS_CHECK_VIEW, "ログ", SH.NAME_CONFLICT_LOG].forEach(name => {
       const sh = ss.getSheetByName(name);
       if (!sh) return;
       const n = st_clearBelowHeader_(sh, 1);
