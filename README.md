@@ -1,158 +1,127 @@
 # 弁当予約フォーム（Googleフォーム + スプレッドシート + Apps Script）
 
-Googleフォームの予約送信を起点に、スプレッドシートへ **注文一覧の記録 / 予約No発行 / （任意で）LINE通知** を行う運用ツールです。    
-日々の業務として **予約札作成** と **当日まとめ更新** をメニューまたは自動（トリガー）で実行できます。:contentReference[oaicite:0]{index=0}:contentReference[oaicite:1]{index=1}
+Googleフォームの予約送信を起点に、スプレッドシートへ **注文一覧の記録 / 予約No発行 / 自動返信（＋任意でLINE通知）** を行う運用ツールです。  
+日々の業務として **予約札作成** と **当日まとめ更新** をメニューまたは自動（トリガー）で実行できます。  
+※「顧客名簿」シート前提の運用は現行では採っていません（注文一覧を中心に運用します）。
+
+- 詳細マニュアル（作業別）：`docs/index.md`
 
 ---
 
-## できること（概要）docs/index.md
+## できること（概要）
 
-- フォーム送信時に `注文一覧` へ1行追加（予約No発行、顧客名簿更新、要確認理由の付与など）:contentReference[oaicite:2]{index=2}:contentReference[oaicite:3]{index=3}
+- フォーム送信 → `onFormSubmit` を起点に処理（フォーム解析→注文一覧へ記録…）:contentReference[oaicite:0]{index=0}
 - ステータス運用（B案）
-  - 有効：`""`（空）
+  - 有効：`""`（空欄）
   - 無効：`"無効"`
-  - 要確認：`"★要確認"`:contentReference[oaicite:4]{index=4}
-- 日次準備（予約札 + 当日まとめ）を **手動/自動（トリガー）** で作成:contentReference[oaicite:5]{index=5}:contentReference[oaicite:6]{index=6}
-- （任意）LINE Webhook / Push による通知・変更導線  
-  Webアプリ公開 + `WEBHOOK_KEY` による簡易認証あり:contentReference[oaicite:7]{index=7}:contentReference[oaicite:8]{index=8}
-
-## [詳細マニュアルはここから](docs/index.md)
+  - 要確認：`"★要確認"`:contentReference[oaicite:1]{index=1}
+- ★要確認一覧の運用（抽出して見やすい一覧で処理）
+- 日次準備（予約札＋当日まとめ）を手動/自動（トリガー）で実行
+- （任意）LINE：Push送信・Webhook受信・変更導線の運用:contentReference[oaicite:2]{index=2}
+- （任意）バックアップ：スプレッドシートの定期バックアップ（Drive）:contentReference[oaicite:3]{index=3}
 
 ---
 
-## 先に結論：初期導入の最短手順
+## 最短で動かす（初期導入の最短手順）
 
 1. **テンプレのスプレッドシート**（このスクリプトが紐づいたもの）をコピー
-2. スプレッドシートで Apps Script を開き、必要な **Script Properties** を設定
-3. フォーム送信トリガーを設定（`onFormSubmit`）
-4. 必要なら、**日次準備トリガー** と **バックアップトリガー** を設定
+2. フォームがそのスプレッドシートに紐づいていることを確認
+3. Apps Script の初回承認（権限）を完了
+4. 使う機能分の **Script Properties** を設定
+5. トリガー設定（必須：`onFormSubmit`／任意：日次準備・バックアップ）
+
+運用開始前チェックは `docs/setup/checklist-prelaunch.md` 推奨。:contentReference[oaicite:4]{index=4}
 
 ---
 
-## 前提（シート/フォーム）
+## 前提（シート）
 
-### 必須シート名（CONFIG.SHEET）
-以下の名前でシートが存在する前提です（テンプレに同梱想定）:contentReference[oaicite:9]{index=9}。
+最低限、以下が揃っている想定です（テンプレに同梱）。:contentReference[oaicite:5]{index=5}
 
 - 注文一覧
 - 当日まとめ
 - 予約札
-- 顧客名簿
 - メニューマスタ
-- 要確認一覧
+- ★要確認一覧
 - ログ
-- 設定
 
-> 注文一覧の列位置は `CONFIG.COLUMN` で固定（A=TIMESTAMP, B=ORDER_NO, …）です:contentReference[oaicite:10]{index=10}。
-
-### フォームの質問タイトル（CONFIG.FORM）
-フォーム側の「質問文（タイトル）」が一致している必要があります:contentReference[oaicite:11]{index=11}。
-
-- 氏名
-- 電話番号
-- 受け取り希望日
-- 受取り希望時刻
-- 備考
-- 注文
-- 予約番号（変更用）
-- LINE_ID(自動入力)
-
-> 送信トリガーのイベント `e.response` が無い場合でも、スプレッドシートに紐づくフォームURLから「最新回答」を取得して処理します:contentReference[oaicite:12]{index=12}。  
-> そのため、トリガー設定の違いでイベント形式が変わっても動作しやすい設計です。
+> うまく動かない時はまず `ログ` と Apps Script 実行履歴を確認してください（詳細：`docs/troubleshooting/logs.md`）。
 
 ---
 
-## セットアップ
+## Script Properties（重要）
 
-### 1) Script Properties（重要）
+「使う機能だけ」設定すればOKです（未設定でもデフォルトで動く項目あり）。
 
-#### 必須（運用により）
-- **LINE連携を使う場合**
-  - `LINE_TOKEN`（Push等に使用）
-  - `WEBHOOK_KEY`（Webhook URL に `?key=` を必須化する簡易認証）:contentReference[oaicite:13]{index=13}
+### 1) LINE連携を使う場合（任意）
+- `LINE_TOKEN`（Push等に使用）
+- `WEBHOOK_KEY`（Webhook URL の `?key=` による簡易認証）:contentReference[oaicite:6]{index=6}:contentReference[oaicite:7]{index=7}
 
-- **バックアップを使う場合**
-  - `BACKUP_FOLDER_ID`（バックアップ保存用の親フォルダID）:contentReference[oaicite:14]{index=14}:contentReference[oaicite:15]{index=15}
+### 2) バックアップを使う場合（任意）
+- `BACKUP_FOLDER_ID`（バックアップ保存用の親フォルダID）:contentReference[oaicite:8]{index=8}
+- 追加で保持期間なども設定可能（未設定時のデフォルトあり）:contentReference[oaicite:9]{index=9}
 
-#### 任意（推奨/運用で）
-- バックアップの保持期間や月次設定など（未設定時のデフォルトあり）:contentReference[oaicite:16]{index=16}
-- デバッグ：`DEBUG_MAIN` など（旧キー `DEBUG_ORDER_SAVE` は互換）:contentReference[oaicite:17]{index=17}
-- 締切後送信メール通知：`LATE_SUBMISSION_NOTIFY_TO`（宛先を入れたら有効）:contentReference[oaicite:18]{index=18}
-
-> テンプレ配布/初期化向けに Script Properties を一括で用意する関数もあります（`ensureTemplateScriptProperties`, `overwriteTemplateScriptProperties` など）。また、増えすぎた任意キーを削除して最小化する `cleanupAllOptionalScriptProperties` などの関数もあります。（`ensureTemplateScriptProperties`, `overwriteTemplateScriptProperties`）。
+### 3) 推奨（ログ）
+- `LOG_LEVEL`, `LOG_MAX_ROWS`（ログ運用の安定化に推奨）:contentReference[oaicite:10]{index=10}
 
 ---
 
-### 2) フォーム送信トリガー（必須）
+## トリガー（必須 / 任意）
 
-Apps Script の「トリガー」から、関数 `onFormSubmit` を「フォーム送信時」に紐づけます。  
-`onFormSubmit` はフォーム解析→保存→（任意で）LINE通知まで行います:contentReference[oaicite:20]{index=20}:contentReference[oaicite:21]{index=21}。
+- **必須**：フォーム送信 → `onFormSubmit`:contentReference[oaicite:11]{index=11}
+- **任意**：日次準備 → `dailyPrepTrigger`:contentReference[oaicite:12]{index=12}
+- **任意**：バックアップ → `backupSpreadsheetDaily`:contentReference[oaicite:13]{index=13}
 
----
-
-### 3) 日次準備（予約札 + 当日まとめ）トリガー（任意）
-
-スプレッドシートメニューに「導入ツール」があり、ここから設定できます:contentReference[oaicite:22]{index=22}。
-
-- 日次準備設定を開く
-- 日次準備トリガーを設定
-- 日次準備トリガーを削除
-- （手動実行）日次準備を実行
-
-日次準備の起動先は `dailyPrepTrigger()` です:contentReference[oaicite:23]{index=23}。
+詳細手順：`docs/setup/triggers.md`
 
 ---
 
-### 4) バックアップ（任意）
+## 日々の運用（ざっくり）
 
-`backupSpreadsheetDaily()` が日次バックアップ本体です（方針：日次60日＋月次12ヶ月）:contentReference[oaicite:24]{index=24}:contentReference[oaicite:25]{index=25}。  
-まず Googleドライブに親フォルダを作り、`BACKUP_FOLDER_ID` を設定してください。
+当日朝にやること（例）：
+- `★予約管理 → 指定日の予約札を作成`
+- `★予約管理 → 当日まとめシートを更新`:contentReference[oaicite:14]{index=14}
 
----
-
-## 使い方（運用）
-
-### 予約管理メニュー
-スプレッドシートのメニュー **「★予約管理」** から実行できます:contentReference[oaicite:26]{index=26}。
-
-- 顧客備考を編集（サイドバー）
-- 指定日の予約札を作成
-- 当日まとめシートを更新
-- （必要に応じて）ステータス運用/監査系メニュー
-
-### 基本フロー
-1. お客様がフォーム送信
-2. `注文一覧` に記録（必要に応じて「★要確認」や「無効」になる）:contentReference[oaicite:27]{index=27}
-3. 店舗側は日次で「予約札」「当日まとめ」を作成（手動 or 自動）
+※さらに詳しい運用導線：`docs/operations/daily-check.md` / `docs/operations/order-flow.md`
 
 ---
 
-## LINE連携（任意）
+## LINE Webhook（任意）とセキュリティ
 
-### Webhook（Webアプリ公開）
-`appsscript.json` は Webアプリ公開（匿名アクセス可）を前提にしています:contentReference[oaicite:28]{index=28}。  
-Webhook は `doPost(e)` が受け、URLに `?key=` を付ける方式で簡易認証します:contentReference[oaicite:29]{index=29}。
+このプロジェクトは Webアプリとして公開してWebhookを受ける構成を取れます。  
+`appsscript.json` 上、Webアプリは **`executeAs: USER_DEPLOYING` / `access: ANYONE_ANONYMOUS`** の設定です。:contentReference[oaicite:15]{index=15}
+
+- そのため、Webhookは `WEBHOOK_KEY`（URLクエリ）で簡易的に弾く前提:contentReference[oaicite:16]{index=16}
+- `WEBHOOK_KEY` は漏れないように管理してください（共有・公開注意）
+
+詳細：`docs/setup/deployment.md` / `docs/troubleshooting/line-webhook-fails.md`
+
+---
+
+## 管理者/閲覧者（メニュー表示制御）
+
+「★予約管理」の一部メニューは管理者だけに出せます。  
+管理者判定の基本：**スプレッドシートオーナー + Script Properties の `ADMIN_EMAILS`（任意）**:contentReference[oaicite:17]{index=17}
+
+詳細：`docs/setup/menu-visibility.md`
 
 ---
 
 ## トラブルシュート
 
-### まず見る場所：ログ
-`ログ` シートに追記され、肥大化すると古い行を削る簡易ローテーションがあります:contentReference[oaicite:30]{index=30}。  
-うまく動かない時は、まず `ログ` シートと Apps Script 実行履歴（エラー）を確認してください。
-
-### よくある原因
-- フォームの質問タイトルが `CONFIG.FORM` と一致していない:contentReference[oaicite:31]{index=31}
-- 必須の Script Properties（例：`BACKUP_FOLDER_ID`, `WEBHOOK_KEY` など）が未設定:contentReference[oaicite:32]{index=32}:contentReference[oaicite:33]{index=33}
-- トリガー未設定（`onFormSubmit` / `dailyPrepTrigger`）
+- まずログ：`docs/troubleshooting/logs.md`
+- トリガー系：`docs/troubleshooting/trigger-issues.md`
+- フォーム文言ズレ：`docs/troubleshooting/form-title-mismatch.md`
+- 二重登録：`docs/troubleshooting/duplicate-orders.md`
 
 ---
 
 ## 開発メモ
 
-- Apps Script ランタイム：V8 / タイムゾーン：Asia/Tokyo:contentReference[oaicite:34]{index=34}
+- Apps Script：V8 / タイムゾーン：Asia/Tokyo:contentReference[oaicite:18]{index=18}
 
 ---
 
 ## License
+
 TBD（社内/店舗運用なら “Proprietary” または “All rights reserved” の扱いが無難です）
