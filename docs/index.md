@@ -23,7 +23,6 @@ README は“入口（概要・最短導線）”、本マニュアルは“現�
 - [ステータス運用（有効/無効/★要確認）](operations/status-operations.md)
 - [予約札を作成する（指定日）](operations/create-cards.md)
 - [当日まとめを更新する](operations/production-sheet.md)
-- [顧客備考（サイドバー）の使い方](operations/customer-notes-sidebar.md)
 - [予約の変更・キャンセル運用](operations/change-cancel.md)
 - [ノーショウ（無断キャンセル）対応の運用](operations/no-show-policy.md)
 - [LINE連携の運用（任意）](operations/line-operations.md)
