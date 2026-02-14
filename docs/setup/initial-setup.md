@@ -45,8 +45,8 @@
 
 ### 4) Script Properties を設定（必要な分だけ）
 - ログ：`LOG_LEVEL`, `LOG_MAX_ROWS`（推奨）
-- LINE連携（任意）：`LINE_TOKEN`, `WEBHOOK_KEY`
-- バックアップ（任意）：`BACKUP_FOLDER_ID`
+- `LINE_TOKEN`（お客様へのLINE自動返信）
+- `WEBHOOK_KEY`（Webhookの簡易認証：`?key=` を必須化）
 
 詳しくは：`setup/properties.md`
 
