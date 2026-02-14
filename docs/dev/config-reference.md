@@ -33,6 +33,12 @@
 
 ---
 
+## CONFIG.SHEET_ID（シートID）
+`CONFIG.getSheet(key)` は **sheetId優先→名前フォールバック** で取得します。  
+テンプレのタブを並べ替えても壊れにくくするための仕組みです。
+
+---
+
 ## CONFIG.COLUMN（注文一覧の列：位置固定）
 注文一覧の列位置は `CONFIG.COLUMN` で固定しています（詳細は `dev/sheets-and-columns.md`）。
 
@@ -48,14 +54,48 @@
 ## CONFIG.PROPS（Script Properties のキー名）
 値は Script Properties に保存し、コードではキー名をここから参照します。
 
-- LINE：`LINE_TOKEN`, `WEBHOOK_KEY`
-- ログ：`LOG_LEVEL`, `LOG_MAX_ROWS`
-- バックアップ：`BACKUP_FOLDER_ID`（ほか任意キーあり）
-- 日次準備：`DAILY_PREP_*`
-- 締切後送信通知：`LATE_SUBMISSION_NOTIFY_*`
-- 管理者判定：`ADMIN_EMAILS`（互換：`MENU_SHOW_ADVANCED`）
+### LINE / Webhook
+- `LINE_TOKEN`
+- `WEBHOOK_KEY`
+
+### Logging
+- `LOG_LEVEL`
+- `LOG_MAX_ROWS`
+
+### Backup（運用）
+- `BACKUP_FOLDER_ID`
+- `BACKUP_AT_HOUR`
+- `BACKUP_DAILY_RETENTION_DAYS`
+- `BACKUP_DAILY_FOLDER_KEEP_MONTHS`
+- `BACKUP_MONTHLY_FOLDER_NAME`
+- `BACKUP_MONTHLY_RETENTION_MONTHS`
+- `BACKUP_USE_MONTHLY_FOLDER`
+- `BACKUP_MANUAL_FOLDER_NAME`
+
+### Daily prep（運用）
+- `DAILY_PREP_AT_HOUR`
+- `DAILY_PREP_AT_MINUTE`
+- `DAILY_PREP_OFFSET_DAYS`
+- `DAILY_PREP_WEEKDAYS`
+
+### Late submission notify（運用）
+- `LATE_SUBMISSION_NOTIFY_ENABLED`
+- `LATE_SUBMISSION_NOTIFY_TO`
+
+### Debug（任意）
+- `DEBUG_MAIN`
+- `DEBUG_ORDER_SAVE`
+
+### Menu visibility（任意）
+- `ADMIN_EMAILS`
+- `MENU_SHOW_ADVANCED`（互換）
+
+---
+
+## CONFIG.LINE（メモ：LIFF/entry）
+Config に LIFF URL や entry ID をメモとして保持しています（実トークンは Script Properties）。
 
 ---
 
 ## レガシー/未使用メモ
-`CONFIG.CUSTOMER_COLUMN` は旧「顧客名簿」タブ向けの名残で、現行運用では使用しません。
+`CONFIG.CUSTOMER_COLUMN` は旧「顧客名簿」向けの名残で、現行運用では使用しません。
