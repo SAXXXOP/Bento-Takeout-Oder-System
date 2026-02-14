@@ -88,8 +88,8 @@ function onOpen() {
       ['運用ガード再適用（入力制限/色）', 'applyOrderStatusGuards'],
     ], maintCount);
     addGroup_(maintMenu, 'バックアップ', [
-      ['手動スナップショット作成', 'createManualSnapshot'],
-      ['今すぐ日次バックアップ実行', 'backupSpreadsheetDaily'],
+      ['手動スナップショット（削除なし／作業前）', 'createManualSnapshot'],
+      ['日次バックアップを今すぐ（古いの掃除あり）', 'backupSpreadsheetDaily'],
       ['日次バックアップ設定（トリガー作成）', 'installDailyBackupTrigger'],
       ['日次バックアップ停止（トリガー削除）', 'deleteDailyBackupTrigger'],
     ], maintCount);

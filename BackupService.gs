@@ -313,7 +313,7 @@ function createManualSnapshot() {
     let note = "";
     try {
       const ui = SpreadsheetApp.getUi();
-      const res = ui.prompt("手動スナップショット", "メモ（任意：例）改修前 / 締め処理前", ui.ButtonSet.OK_CANCEL);
+      const res = ui.prompt("手動スナップショット（削除なし）", "メモ（任意：例）改修前 / 締め処理前", ui.ButtonSet.OK_CANCEL);
       if (res.getSelectedButton() === ui.Button.CANCEL) return;
       note = String(res.getResponseText() || "").trim();
     } catch (e) {
