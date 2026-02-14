@@ -60,6 +60,15 @@ const OPS_NOTIFY_ = (() => {
     return s;
   }
 
+  // 予約No/旧Noなど、シートで日付化しやすい値を「安全な文字列」に寄せる
+  function toNoText_(v) {
+    if (v instanceof Date && !isNaN(v.getTime())) {
+      // 既に日付として入ってしまった値は、長い toString を避けて短い表記にする
+      return fmt_(v, "yyyyMMddHHmmss");
+    }
+    return String(v ?? "").replace(/^'/, "").trim();
+  }
+
   function parseRecipients_(raw) {
     raw = String(raw || "");
     const list = raw.split(/[,\s;]+/).map(s => s.trim()).filter(Boolean);
@@ -191,11 +200,14 @@ const OPS_NOTIFY_ = (() => {
 
     const note = compact_(formData && formData.note || "", 220);
 
+    const resNoText = toNoText_(reservationNo);
+    const oldNoText = toNoText_(oldNo);
+
     const row = [
       new Date(),
       kind,
-      reservationNo || "",
-      oldNo,
+      resNoText ? ("'" + resNoText) : "",
+      oldNoText ? ("'" + oldNoText) : "",
       formData && (formData.userName || formData.simpleName || formData.rawName) || "",
       formData && (formData.phoneNumber || "") || "",
       formData && (formData.pickupDate || "") || "",
@@ -219,36 +231,44 @@ const OPS_NOTIFY_ = (() => {
     const minTs = timestamps.length ? new Date(Math.min(...timestamps.map(d => d.getTime()))) : new Date();
     const maxTs = timestamps.length ? new Date(Math.max(...timestamps.map(d => d.getTime()))) : new Date();
 
-    const lines = [];
-    lines.push(`予約/変更 通知（1時間まとめ）: ${rows.length}件`);
-    lines.push(`期間: ${fmt_(minTs, "yyyy/MM/dd HH:mm")} 〜 ${fmt_(maxTs, "HH:mm")}`);
-    lines.push("");
-
-    rows.forEach(r => {
-      const at = (r.ts instanceof Date) ? fmt_(r.ts, "HH:mm") : "";
-      const flags = [
-        r.late ? "締切後" : "",
-        r.needsCheckReason ? `要確認:${compact_(r.needsCheckReason, 40)}` : ""
-      ].filter(Boolean).join(" / ");
-
-      const base =
-        `${at} [${r.kind}] No:${r.reservationNo}` +
-        (r.oldNo ? ` (旧:${r.oldNo})` : "") +
-        ` / ${compact_(r.name, 20)}` +
-        (r.tel ? ` / ${r.tel}` : "") +
-        (r.pickup ? ` / 受取:${compact_(r.pickup, 40)}` : "");
-
-      const detail = r.summary ? ` / ${compact_(r.summary, 120)}` : "";
-      const note = r.note ? ` / 備考:${compact_(r.note, 60)}` : "";
-      const flg = flags ? ` / ※${flags}` : "";
-
-      lines.push(base + detail + note + flg);
+    // 時刻順で読みやすく
+    const sorted = rows.slice().sort((a, b) => {
+      const at = (a.ts instanceof Date) ? a.ts.getTime() : 0;
+      const bt = (b.ts instanceof Date) ? b.ts.getTime() : 0;
+      return at - bt;
     });
 
+    const lines = [];
+    lines.push(`予約/変更 通知（1時間まとめ）`);
+    lines.push(`件数：${sorted.length}`);
+    lines.push(`期間：${fmt_(minTs, "yyyy/MM/dd HH:mm")} 〜 ${fmt_(maxTs, "HH:mm")}`);
     lines.push("");
-    lines.push("スプレッドシート：");
-    lines.push(url);
 
+    sorted.forEach((r, i) => {
+      const t = (r.ts instanceof Date) ? fmt_(r.ts, "HH:mm") : "";
+      const no = toNoText_(r.reservationNo) || "(不明)";
+      const old = toNoText_(r.oldNo);
+      const name = compact_(r.name, 30) || "（氏名未入力）";
+      const tel = toNoText_(r.tel);
+      const pickup = compact_(r.pickup, 80);
+      const summary = compact_(r.summary, 220);
+      const note = compact_(r.note, 160);
+
+      const flags = [
+        r.late ? "締切後" : "",
+        r.needsCheckReason ? `要確認:${compact_(r.needsCheckReason, 80)}` : ""
+      ].filter(Boolean).join(" / ");
+
+      lines.push(`${i + 1}) ${t} [${r.kind}] 予約No:${no}${old ? `（旧:${old}）` : ""}`.trim());
+      lines.push(`   ${name}${tel ? ` / TEL:${tel}` : ""}`.trim());
+      if (pickup) lines.push(`   受取:${pickup}`);
+      if (summary) lines.push(`   内容:${summary}`);
+      if (note) lines.push(`   備考:${note}`);
+      if (flags) lines.push(`   ※${flags}`);
+      lines.push("");
+    });
+
+    lines.push(`スプレッドシート：${url}`);
     return lines.join("\n");
   }
 

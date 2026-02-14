@@ -65,7 +65,7 @@ function refreshNeedsCheckView() {
         stripQuote_(r[CONFIG.COLUMN.ORDER_NO - 1]),
         r[CONFIG.COLUMN.PICKUP_DATE - 1] || "",
         r[CONFIG.COLUMN.NAME - 1] || "",
-        stripQuote_(r[CONFIG.COLUMN.TEL - 1]),
+        toTextCell_(r[CONFIG.COLUMN.TEL - 1]), // ★電話は文字列として保持（先頭0対策）
         status,
         r[CONFIG.COLUMN.REASON - 1] || "",
         stripQuote_(r[CONFIG.COLUMN.SOURCE_NO - 1]),
@@ -87,7 +87,8 @@ function refreshNeedsCheckView() {
   const outValues = rows.map(x => x.out);
 
   if (outValues.length) {
-    view.getRange(2, 1, outValues.length, header.length).setValues(outValues);
+    // ★電話列(6列目)はプレーンテキストに固定（数値化で先頭0が落ちるのを防ぐ）
+    view.getRange(2, 6, outValues.length, 1).setNumberFormat("@");
   }
 
   // フィルタ（見やすさ）
@@ -110,4 +111,11 @@ function resetFilter_(sheet) {
 function stripQuote_(v) {
   if (v === null || v === undefined) return "";
   return String(v).replace(/^'/, "");
+}
+
+// ★セルに貼るとき「文字列」として固定したい値（電話など）に使う
+function toTextCell_(v) {
+  const s = stripQuote_(v);
+  if (!s) return "";
+  return "'" + s; // 表示上は ' は出ないが、数値化を防げる
 }
