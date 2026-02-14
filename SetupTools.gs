@@ -299,8 +299,6 @@ function deleteDailyPrepTrigger() {
   if (ui) ui.alert(`OK：日次準備トリガーを削除しました（${deleted}件）。`);
 }
 
-// ===== 導入ツール（統合）：テンプレ配布用 Script Properties =====
-
 /**
  * TemplatePropsTools.gs
  * テンプレ配布用：Script Properties の「必須キー作成」と「任意キー最小化」を提供
@@ -358,7 +356,7 @@ function cleanupAllOptionalScriptProperties() {
     // backup optional
     [CONFIG.PROPS.BACKUP_AT_HOUR, CONFIG.PROPS.BACKUP_DAILY_RETENTION_DAYS, CONFIG.PROPS.BACKUP_DAILY_FOLDER_KEEP_MONTHS,
      CONFIG.PROPS.BACKUP_USE_MONTHLY_FOLDER, CONFIG.PROPS.BACKUP_MONTHLY_RETENTION_MONTHS, CONFIG.PROPS.BACKUP_MONTHLY_FOLDER_NAME,
-     CONFIG.PROPS.BACKUP_MANUAL_FOLDER_NAME, CONFIG.PROPS.BACKUP_RETENTION_DAYS],
+     CONFIG.PROPS.BACKUP_MANUAL_FOLDER_NAME, "BACKUP_RETENTION_DAYS"], // legacy cleanup
     // log
     [CONFIG.PROPS.LOG_LEVEL, CONFIG.PROPS.LOG_MAX_ROWS, "LOG_MAX"],
     // daily prep

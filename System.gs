@@ -138,6 +138,7 @@ function onOpen() {
   let hasSetupItem = false;
   if (isAdmin) {
     setupRecovery.addItem('初期設定チェック（Script Properties）', 'checkScriptProperties');
+    setupRecovery.addItem('現在のプロパティ一覧（マスク）', 'showCurrentProperties');
     hasSetupItem = true;
   }
 
