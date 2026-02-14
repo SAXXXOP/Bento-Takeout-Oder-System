@@ -165,6 +165,30 @@ function deleteFormSubmitTrigger() {
   ui.alert(`OK：フォーム送信トリガーを削除しました（${deleted}件）。`);
 }
 
+// ===== トリガー（運用通知：1時間まとめ） =====
+/**
+ * 運用通知（予約/変更）を 1時間ごとにまとめて送るトリガーを設定
+ * メニュー「導入ツール > 運用通知（1時間まとめ） > トリガー作成」から呼ばれます。
+ */
+function installOpsNotifyHourlyTrigger() {
+  const ui = SpreadsheetApp.getUi();
+  const handler = "opsNotifyHourlyTrigger";
+  const deleted = st_deleteTriggersByHandler_(handler);
+
+  ScriptApp.newTrigger(handler).timeBased().everyHours(1).create();
+  ui.alert(`OK：運用通知（1時間まとめ）トリガーを設定しました（削除：${deleted}件）。`);
+}
+
+/**
+ * 運用通知（予約/変更）トリガーを削除
+ * メニュー「導入ツール > 運用通知（1時間まとめ） > トリガー削除」から呼ばれます。
+ */
+function deleteOpsNotifyHourlyTrigger() {
+  const ui = SpreadsheetApp.getUi();
+  const deleted = st_deleteTriggersByHandler_("opsNotifyHourlyTrigger");
+  ui.alert(`OK：運用通知（1時間まとめ）トリガーを削除しました（${deleted}件）。`);
+}
+
 function configureDailyPrepSettingsPrompt() {
   const ui = SpreadsheetApp.getUi();
 

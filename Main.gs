@@ -166,6 +166,16 @@ function onFormSubmit(e) {
     // 5. 注文保存
     OrderService.saveOrder(reservationInfo.no, formData, changeMeta);
 
+    // 5.1 運用通知キューへ追加（予約/変更 → 1時間ごとにまとめて送信）
+    try {
+      if (typeof opsNotifyEnqueueFromForm_ === "function") {
+        opsNotifyEnqueueFromForm_(reservationInfo.no, formData, changeMeta);
+      }
+    } catch (err) {
+      // 通知失敗は致命ではない（注文処理は継続）
+      try { if (typeof logToSheet === "function") logToSheet("WARN", "opsNotify enqueue failed", { err: String(err) }); } catch (e) {}
+    }
+
 
       if (isDebugMain_()) logToSheet("INFO", "after saveOrder", { reservationNo: reservationInfo.no });
 

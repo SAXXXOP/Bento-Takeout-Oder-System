@@ -63,19 +63,6 @@ function onOpen() {
   }
   if (hasRerunItem) menu.addSubMenu(rerunMenu);
 
-  // ===== 要確認の処理（予約No指定） =====
-  if (isAdmin) {
-    menu
-      .addSeparator()
-      .addSubMenu(
-        ui.createMenu('予約No指定（直接処理）')
-          .addItem('有効に戻す（空欄）', 'markByOrderNoAsActive')
-          .addItem('無効にする（理由必須）', 'markByOrderNoAsInvalid')
-          .addItem('★要確認にする（理由必須）', 'markByOrderNoAsNeedsCheck')
-          .addItem('理由だけ編集', 'editReasonByOrderNo')
-      );
-  }
-
   // 氏名は必須にしない方針のため「氏名不一致」メニューは廃止
 
   // ===== 補助（チェック/監査/移行） =====
@@ -129,6 +116,15 @@ function onOpen() {
               .addSeparator()
               .addItem('トリガー再作成（復旧）', 'installDailyPrepTrigger')
               .addItem('トリガー削除（停止）', 'deleteDailyPrepTrigger')
+          )
+          .addSeparator()
+          .addSubMenu(
+            ui.createMenu('運用通知（1時間まとめ）')
+              .addItem('トリガー作成（1時間ごと）', 'installOpsNotifyHourlyTrigger')
+              .addItem('トリガー削除', 'deleteOpsNotifyHourlyTrigger')
+              .addSeparator()
+              .addItem('疎通（Ping）', 'sendOpsNotifyPing')
+              .addItem('今すぐ送信（手動）', 'flushOpsNotifyQueueNow')
           )
           .addSeparator()
           .addSubMenu(
